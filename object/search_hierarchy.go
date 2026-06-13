@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/beego/beego/logs"
 	"github.com/the-open-agent/openagent/embedding"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/model"
@@ -32,80 +31,59 @@ func NewHierarchySearchProvider(owner string) (*HierarchySearchProvider, error) 
 	return &HierarchySearchProvider{owner: owner}, nil
 }
 
-func extractMarkdownTitlesFromVectors(vectors []*Vector) []string {
-	titleMap := make(map[string]bool)
-	for _, v := range vectors {
-		if v == nil || v.File == "" || !strings.HasSuffix(strings.ToLower(v.File), ".md") {
-			continue
-		}
-		if len(v.Data) == 0 {
-			continue
-		}
-		parts := strings.SplitN(v.Text, "\n\n", 2)
-		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
-			titleMap[parts[0]] = true
-		}
-	}
-	titles := make([]string, 0, len(titleMap))
-	for t := range titleMap {
-		titles = append(titles, t)
-	}
-	return titles
-}
-
-func tryEnhanceQuestion(modelProviderName string, text string, titleCandidates []string, knowledgeCount int, lang string) (string, bool) {
-	if len(titleCandidates) == 0 {
-		return text, false
-	}
-	enhanced, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
-	if err != nil {
-		logs.Warn("HierarchySearch: failed to enhance question with titles, fallback to original query, err=%v", err)
-		return text, false
-	}
-	if strings.TrimSpace(enhanced) == "" {
-		logs.Warn("HierarchySearch: enhanced question is empty, fallback to original query")
-		return text, false
-	}
-	return enhanced, true
-}
-
-func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) (*SearchResultSet, *embedding.EmbeddingResult, error) {
+func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error) {
 	vectors, err := getRelatedVectors(relatedStores, embeddingProviderName)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	titleCandidates := extractMarkdownTitlesFromVectors(vectors)
-	queryText, _ := tryEnhanceQuestion(modelProviderName, text, titleCandidates, knowledgeCount, lang)
+	var (
+		vectorData [][]float32
+		titleMap   = make(map[string]bool)
+	)
+	for _, candidate := range vectors {
+		if candidate.File != "" && strings.HasSuffix(candidate.File, ".md") {
+			parts := strings.SplitN(candidate.Text, "\n\n", 2)
+			if len(parts) > 0 {
+				titleMap[parts[0]] = true
+			}
+			vectorData = append(vectorData, candidate.Data)
+		}
+	}
+	titleCandidates := make([]string, 0, len(titleMap))
+	for title := range titleMap {
+		titleCandidates = append(titleCandidates, title)
+	}
 
-	qVector, embeddingResult, err := queryVectorSafe(embeddingProviderObj, queryText, embeddingProviderName, lang)
+	question, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
 	if err != nil {
-		return nil, embeddingResult, err
+		return nil, nil, err
+	}
+
+	qVector, embeddingResult, err := queryVectorSafe(embeddingProviderObj, question, embeddingProviderName, lang)
+	if err != nil {
+		return nil, nil, err
 	}
 	if qVector == nil || len(qVector) == 0 {
 		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no qVector found"))
 	}
 
-	candidates := buildVectorCandidates(vectors)
-	if len(candidates) == 0 {
-		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors available"))
-	}
-
-	similarities, err := getNearestVectors(qVector, candidates, knowledgeCount, lang)
+	similarities, err := getNearestVectors(qVector, vectorData, knowledgeCount)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
 
-	rs, err := buildSearchResultSet(similarities, lang)
-	return rs, embeddingResult, err
+	res := []Vector{}
+	for _, similarity := range similarities {
+		vector := vectors[similarity.Index]
+		vector.Score = similarity.Similarity
+		res = append(res, *vector)
+	}
+
+	return res, embeddingResult, nil
 }
 
 func getEnhancedQuestionByModel(modelProviderName string, text string, titleCandidates []string, candidateTitlesNum int, lang string) (string, *model.ModelResult, error) {
-	candidateTitlesNum = validateKnowledgeCount(candidateTitlesNum)
-	if candidateTitlesNum > len(titleCandidates) {
-		candidateTitlesNum = len(titleCandidates)
-	}
-
 	prompt := fmt.Sprintf("Please help me select the top %d titles that are most likely to contain the answer. Just return the title list. No other content.", candidateTitlesNum)
 
 	question := fmt.Sprintf("Please select the titles most relevant to the following question and choose the %v most relevant items. Just return the title list. No other content.\nquestion:\n %s \n\nTitles: \n%s", candidateTitlesNum, text, "• "+strings.Join(titleCandidates, "\n• "))

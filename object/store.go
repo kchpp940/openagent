@@ -515,13 +515,7 @@ func RefreshFileVectors(file *File, lang string) (bool, error) {
 		return false, fmt.Errorf(i18n.Translate(lang, "account:The store: %s is not found"), file.Store)
 	}
 
-	var objectKey string
-	prefix := fmt.Sprintf("%s_", file.Store)
-	if strings.HasPrefix(file.Name, prefix) {
-		objectKey = strings.TrimPrefix(file.Name, prefix)
-	} else {
-		objectKey = file.Name
-	}
+	objectKey := file.getObjectKey()
 	if objectKey == "" {
 		return false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
 	}
@@ -530,12 +524,36 @@ func RefreshFileVectors(file *File, lang string) (bool, error) {
 		return false, fmt.Errorf(i18n.Translate(lang, "object:The file URL for: %s is empty"), file.Name)
 	}
 
-	_, err = DeleteVectorsByFile(store.Owner, store.Name, objectKey)
+	modelProvider, err := store.GetModelProvider()
+	if err != nil {
+		return false, err
+	}
+	if modelProvider == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
+	}
+
+	embeddingProvider, err := store.GetEmbeddingProvider()
+	if err != nil {
+		return false, err
+	}
+	if embeddingProvider == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The embedding provider for store: %s is not found"), store.GetId())
+	}
+
+	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider(lang)
 	if err != nil {
 		return false, err
 	}
 
-	return AddVectorsForFile(store, objectKey, file.Url, lang)
+	ok, err := withFileStatus(store.Owner, store.Name, objectKey, func() (bool, int, error) {
+		_, delErr := DeleteVectorsByFile(store.Owner, store.Name, objectKey)
+		if delErr != nil {
+			return false, 0, delErr
+		}
+		return addVectorsForFile(embeddingProviderObj, store.Name, objectKey, file.Url, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
+	})
+
+	return ok, err
 }
 
 func refreshVector(vector *Vector, lang string) (bool, error) {

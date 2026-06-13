@@ -29,7 +29,7 @@ func NewDefaultSearchProvider(owner string) (*DefaultSearchProvider, error) {
 	return &DefaultSearchProvider{owner: owner}, nil
 }
 
-func (p *DefaultSearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) (*SearchResultSet, *embedding.EmbeddingResult, error) {
+func (p *DefaultSearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error) {
 	vectors, err := getRelatedVectors(relatedStores, embeddingProviderName)
 	if err != nil {
 		return nil, nil, err
@@ -43,16 +43,22 @@ func (p *DefaultSearchProvider) Search(relatedStores []string, embeddingProvider
 		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no qVector found"))
 	}
 
-	candidates := buildVectorCandidates(vectors)
-	if len(candidates) == 0 {
-		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors available"))
+	var vectorData [][]float32
+	for _, candidate := range vectors {
+		vectorData = append(vectorData, candidate.Data)
 	}
 
-	similarities, err := getNearestVectors(qVector, candidates, knowledgeCount, lang)
+	similarities, err := getNearestVectors(qVector, vectorData, knowledgeCount)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
 
-	rs, err := buildSearchResultSet(similarities, lang)
-	return rs, embeddingResult, err
+	res := []Vector{}
+	for _, similarity := range similarities {
+		vector := vectors[similarity.Index]
+		vector.Score = similarity.Similarity
+		res = append(res, *vector)
+	}
+
+	return res, embeddingResult, nil
 }

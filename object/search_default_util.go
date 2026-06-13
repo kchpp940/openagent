@@ -15,13 +15,10 @@
 package object
 
 import (
-	"fmt"
 	"math"
 	"sort"
 
 	"github.com/beego/beego/logs"
-	"github.com/the-open-agent/openagent/i18n"
-	"github.com/the-open-agent/openagent/model"
 )
 
 func dot(vec1, vec2 []float32) float32 {
@@ -53,83 +50,23 @@ func cosineSimilarity(vec1, vec2 []float32, vec1Norm float32) float32 {
 	return dotProduct / (vec1Norm * vec2Norm)
 }
 
-type VectorCandidate struct {
-	Vector   *Vector
-	Data     []float32
-	FileName string
-	ChunkIdx int
-}
-
-type SimilarityResult struct {
+type SimilarityIndex struct {
 	Similarity float32
-	Candidate  *VectorCandidate
+	Index      int
 }
 
-func buildVectorCandidates(vectors []*Vector) []*VectorCandidate {
-	candidates := make([]*VectorCandidate, 0, len(vectors))
-	for _, v := range vectors {
-		if v == nil {
-			logs.Warn("Skipping nil vector")
-			continue
-		}
-		if len(v.Data) == 0 {
-			logs.Warn("Skipping empty vector, file=%s, index=%d", v.File, v.Index)
-			continue
-		}
-		candidates = append(candidates, &VectorCandidate{
-			Vector:   v,
-			Data:     v.Data,
-			FileName: v.File,
-			ChunkIdx: v.Index,
-		})
-	}
-	return candidates
-}
-
-func validateKnowledgeCount(n int) int {
-	if n <= 0 {
-		return 1
-	}
-	if n > 100 {
-		return 100
-	}
-	return n
-}
-
-func getNearestVectors(target []float32, candidates []*VectorCandidate, n int, lang string) ([]SimilarityResult, error) {
-	if len(target) == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:target vector is empty"))
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:no candidate vectors available"))
-	}
-
-	n = validateKnowledgeCount(n)
+func getNearestVectors(target []float32, vectors [][]float32, n int) ([]SimilarityIndex, error) {
 	targetNorm := norm(target)
-	if targetNorm == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:target vector has zero norm"))
-	}
 
-	similarities := []SimilarityResult{}
-	for _, candidate := range candidates {
-		if candidate == nil || len(candidate.Data) == 0 {
-			continue
-		}
-		if len(target) != len(candidate.Data) {
-			logs.Warn("The target vector's length: [%d] should equal to knowledge vector's length: [%d], file=%s, index=%d",
-				len(target), len(candidate.Data), candidate.FileName, candidate.ChunkIdx)
+	similarities := []SimilarityIndex{}
+	for i, vector := range vectors {
+		if len(target) != len(vector) {
+			logs.Warn("The target vector's length: [%d] should equal to knowledge vector's length: [%d]", len(target), len(vector))
 			continue
 		}
 
-		similarity := cosineSimilarity(target, candidate.Data, targetNorm)
-		similarities = append(similarities, SimilarityResult{
-			Similarity: similarity,
-			Candidate:  candidate,
-		})
-	}
-
-	if len(similarities) == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors after dimension check"))
+		similarity := cosineSimilarity(target, vector, targetNorm)
+		similarities = append(similarities, SimilarityIndex{similarity, i})
 	}
 
 	sort.Slice(similarities, func(i, j int) bool {
@@ -139,73 +76,6 @@ func getNearestVectors(target []float32, candidates []*VectorCandidate, n int, l
 	if n > len(similarities) {
 		n = len(similarities)
 	}
-	return similarities[:n], nil
-}
-
-func buildSearchResult(similarities []SimilarityResult, lang string) ([]Vector, error) {
-	if len(similarities) == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:no search results found"))
-	}
-	res := make([]Vector, 0, len(similarities))
-	for _, sr := range similarities {
-		if sr.Candidate == nil || sr.Candidate.Vector == nil {
-			continue
-		}
-		vector := *sr.Candidate.Vector
-		vector.Score = sr.Similarity
-		res = append(res, vector)
-	}
-	if len(res) == 0 {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:no valid search results after filtering"))
-	}
+	res := similarities[:n]
 	return res, nil
-}
-
-type SearchResultSet struct {
-	Vectors []Vector
-}
-
-func buildSearchResultSet(similarities []SimilarityResult, lang string) (*SearchResultSet, error) {
-	vectors, err := buildSearchResult(similarities, lang)
-	if err != nil {
-		return nil, err
-	}
-	return &SearchResultSet{Vectors: vectors}, nil
-}
-
-func (rs *SearchResultSet) Len() int {
-	if rs == nil {
-		return 0
-	}
-	return len(rs.Vectors)
-}
-
-type KnowledgeAndScores struct {
-	Knowledge    []*model.RawMessage
-	VectorScores []VectorScore
-}
-
-func (rs *SearchResultSet) BuildKnowledgeAndScores() *KnowledgeAndScores {
-	if rs == nil || len(rs.Vectors) == 0 {
-		return &KnowledgeAndScores{
-			Knowledge:    []*model.RawMessage{},
-			VectorScores: []VectorScore{},
-		}
-	}
-	ks := &KnowledgeAndScores{
-		Knowledge:    make([]*model.RawMessage, 0, len(rs.Vectors)),
-		VectorScores: make([]VectorScore, 0, len(rs.Vectors)),
-	}
-	for _, vector := range rs.Vectors {
-		ks.VectorScores = append(ks.VectorScores, VectorScore{
-			Vector: vector.Name,
-			Score:  vector.Score,
-		})
-		ks.Knowledge = append(ks.Knowledge, &model.RawMessage{
-			Text:           vector.Text,
-			Author:         "System",
-			TextTokenCount: vector.TokenCount,
-		})
-	}
-	return ks
 }

@@ -273,10 +273,8 @@ func GetNearestKnowledge(storeName string, vectorStores []string, searchProvider
 		return nil, nil, nil, err
 	}
 
-	knowledgeCount = validateKnowledgeCount(knowledgeCount)
-
 	relatedStores := append(vectorStores, storeName)
-	resultSet, embeddingResult, err := searchProvider.Search(relatedStores, embeddingProvider.Name, embeddingProviderObj, modelProvider.Name, text, knowledgeCount, lang)
+	vectors, embeddingResult, err := searchProvider.Search(relatedStores, embeddingProvider.Name, embeddingProviderObj, modelProvider.Name, text, knowledgeCount, lang)
 	if err != nil {
 		if err.Error() == "no knowledge vectors found" {
 			return nil, nil, embeddingResult, err
@@ -285,6 +283,23 @@ func GetNearestKnowledge(storeName string, vectorStores []string, searchProvider
 		}
 	}
 
-	ks := resultSet.BuildKnowledgeAndScores()
-	return ks.Knowledge, ks.VectorScores, embeddingResult, nil
+	vectorScores := []VectorScore{}
+	knowledge := []*model.RawMessage{}
+	for _, vector := range vectors {
+		// if embeddingProvider.Name != vector.Provider {
+		//	return "", nil, fmt.Errorf(i18n.Translate(lang, "object:The store's embedding provider: [%s] should equal to vector's embedding provider: [%s], vector = %v"), embeddingProvider.Name, vector.Provider, vector)
+		// }
+
+		vectorScores = append(vectorScores, VectorScore{
+			Vector: vector.Name,
+			Score:  vector.Score,
+		})
+		knowledge = append(knowledge, &model.RawMessage{
+			Text:           vector.Text,
+			Author:         "System",
+			TextTokenCount: vector.TokenCount,
+		})
+	}
+
+	return knowledge, vectorScores, embeddingResult, nil
 }

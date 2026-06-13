@@ -71,11 +71,7 @@ func populateFileVectorCounts(files []*File) error {
 	}
 
 	for _, file := range files {
-		prefix := file.Store + "_"
-		objectKey := file.Name
-		if strings.HasPrefix(file.Name, prefix) {
-			objectKey = strings.TrimPrefix(file.Name, prefix)
-		}
+		objectKey := file.getObjectKey()
 		file.VectorCount = countMap[file.Store+"/"+objectKey]
 	}
 	return nil
@@ -163,14 +159,7 @@ func AddFile(file *File) (bool, error) {
 }
 
 func DeleteFile(file *File, lang string) (bool, error) {
-	// Derive the object key: strip the "store_" prefix when present, otherwise use name as-is.
-	objectKey := file.Name
-	if file.Store != "" {
-		prefix := fmt.Sprintf("%s_", file.Store)
-		if strings.HasPrefix(file.Name, prefix) {
-			objectKey = strings.TrimPrefix(file.Name, prefix)
-		}
-	}
+	objectKey := file.getObjectKey()
 	if objectKey == "" {
 		return false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
 	}
@@ -204,6 +193,21 @@ func (file *File) GetId() string {
 
 func getFileName(storeName string, objectKey string) string {
 	return fmt.Sprintf("%s_%s", storeName, objectKey)
+}
+
+func getObjectKey(storeName string, fileName string) string {
+	if storeName == "" {
+		return fileName
+	}
+	prefix := fmt.Sprintf("%s_", storeName)
+	if strings.HasPrefix(fileName, prefix) {
+		return strings.TrimPrefix(fileName, prefix)
+	}
+	return fileName
+}
+
+func (file *File) getObjectKey() string {
+	return getObjectKey(file.Store, file.Name)
 }
 
 func GetFileCount(owner, store, field, value string) (int64, error) {
@@ -254,20 +258,50 @@ func GetPaginationFiles(owner, store string, offset, limit int, field, value, so
 
 func updateFileStatus(owner string, storeName string, objectKey string, status FileStatus, errorText string, tokenCount int) error {
 	name := getFileName(storeName, objectKey)
-	cols := []string{"status", "error_text"}
-	file := &File{Status: status, ErrorText: errorText}
-	if status == FileStatusProcessing {
-		cols = append(cols, "token_count")
+
+	existing := &File{Owner: owner, Name: name}
+	has, err := adapter.engine.Get(existing)
+	if err != nil {
+		return err
+	}
+
+	if has {
+		if existing.Status == FileStatusProcessing && status == FileStatusPending {
+			return nil
+		}
+	}
+
+	cols := []string{"status"}
+	file := &File{Status: status}
+
+	switch status {
+	case FileStatusPending:
+		cols = append(cols, "error_text")
+		file.ErrorText = ""
+	case FileStatusProcessing:
+		cols = append(cols, "error_text", "token_count")
+		file.ErrorText = ""
 		file.TokenCount = 0
-	} else if status == FileStatusFinished || status == FileStatusError {
-		cols = append(cols, "token_count")
+	case FileStatusFinished:
+		cols = append(cols, "error_text", "token_count")
+		file.ErrorText = ""
+		file.TokenCount = tokenCount
+	case FileStatusError:
+		cols = append(cols, "error_text", "token_count")
+		file.ErrorText = errorText
 		file.TokenCount = tokenCount
 	}
-	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(cols...).Update(file)
+
+	_, err = adapter.engine.ID(core.PK{owner, name}).Cols(cols...).Update(file)
 	return err
 }
 
 func UpdateFilesStatusByStore(owner string, storeName string, status FileStatus) error {
+	if status == FileStatusPending {
+		_, err := adapter.engine.Where("owner = ? and store = ? and status != ?", owner, storeName, FileStatusProcessing).
+			Cols("status", "error_text").Update(&File{Status: status, ErrorText: ""})
+		return err
+	}
 	_, err := adapter.engine.Where("owner = ? and store = ?", owner, storeName).
 		Cols("status", "error_text").Update(&File{Status: status, ErrorText: ""})
 	return err
