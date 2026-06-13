@@ -32,37 +32,16 @@ func NewHierarchySearchProvider(owner string) (*HierarchySearchProvider, error) 
 	return &HierarchySearchProvider{owner: owner}, nil
 }
 
-func buildMarkdownCandidates(vectors []*Vector) []*VectorCandidate {
-	candidates := make([]*VectorCandidate, 0, len(vectors))
+func extractMarkdownTitlesFromVectors(vectors []*Vector) []string {
+	titleMap := make(map[string]bool)
 	for _, v := range vectors {
-		if v == nil {
-			logs.Warn("Skipping nil vector in HierarchySearch")
+		if v == nil || v.File == "" || !strings.HasSuffix(strings.ToLower(v.File), ".md") {
 			continue
 		}
 		if len(v.Data) == 0 {
-			logs.Warn("Skipping empty data vector in HierarchySearch, file=%s, index=%d", v.File, v.Index)
 			continue
 		}
-		if v.File == "" || !strings.HasSuffix(strings.ToLower(v.File), ".md") {
-			continue
-		}
-		candidates = append(candidates, &VectorCandidate{
-			Vector:   v,
-			Data:     v.Data,
-			FileName: v.File,
-			ChunkIdx: v.Index,
-		})
-	}
-	return candidates
-}
-
-func extractMarkdownTitles(candidates []*VectorCandidate) []string {
-	titleMap := make(map[string]bool)
-	for _, c := range candidates {
-		if c == nil || c.Vector == nil {
-			continue
-		}
-		parts := strings.SplitN(c.Vector.Text, "\n\n", 2)
+		parts := strings.SplitN(v.Text, "\n\n", 2)
 		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
 			titleMap[parts[0]] = true
 		}
@@ -80,12 +59,7 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 		return nil, nil, err
 	}
 
-	markdownCandidates := buildMarkdownCandidates(vectors)
-	if len(markdownCandidates) == 0 {
-		return nil, nil, fmt.Errorf(i18n.Translate(lang, "object:no markdown vectors found for hierarchy search"))
-	}
-
-	titleCandidates := extractMarkdownTitles(markdownCandidates)
+	titleCandidates := extractMarkdownTitlesFromVectors(vectors)
 
 	question, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
 	if err != nil {
@@ -100,7 +74,12 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no qVector found"))
 	}
 
-	similarities, err := getNearestVectors(qVector, markdownCandidates, knowledgeCount, lang)
+	candidates := buildVectorCandidates(vectors)
+	if len(candidates) == 0 {
+		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors available"))
+	}
+
+	similarities, err := getNearestVectors(qVector, candidates, knowledgeCount, lang)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
