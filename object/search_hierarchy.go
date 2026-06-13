@@ -96,14 +96,8 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 		return nil, embeddingResult, err
 	}
 
-	res := make([]Vector, 0, len(similarities))
-	for _, sr := range similarities {
-		vector := *sr.Candidate.Vector
-		vector.Score = sr.Similarity
-		res = append(res, vector)
-	}
-
-	return res, embeddingResult, nil
+	res, err := buildSearchResult(similarities, lang)
+	return res, embeddingResult, err
 }
 
 func getEnhancedQuestionByModel(modelProviderName string, text string, titleCandidates []string, candidateTitlesNum int, lang string) (string, *model.ModelResult, error) {

@@ -140,3 +140,22 @@ func getNearestVectors(target []float32, candidates []*VectorCandidate, n int, l
 	}
 	return similarities[:n], nil
 }
+
+func buildSearchResult(similarities []SimilarityResult, lang string) ([]Vector, error) {
+	if len(similarities) == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:no search results found"))
+	}
+	res := make([]Vector, 0, len(similarities))
+	for _, sr := range similarities {
+		if sr.Candidate == nil || sr.Candidate.Vector == nil {
+			continue
+		}
+		vector := *sr.Candidate.Vector
+		vector.Score = sr.Similarity
+		res = append(res, vector)
+	}
+	if len(res) == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:no valid search results after filtering"))
+	}
+	return res, nil
+}
