@@ -19,7 +19,7 @@ import (
 )
 
 type SearchProvider interface {
-	Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error)
+	Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) (*SearchResultSet, *embedding.EmbeddingResult, error)
 }
 
 func GetSearchProvider(typ string, owner string) (SearchProvider, error) {

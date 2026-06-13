@@ -21,6 +21,7 @@ import (
 
 	"github.com/beego/beego/logs"
 	"github.com/the-open-agent/openagent/i18n"
+	"github.com/the-open-agent/openagent/model"
 )
 
 func dot(vec1, vec2 []float32) float32 {
@@ -158,4 +159,53 @@ func buildSearchResult(similarities []SimilarityResult, lang string) ([]Vector, 
 		return nil, fmt.Errorf(i18n.Translate(lang, "object:no valid search results after filtering"))
 	}
 	return res, nil
+}
+
+type SearchResultSet struct {
+	Vectors []Vector
+}
+
+func buildSearchResultSet(similarities []SimilarityResult, lang string) (*SearchResultSet, error) {
+	vectors, err := buildSearchResult(similarities, lang)
+	if err != nil {
+		return nil, err
+	}
+	return &SearchResultSet{Vectors: vectors}, nil
+}
+
+func (rs *SearchResultSet) Len() int {
+	if rs == nil {
+		return 0
+	}
+	return len(rs.Vectors)
+}
+
+type KnowledgeAndScores struct {
+	Knowledge    []*model.RawMessage
+	VectorScores []VectorScore
+}
+
+func (rs *SearchResultSet) BuildKnowledgeAndScores() *KnowledgeAndScores {
+	if rs == nil || len(rs.Vectors) == 0 {
+		return &KnowledgeAndScores{
+			Knowledge:    []*model.RawMessage{},
+			VectorScores: []VectorScore{},
+		}
+	}
+	ks := &KnowledgeAndScores{
+		Knowledge:    make([]*model.RawMessage, 0, len(rs.Vectors)),
+		VectorScores: make([]VectorScore, 0, len(rs.Vectors)),
+	}
+	for _, vector := range rs.Vectors {
+		ks.VectorScores = append(ks.VectorScores, VectorScore{
+			Vector: vector.Name,
+			Score:  vector.Score,
+		})
+		ks.Knowledge = append(ks.Knowledge, &model.RawMessage{
+			Text:           vector.Text,
+			Author:         "System",
+			TextTokenCount: vector.TokenCount,
+		})
+	}
+	return ks
 }

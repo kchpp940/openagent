@@ -69,7 +69,7 @@ func tryEnhanceQuestion(modelProviderName string, text string, titleCandidates [
 	return enhanced, true
 }
 
-func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error) {
+func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) (*SearchResultSet, *embedding.EmbeddingResult, error) {
 	vectors, err := getRelatedVectors(relatedStores, embeddingProviderName)
 	if err != nil {
 		return nil, nil, err
@@ -96,8 +96,8 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 		return nil, embeddingResult, err
 	}
 
-	res, err := buildSearchResult(similarities, lang)
-	return res, embeddingResult, err
+	rs, err := buildSearchResultSet(similarities, lang)
+	return rs, embeddingResult, err
 }
 
 func getEnhancedQuestionByModel(modelProviderName string, text string, titleCandidates []string, candidateTitlesNum int, lang string) (string, *model.ModelResult, error) {
