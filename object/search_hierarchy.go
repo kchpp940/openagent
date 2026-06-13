@@ -53,6 +53,22 @@ func extractMarkdownTitlesFromVectors(vectors []*Vector) []string {
 	return titles
 }
 
+func tryEnhanceQuestion(modelProviderName string, text string, titleCandidates []string, knowledgeCount int, lang string) (string, bool) {
+	if len(titleCandidates) == 0 {
+		return text, false
+	}
+	enhanced, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
+	if err != nil {
+		logs.Warn("HierarchySearch: failed to enhance question with titles, fallback to original query, err=%v", err)
+		return text, false
+	}
+	if strings.TrimSpace(enhanced) == "" {
+		logs.Warn("HierarchySearch: enhanced question is empty, fallback to original query")
+		return text, false
+	}
+	return enhanced, true
+}
+
 func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error) {
 	vectors, err := getRelatedVectors(relatedStores, embeddingProviderName)
 	if err != nil {
@@ -60,13 +76,9 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 	}
 
 	titleCandidates := extractMarkdownTitlesFromVectors(vectors)
+	queryText, _ := tryEnhanceQuestion(modelProviderName, text, titleCandidates, knowledgeCount, lang)
 
-	question, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	qVector, embeddingResult, err := queryVectorSafe(embeddingProviderObj, question, embeddingProviderName, lang)
+	qVector, embeddingResult, err := queryVectorSafe(embeddingProviderObj, queryText, embeddingProviderName, lang)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
