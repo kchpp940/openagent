@@ -43,21 +43,21 @@ func (p *DefaultSearchProvider) Search(relatedStores []string, embeddingProvider
 		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no qVector found"))
 	}
 
-	var vectorData [][]float32
-	for _, candidate := range vectors {
-		vectorData = append(vectorData, candidate.Data)
+	candidates := buildVectorCandidates(vectors)
+	if len(candidates) == 0 {
+		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors available"))
 	}
 
-	similarities, err := getNearestVectors(qVector, vectorData, knowledgeCount)
+	similarities, err := getNearestVectors(qVector, candidates, knowledgeCount, lang)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
 
-	res := []Vector{}
-	for _, similarity := range similarities {
-		vector := vectors[similarity.Index]
-		vector.Score = similarity.Similarity
-		res = append(res, *vector)
+	res := make([]Vector, 0, len(similarities))
+	for _, sr := range similarities {
+		vector := *sr.Candidate.Vector
+		vector.Score = sr.Similarity
+		res = append(res, vector)
 	}
 
 	return res, embeddingResult, nil

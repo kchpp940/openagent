@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/beego/beego/logs"
 	"github.com/the-open-agent/openagent/embedding"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/model"
@@ -31,29 +32,60 @@ func NewHierarchySearchProvider(owner string) (*HierarchySearchProvider, error) 
 	return &HierarchySearchProvider{owner: owner}, nil
 }
 
+func buildMarkdownCandidates(vectors []*Vector) []*VectorCandidate {
+	candidates := make([]*VectorCandidate, 0, len(vectors))
+	for _, v := range vectors {
+		if v == nil {
+			logs.Warn("Skipping nil vector in HierarchySearch")
+			continue
+		}
+		if len(v.Data) == 0 {
+			logs.Warn("Skipping empty data vector in HierarchySearch, file=%s, index=%d", v.File, v.Index)
+			continue
+		}
+		if v.File == "" || !strings.HasSuffix(strings.ToLower(v.File), ".md") {
+			continue
+		}
+		candidates = append(candidates, &VectorCandidate{
+			Vector:   v,
+			Data:     v.Data,
+			FileName: v.File,
+			ChunkIdx: v.Index,
+		})
+	}
+	return candidates
+}
+
+func extractMarkdownTitles(candidates []*VectorCandidate) []string {
+	titleMap := make(map[string]bool)
+	for _, c := range candidates {
+		if c == nil || c.Vector == nil {
+			continue
+		}
+		parts := strings.SplitN(c.Vector.Text, "\n\n", 2)
+		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+			titleMap[parts[0]] = true
+		}
+	}
+	titles := make([]string, 0, len(titleMap))
+	for t := range titleMap {
+		titles = append(titles, t)
+	}
+	return titles
+}
+
 func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProviderName string, embeddingProviderObj embedding.EmbeddingProvider, modelProviderName string, text string, knowledgeCount int, lang string) ([]Vector, *embedding.EmbeddingResult, error) {
 	vectors, err := getRelatedVectors(relatedStores, embeddingProviderName)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var (
-		vectorData [][]float32
-		titleMap   = make(map[string]bool)
-	)
-	for _, candidate := range vectors {
-		if candidate.File != "" && strings.HasSuffix(candidate.File, ".md") {
-			parts := strings.SplitN(candidate.Text, "\n\n", 2)
-			if len(parts) > 0 {
-				titleMap[parts[0]] = true
-			}
-			vectorData = append(vectorData, candidate.Data)
-		}
+	markdownCandidates := buildMarkdownCandidates(vectors)
+	if len(markdownCandidates) == 0 {
+		return nil, nil, fmt.Errorf(i18n.Translate(lang, "object:no markdown vectors found for hierarchy search"))
 	}
-	titleCandidates := make([]string, 0, len(titleMap))
-	for title := range titleMap {
-		titleCandidates = append(titleCandidates, title)
-	}
+
+	titleCandidates := extractMarkdownTitles(markdownCandidates)
 
 	question, _, err := getEnhancedQuestionByModel(modelProviderName, text, titleCandidates, knowledgeCount, lang)
 	if err != nil {
@@ -62,28 +94,33 @@ func (p *HierarchySearchProvider) Search(relatedStores []string, embeddingProvid
 
 	qVector, embeddingResult, err := queryVectorSafe(embeddingProviderObj, question, embeddingProviderName, lang)
 	if err != nil {
-		return nil, nil, err
+		return nil, embeddingResult, err
 	}
 	if qVector == nil || len(qVector) == 0 {
 		return nil, embeddingResult, fmt.Errorf(i18n.Translate(lang, "object:no qVector found"))
 	}
 
-	similarities, err := getNearestVectors(qVector, vectorData, knowledgeCount)
+	similarities, err := getNearestVectors(qVector, markdownCandidates, knowledgeCount, lang)
 	if err != nil {
 		return nil, embeddingResult, err
 	}
 
-	res := []Vector{}
-	for _, similarity := range similarities {
-		vector := vectors[similarity.Index]
-		vector.Score = similarity.Similarity
-		res = append(res, *vector)
+	res := make([]Vector, 0, len(similarities))
+	for _, sr := range similarities {
+		vector := *sr.Candidate.Vector
+		vector.Score = sr.Similarity
+		res = append(res, vector)
 	}
 
 	return res, embeddingResult, nil
 }
 
 func getEnhancedQuestionByModel(modelProviderName string, text string, titleCandidates []string, candidateTitlesNum int, lang string) (string, *model.ModelResult, error) {
+	candidateTitlesNum = validateKnowledgeCount(candidateTitlesNum)
+	if candidateTitlesNum > len(titleCandidates) {
+		candidateTitlesNum = len(titleCandidates)
+	}
+
 	prompt := fmt.Sprintf("Please help me select the top %d titles that are most likely to contain the answer. Just return the title list. No other content.", candidateTitlesNum)
 
 	question := fmt.Sprintf("Please select the titles most relevant to the following question and choose the %v most relevant items. Just return the title list. No other content.\nquestion:\n %s \n\nTitles: \n%s", candidateTitlesNum, text, "• "+strings.Join(titleCandidates, "\n• "))

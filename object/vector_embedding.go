@@ -273,6 +273,8 @@ func GetNearestKnowledge(storeName string, vectorStores []string, searchProvider
 		return nil, nil, nil, err
 	}
 
+	knowledgeCount = validateKnowledgeCount(knowledgeCount)
+
 	relatedStores := append(vectorStores, storeName)
 	vectors, embeddingResult, err := searchProvider.Search(relatedStores, embeddingProvider.Name, embeddingProviderObj, modelProvider.Name, text, knowledgeCount, lang)
 	if err != nil {
@@ -286,10 +288,6 @@ func GetNearestKnowledge(storeName string, vectorStores []string, searchProvider
 	vectorScores := []VectorScore{}
 	knowledge := []*model.RawMessage{}
 	for _, vector := range vectors {
-		// if embeddingProvider.Name != vector.Provider {
-		//	return "", nil, fmt.Errorf(i18n.Translate(lang, "object:The store's embedding provider: [%s] should equal to vector's embedding provider: [%s], vector = %v"), embeddingProvider.Name, vector.Provider, vector)
-		// }
-
 		vectorScores = append(vectorScores, VectorScore{
 			Vector: vector.Name,
 			Score:  vector.Score,

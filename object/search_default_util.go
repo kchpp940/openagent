@@ -15,10 +15,12 @@
 package object
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
 	"github.com/beego/beego/logs"
+	"github.com/the-open-agent/openagent/i18n"
 )
 
 func dot(vec1, vec2 []float32) float32 {
@@ -50,23 +52,83 @@ func cosineSimilarity(vec1, vec2 []float32, vec1Norm float32) float32 {
 	return dotProduct / (vec1Norm * vec2Norm)
 }
 
-type SimilarityIndex struct {
-	Similarity float32
-	Index      int
+type VectorCandidate struct {
+	Vector   *Vector
+	Data     []float32
+	FileName string
+	ChunkIdx int
 }
 
-func getNearestVectors(target []float32, vectors [][]float32, n int) ([]SimilarityIndex, error) {
-	targetNorm := norm(target)
+type SimilarityResult struct {
+	Similarity float32
+	Candidate  *VectorCandidate
+}
 
-	similarities := []SimilarityIndex{}
-	for i, vector := range vectors {
-		if len(target) != len(vector) {
-			logs.Warn("The target vector's length: [%d] should equal to knowledge vector's length: [%d]", len(target), len(vector))
+func buildVectorCandidates(vectors []*Vector) []*VectorCandidate {
+	candidates := make([]*VectorCandidate, 0, len(vectors))
+	for _, v := range vectors {
+		if v == nil {
+			logs.Warn("Skipping nil vector")
+			continue
+		}
+		if len(v.Data) == 0 {
+			logs.Warn("Skipping empty vector, file=%s, index=%d", v.File, v.Index)
+			continue
+		}
+		candidates = append(candidates, &VectorCandidate{
+			Vector:   v,
+			Data:     v.Data,
+			FileName: v.File,
+			ChunkIdx: v.Index,
+		})
+	}
+	return candidates
+}
+
+func validateKnowledgeCount(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	if n > 100 {
+		return 100
+	}
+	return n
+}
+
+func getNearestVectors(target []float32, candidates []*VectorCandidate, n int, lang string) ([]SimilarityResult, error) {
+	if len(target) == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:target vector is empty"))
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:no candidate vectors available"))
+	}
+
+	n = validateKnowledgeCount(n)
+	targetNorm := norm(target)
+	if targetNorm == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:target vector has zero norm"))
+	}
+
+	similarities := []SimilarityResult{}
+	for _, candidate := range candidates {
+		if candidate == nil || len(candidate.Data) == 0 {
+			continue
+		}
+		if len(target) != len(candidate.Data) {
+			logs.Warn("The target vector's length: [%d] should equal to knowledge vector's length: [%d], file=%s, index=%d",
+				len(target), len(candidate.Data), candidate.FileName, candidate.ChunkIdx)
 			continue
 		}
 
-		similarity := cosineSimilarity(target, vector, targetNorm)
-		similarities = append(similarities, SimilarityIndex{similarity, i})
+		similarity := cosineSimilarity(target, candidate.Data, targetNorm)
+		similarities = append(similarities, SimilarityResult{
+			Similarity: similarity,
+			Candidate:  candidate,
+		})
+	}
+
+	if len(similarities) == 0 {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:no valid candidate vectors after dimension check"))
 	}
 
 	sort.Slice(similarities, func(i, j int) bool {
@@ -76,6 +138,5 @@ func getNearestVectors(target []float32, vectors [][]float32, n int) ([]Similari
 	if n > len(similarities) {
 		n = len(similarities)
 	}
-	res := similarities[:n]
-	return res, nil
+	return similarities[:n], nil
 }
