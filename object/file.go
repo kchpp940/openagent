@@ -283,49 +283,55 @@ func GetPaginationFiles(owner, store string, offset, limit int, field, value, so
 	return files, nil
 }
 
-func updateFileStatus(owner string, storeName string, objectKey string, status FileStatus, errorText string, tokenCount int) error {
-	recordName, err := findFileRecordName(owner, storeName, objectKey)
-	if err != nil {
-		return err
+func tryAcquireProcessingStatus(owner string, storeName string, objectKey string) (recordName string, acquired bool, err error) {
+	resolved := ResolveFileObjectKey(storeName, objectKey)
+	candidates := []string{
+		getFileName(storeName, resolved),
+		resolved,
 	}
 
-	existing := &File{Owner: owner, Name: recordName}
-	has, err := adapter.engine.Get(existing)
-	if err != nil {
-		return err
-	}
-
-	if has {
-		if existing.Status == FileStatusProcessing && status == FileStatusPending {
-			return nil
+	for _, name := range candidates {
+		affected, updErr := adapter.engine.ID(core.PK{owner, name}).
+			Where("status != ?", FileStatusProcessing).
+			Cols("status", "error_text", "token_count").
+			Update(&File{Status: FileStatusProcessing, ErrorText: "", TokenCount: 0})
+		if updErr != nil {
+			return "", false, updErr
 		}
-		if existing.Status == FileStatusProcessing && status == FileStatusProcessing {
-			return ErrFileAlreadyProcessing
+		if affected > 0 {
+			return name, true, nil
 		}
 	}
 
-	cols := []string{"status"}
-	file := &File{Status: status}
-
-	switch status {
-	case FileStatusPending:
-		cols = append(cols, "error_text")
-		file.ErrorText = ""
-	case FileStatusProcessing:
-		cols = append(cols, "error_text", "token_count")
-		file.ErrorText = ""
-		file.TokenCount = 0
-	case FileStatusFinished:
-		cols = append(cols, "error_text", "token_count")
-		file.ErrorText = ""
-		file.TokenCount = tokenCount
-	case FileStatusError:
-		cols = append(cols, "error_text", "token_count")
-		file.ErrorText = errorText
-		file.TokenCount = tokenCount
+	existing := &File{Owner: owner, Name: candidates[0]}
+	has, getErr := adapter.engine.Get(existing)
+	if getErr != nil {
+		return "", false, getErr
+	}
+	if has && existing.Status == FileStatusProcessing {
+		return candidates[0], false, ErrFileAlreadyProcessing
 	}
 
-	_, err = adapter.engine.ID(core.PK{owner, recordName}).Cols(cols...).Update(file)
+	existing2 := &File{Owner: owner, Name: candidates[1]}
+	has2, getErr2 := adapter.engine.Get(existing2)
+	if getErr2 != nil {
+		return "", false, getErr2
+	}
+	if has2 && existing2.Status == FileStatusProcessing {
+		return candidates[1], false, ErrFileAlreadyProcessing
+	}
+
+	return candidates[0], false, ErrFileAlreadyProcessing
+}
+
+func finalizeFileStatus(owner string, recordName string, status FileStatus, errorText string, tokenCount int) error {
+	cols := []string{"status", "error_text"}
+	file := &File{Status: status, ErrorText: errorText}
+	if status == FileStatusFinished || status == FileStatusError {
+		cols = append(cols, "token_count")
+		file.TokenCount = tokenCount
+	}
+	_, err := adapter.engine.ID(core.PK{owner, recordName}).Cols(cols...).Update(file)
 	return err
 }
 
@@ -340,12 +346,8 @@ func UpdateFilesStatusByStore(owner string, storeName string, status FileStatus)
 	return err
 }
 
-func deleteFileRecord(owner string, storeName string, objectKey string) error {
-	recordName, err := findFileRecordName(owner, storeName, objectKey)
-	if err != nil {
-		return err
-	}
-	_, err = adapter.engine.ID(core.PK{owner, recordName}).Delete(&File{})
+func deleteFileRecord(owner string, recordName string) error {
+	_, err := adapter.engine.ID(core.PK{owner, recordName}).Delete(&File{})
 	return err
 }
 

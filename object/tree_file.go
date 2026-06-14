@@ -133,7 +133,11 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 			return false, err
 		}
 
-		if err := deleteFileRecord(owner, store.Name, resolvedKey); err != nil {
+		recordName, recErr := findFileRecordName(owner, store.Name, resolvedKey)
+		if recErr != nil {
+			return false, recErr
+		}
+		if err := deleteFileRecord(owner, recordName); err != nil {
 			return false, err
 		}
 	} else {
@@ -156,7 +160,11 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 				return false, err
 			}
 
-			if err := deleteFileRecord(owner, store.Name, resolvedKey); err != nil {
+			recordName, recErr := findFileRecordName(owner, store.Name, resolvedKey)
+			if recErr != nil {
+				return false, recErr
+			}
+			if err := deleteFileRecord(owner, recordName); err != nil {
 				return false, err
 			}
 		}

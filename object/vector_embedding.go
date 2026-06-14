@@ -206,17 +206,19 @@ func RebuildFileVectors(store *Store, objectKey string, fileUrl string, lang str
 	return ok, err
 }
 
-func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
-	resolvedKey := ResolveFileObjectKey(storeName, fileKey)
-
-	err := updateFileStatus(owner, storeName, resolvedKey, FileStatusProcessing, "", 0)
+func withFileStatus(owner string, storeName string, resolvedKey string, op func() (bool, int, error)) (bool, error) {
+	recordName, acquired, err := tryAcquireProcessingStatus(owner, storeName, resolvedKey)
 	if err != nil {
 		if errors.Is(err, ErrFileAlreadyProcessing) {
 			logs.Warn("Skipping vector rebuild for store: [%s], file: [%s] — already processing", storeName, resolvedKey)
-			return false, err
+		} else {
+			logs.Error("Failed to acquire processing status for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
 		}
-		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
 		return false, err
+	}
+	if !acquired {
+		logs.Warn("Skipping vector rebuild for store: [%s], file: [%s] — status not acquired", storeName, resolvedKey)
+		return false, ErrFileAlreadyProcessing
 	}
 
 	affected, tokenCount, opErr := op()
@@ -228,11 +230,9 @@ func withFileStatus(owner string, storeName string, fileKey string, op func() (b
 		errorText = opErr.Error()
 	}
 
-	statusErr := updateFileStatus(owner, storeName, resolvedKey, fileStatus, errorText, tokenCount)
+	statusErr := finalizeFileStatus(owner, recordName, fileStatus, errorText, tokenCount)
 	if statusErr != nil {
-		if !errors.Is(statusErr, ErrFileAlreadyProcessing) {
-			logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, statusErr)
-		}
+		logs.Error("Failed to finalize file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, statusErr)
 		if opErr != nil {
 			return affected, errors.Join(opErr, statusErr)
 		}
