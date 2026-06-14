@@ -473,6 +473,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		}
 	}()
 	message.ReasonText = writer.ReasonString()
+	writer.FinalizePendingTools()
 	message.ToolCalls = model.GetToolCallsFromWriter(writer.ToolString())
 	searchString := writer.SearchString()
 	if searchString != "" {

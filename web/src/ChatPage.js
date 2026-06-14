@@ -30,7 +30,7 @@ import i18next from "i18next";
 import BaseListPage from "./BaseListPage";
 import {MessageCarrier} from "./chat/MessageCarrier";
 import {getFirstUserMessageText} from "./carrier/titleUtils";
-import {applyToolDelta, applyToolEvent, createToolDeltaFlusher} from "./chat/toolCallStream";
+import {applyToolDelta, applyToolEvent, createToolDeltaFlusher, finalizeToolCalls} from "./chat/toolCallStream";
 
 const chatStatusPollingInterval = 2000;
 
@@ -595,8 +595,8 @@ class ChatPage extends BaseListPage {
               if (!jsonData) {
                 return;
               }
-              applyToolEvent(toolCalls, jsonData);
               flushToolDeltaNow();
+              applyToolEvent(toolCalls, jsonData);
               commitMessageUpdate((lastMessage2) => {
                 lastMessage2.toolCalls = [...toolCalls];
                 lastMessage2.isReasoningPhase = false;
@@ -639,9 +639,10 @@ class ChatPage extends BaseListPage {
                 return;
               }
               flushToolDeltaNow();
+              const finalToolCalls = finalizeToolCalls([...toolCalls]);
               commitMessageUpdate((lastMessage2) => {
                 lastMessage2.errorText = error;
-                lastMessage2.toolCalls = [...toolCalls];
+                lastMessage2.toolCalls = finalToolCalls;
                 lastMessage2.text = text || lastMessage2.text;
                 lastMessage2.reasonText = reasonText || lastMessage2.reasonText;
               });
@@ -654,7 +655,7 @@ class ChatPage extends BaseListPage {
                 return;
               }
               flushToolDeltaNow();
-              const finalToolCalls = [...toolCalls];
+              const finalToolCalls = finalizeToolCalls([...toolCalls]);
               const parsedResult = mssageCarrier.parseAnswerWithCarriers(text, userTextForTitle);
               text = parsedResult.finalAnswer;
               if (parsedResult.title !== "") {
