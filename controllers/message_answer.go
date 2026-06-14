@@ -138,21 +138,49 @@ func streamMessageAnswerJob(responseWriter http.ResponseWriter, request *http.Re
 }
 
 func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host string, lang string, signedIn bool, responseError func(string, ...interface{})) {
+	message, err := object.GetMessage(id)
+	if err != nil {
+		if err := writeMessageErrorStream(responseWriter, lang, message, err.Error()); err != nil {
+			if responseError != nil {
+				responseError(err.Error())
+			}
+		}
+		return
+	}
+
+	executionTracer := object.NewExecutionTracer(id)
+	var writer *RefinedWriter
+	shouldSaveExecutionSteps := true
+
+	saveExecutionSteps := func() {
+		if !shouldSaveExecutionSteps || message == nil || executionTracer == nil {
+			return
+		}
+		if writer != nil {
+			writer.FinalizeReasoningStep()
+		}
+		stepsJson, jsonErr := executionTracer.ToJSON()
+		if jsonErr != nil {
+			fmt.Printf("failed to marshal execution steps: %s\n", jsonErr.Error())
+			return
+		}
+		message.ExecutionSteps = stepsJson
+		if _, updateErr := object.UpdateMessage(id, message, true); updateErr != nil {
+			fmt.Printf("failed to save execution steps: %s\n", updateErr.Error())
+		}
+	}
+	defer saveExecutionSteps()
+
 	responseErrorStream := func(message *object.Message, errorText string) {
+		if executionTracer != nil {
+			executionTracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
+		}
 		if err := writeMessageErrorStream(responseWriter, lang, message, errorText); err != nil {
 			if responseError != nil {
 				responseError(err.Error())
 			}
 		}
 	}
-
-	message, err := object.GetMessage(id)
-	if err != nil {
-		responseErrorStream(message, err.Error())
-		return
-	}
-
-	executionTracer := object.NewExecutionTracer(id)
 
 	if message == nil {
 		responseErrorStream(message, fmt.Sprintf("The message: %s is not found", id))
@@ -354,13 +382,14 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		if embeddingResult == nil {
 			embeddingResult = &embedding.EmbeddingResult{}
 		}
-		executionTracer.UpdateStep(knowledgeStepId, map[string]interface{}{
-			"output": fmt.Sprintf("%d knowledge chunks retrieved", len(knowledge)),
-		})
 		executionTracer.EndStep(knowledgeStepId, object.StepStatusCompleted, fmt.Sprintf("%d chunks", len(knowledge)), "")
 	}
 
-	writer := &RefinedWriter{context.Response{ResponseWriter: responseWriter}, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, executionTracer}
+	writer = newRefinedWriter(context.Response{ResponseWriter: responseWriter}, executionTracer)
+
+	if len(knowledge) > 0 || len(vectorScores) > 0 {
+		writer.RecordVectorResult(vectorScores, knowledge)
+	}
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -524,14 +553,13 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 
 	message.VectorScores = vectorScores
 
+	writer.FinalizeReasoningStep()
+
 	executionTracer.AddSimpleStep(object.StepTypeFinalOutput, "Final Output", fmt.Sprintf("%d chars", len(message.Text)), map[string]interface{}{
 		"tokenCount": message.TokenCount,
 		"price":      message.Price,
 		"currency":   message.Currency,
 	})
-
-	executionStepsJson, _ := executionTracer.ToJSON()
-	message.ExecutionSteps = executionStepsJson
 
 	// Normalize price precision before persisting or creating transactions
 	message.Price = model.AddPrices(message.Price, 0)

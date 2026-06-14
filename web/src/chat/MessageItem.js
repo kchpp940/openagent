@@ -129,7 +129,8 @@ const MessageItem = ({
 
     setLoadingExecutionSteps(true);
     setExecutionTimelineVisible(true);
-    MessageBackend.getMessageExecutionSteps(message.owner, message.name)
+    const messageId = message.id || `${message.owner}/${message.name}`;
+    MessageBackend.getMessageExecutionSteps(messageId)
       .then(res => {
         if (res && res.data) {
           setExecutionSteps(res.data);

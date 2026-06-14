@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -37,10 +38,11 @@ type RefinedWriter struct {
 	toolBuf         []byte
 	searchBuf       []byte
 	ExecutionTracer *object.ExecutionTracer
+	reasonStepId    string
 }
 
 func newRefinedWriter(w context.Response, tracer *object.ExecutionTracer) *RefinedWriter {
-	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, tracer}
+	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, tracer, ""}
 }
 
 func (w *RefinedWriter) Write(p []byte) (n int, err error) {
@@ -102,13 +104,16 @@ func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 		w.messageBuf = append(w.messageBuf, []byte(data)...)
 	} else if eventType == "reason" {
 		w.reasonBuf = append(w.reasonBuf, []byte(data)...)
+		w.recordReasoningStep(data)
 	} else if eventType == "tool" {
 		if len(w.toolBuf) > 0 {
 			w.toolBuf = append(w.toolBuf, '\n')
 		}
 		w.toolBuf = append(w.toolBuf, []byte(data)...)
+		w.recordToolResult(data)
 	} else if eventType == "search" {
 		w.searchBuf = append(w.searchBuf, []byte(data)...)
+		w.recordSearchResult(data)
 	}
 
 	if eventType == "tool" || eventType == "search" {
@@ -118,6 +123,15 @@ func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 			flusher.Flush()
 		}
 		return n, err
+	}
+
+	if eventType == "reason" {
+		fmt.Print(data)
+		jsonData, err := ConvertMessageDataToJSON(data)
+		if err != nil {
+			return 0, err
+		}
+		return w.ResponseWriter.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", eventType, jsonData)))
 	}
 
 	if w.writerCleaner.cleaned == false && w.writerCleaner.dataTimes < w.writerCleaner.bufferSize {
@@ -309,4 +323,100 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func (w *RefinedWriter) recordReasoningStep(data string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	if w.reasonStepId == "" {
+		w.reasonStepId = w.ExecutionTracer.StartStep(object.StepTypeReasoning, "Reasoning", map[string]interface{}{
+			"mode": "streaming",
+		})
+	}
+	w.ExecutionTracer.UpdateStep(w.reasonStepId, map[string]interface{}{
+		"output": truncateString(string(w.reasonBuf), 2000),
+	})
+}
+
+func (w *RefinedWriter) recordSearchResult(data string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	var searchResults []model.SearchResult
+	if err := json.Unmarshal([]byte(data), &searchResults); err == nil && len(searchResults) > 0 {
+		summary := fmt.Sprintf("%d search results", len(searchResults))
+		metadata := make([]map[string]interface{}, 0, len(searchResults))
+		for _, r := range searchResults {
+			metadata = append(metadata, map[string]interface{}{
+				"title":    r.Title,
+				"url":      r.URL,
+				"siteName": r.SiteName,
+				"index":    r.Index,
+			})
+		}
+		w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, "Web Search", summary, map[string]interface{}{
+			"results": metadata,
+		})
+	}
+}
+
+func (w *RefinedWriter) recordToolResult(data string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	var toolCall model.ToolCall
+	if err := json.Unmarshal([]byte(data), &toolCall); err == nil {
+		if toolCall.IsError {
+			errorMsg := toolCall.Content
+			if errorMsg == "" {
+				errorMsg = "Tool call failed"
+			}
+			w.ExecutionTracer.AddSimpleStep(object.StepTypeToolError, fmt.Sprintf("Tool Error: %s", toolCall.Name), errorMsg, map[string]interface{}{
+				"toolName":  toolCall.Name,
+				"arguments": toolCall.Arguments,
+			})
+		}
+	}
+}
+
+func (w *RefinedWriter) RecordVectorResult(vectorScores []object.VectorScore, knowledge []*model.RawMessage) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	if len(vectorScores) == 0 && len(knowledge) == 0 {
+		return
+	}
+	metadata := make([]map[string]interface{}, 0, len(knowledge))
+	for i, k := range knowledge {
+		item := map[string]interface{}{
+			"index":      i,
+			"text":       truncateString(k.Text, 300),
+			"tokenCount": k.TextTokenCount,
+		}
+		if i < len(vectorScores) {
+			item["vector"] = vectorScores[i].Vector
+			item["score"] = vectorScores[i].Score
+		}
+		metadata = append(metadata, item)
+	}
+	summary := fmt.Sprintf("%d chunks retrieved", len(knowledge))
+	w.ExecutionTracer.AddSimpleStep(object.StepTypeKnowledgeRetrieval, "Knowledge Retrieval", summary, map[string]interface{}{
+		"chunks": metadata,
+	})
+}
+
+func (w *RefinedWriter) RecordStreamingError(errorText string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	w.ExecutionTracer.AddSimpleStep(object.StepTypeError, "Streaming Error", errorText, nil)
+}
+
+func (w *RefinedWriter) FinalizeReasoningStep() {
+	if w.ExecutionTracer == nil || w.reasonStepId == "" {
+		return
+	}
+	w.ExecutionTracer.EndStep(w.reasonStepId, object.StepStatusCompleted, fmt.Sprintf("%d chars", len(w.reasonBuf)), "")
+	w.reasonStepId = ""
 }
