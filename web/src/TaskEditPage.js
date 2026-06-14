@@ -20,7 +20,7 @@ const ANALYZE_PROGRESS_DURATION_SEC = 300;
 const ANALYZE_PROGRESS_TICK_MS = 500;
 const ANALYZE_PROGRESS_MAX_PERCENT = 99;
 
-import {BarChartOutlined, ClearOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined} from "@ant-design/icons";
+import {BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
 import * as TaskBackend from "./backend/TaskBackend";
 import * as ScaleBackend from "./backend/ScaleBackend";
 import * as Setting from "./Setting";
@@ -47,6 +47,7 @@ class TaskEditPage extends React.Component {
       task: null,
       analyzing: false,
       analyzeProgress: 0,
+      analyzeError: "",
       loading: false,
       uploadingDocument: false,
     };
@@ -74,7 +75,10 @@ class TaskEditPage extends React.Component {
     if (!task) {
       return task;
     }
-    let t = task.scale === undefined || task.scale === null ? {...task, scale: ""} : task;
+    let t = task;
+    t = t.scale === undefined || t.scale === null ? {...t, scale: ""} : t;
+    t = t.documentError === undefined || t.documentError === null ? {...t, documentError: ""} : t;
+    t = t.documentFileType === undefined || t.documentFileType === null ? {...t, documentFileType: ""} : t;
     if (!t.result) {
       return t;
     }
@@ -120,7 +124,7 @@ class TaskEditPage extends React.Component {
       return;
     }
     this.analyzeStartTime = Date.now();
-    this.setState({analyzing: true, analyzeProgress: 0});
+    this.setState({analyzing: true, analyzeProgress: 0, analyzeError: ""});
     const durationMs = ANALYZE_PROGRESS_DURATION_SEC * 1000;
     this.analyzeProgressIntervalId = setInterval(() => {
       const elapsed = Date.now() - this.analyzeStartTime;
@@ -136,10 +140,12 @@ class TaskEditPage extends React.Component {
           this.setState({task: task});
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
         } else {
+          this.setState({analyzeError: res.msg || i18next.t("general:Failed to get")});
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       })
       .catch(err => {
+        this.setState({analyzeError: err.message || i18next.t("general:Failed to get")});
         Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
       })
       .finally(() => {
@@ -159,7 +165,7 @@ class TaskEditPage extends React.Component {
     const task = this.state.task;
     task.result = null;
     task.score = 0;
-    this.setState({task: task});
+    this.setState({task: task, analyzeError: ""});
   };
 
   getAnswer() {
@@ -233,9 +239,17 @@ class TaskEditPage extends React.Component {
           const task = this.state.task;
           task.documentUrl = result.url;
           task.documentText = result.text;
+          task.documentError = result.error || "";
+          task.documentFileType = result.fileType || "";
           this.setState({task: task});
 
-          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+          if (result.parseSuccess) {
+            Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+          } else if (result.error) {
+            Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
+          } else {
+            Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
+          }
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
         }
@@ -252,6 +266,8 @@ class TaskEditPage extends React.Component {
     const task = this.state.task;
     task.documentUrl = "";
     task.documentText = "";
+    task.documentError = "";
+    task.documentFileType = "";
     this.setState({task: task});
   };
 
@@ -387,16 +403,32 @@ class TaskEditPage extends React.Component {
               task.documentUrl ? (
                 <Card
                   size="small"
-                  style={{display: "inline-block", width: "auto", maxWidth: "100%", verticalAlign: "top"}}
+                  style={{display: "inline-block", width: "auto", maxWidth: "100%", verticalAlign: "top", borderColor: task.documentError ? "#faad14" : undefined}}
                 >
                   <div style={{display: "flex", alignItems: "center", gap: 12, flexWrap: "nowrap", minWidth: 0}}>
-                    <span style={{fontSize: 28, flexShrink: 0, color: task.documentUrl.endsWith(".pdf") ? "#cf1322" : "#1890ff"}}>
-                      {task.documentUrl.endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />}
+                    <span style={{fontSize: 28, flexShrink: 0, color: task.documentError ? "#faad14" : (task.documentUrl.endsWith(".pdf") ? "#cf1322" : "#1890ff")}}>
+                      {task.documentError ? <WarningOutlined /> : (task.documentUrl.endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />)}
                     </span>
                     <div style={{minWidth: 0, maxWidth: "min(960px, calc(100vw - 220px))", flex: "0 1 auto"}}>
-                      <Typography.Text ellipsis={{tooltip: true}} style={{width: "100%"}}>
+                      <Typography.Text ellipsis={{tooltip: true}} style={{width: "100%", fontWeight: task.documentError ? 500 : "normal"}}>
                         {this.getDocumentFileName()}
                       </Typography.Text>
+                      {task.documentError ? (
+                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
+                          <WarningOutlined style={{marginRight: "4px"}} />
+                          {task.documentError}
+                        </div>
+                      ) : task.documentText ? (
+                        <div style={{fontSize: "12px", color: "#52c41a", marginTop: "2px"}}>
+                          <CheckCircleOutlined style={{marginRight: "4px"}} />
+                          {i18next.t("task:Document parsed successfully")} ({task.documentText.length.toLocaleString()} {i18next.t("task:characters")})
+                        </div>
+                      ) : (
+                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
+                          <WarningOutlined style={{marginRight: "4px"}} />
+                          {i18next.t("task:No text extracted from document")}
+                        </div>
+                      )}
                     </div>
                     <Button type="link" size="small" icon={<DownloadOutlined />} href={task.documentUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}}>
                       {i18next.t("general:Download")}
@@ -434,7 +466,7 @@ class TaskEditPage extends React.Component {
               <div>
                 <Button
                   loading={this.state.analyzing}
-                  disabled={!task.documentText || !!task.result || !String(task.scale || "").trim()}
+                  disabled={task.documentError || !task.documentText || !!task.result || !String(task.scale || "").trim()}
                   style={{marginBottom: "20px", width: "200px"}}
                   type="primary"
                   icon={<BarChartOutlined />}
@@ -447,6 +479,24 @@ class TaskEditPage extends React.Component {
                     {i18next.t("general:Clear")}
                   </Button>
                 ) : null}
+                {task.documentError && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px"}}>
+                    <WarningOutlined style={{marginRight: "4px"}} />
+                    {i18next.t("task:Document parsing failed")}: {task.documentError}
+                  </div>
+                )}
+                {!task.documentError && !task.documentText && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px"}}>
+                    <WarningOutlined style={{marginRight: "4px"}} />
+                    {i18next.t("task:No text extracted from document")}
+                  </div>
+                )}
+                {this.state.analyzeError && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#ff4d4f", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff1f0", borderRadius: "4px", border: "1px solid #ffccc7"}}>
+                    <CloseCircleOutlined style={{marginRight: "4px"}} />
+                    {i18next.t("task:Analysis failed")}: {this.state.analyzeError}
+                  </div>
+                )}
                 {this.state.analyzing && (
                   <>
                     <div style={{maxWidth: "400px", marginTop: "8px", marginBottom: "8px"}}>

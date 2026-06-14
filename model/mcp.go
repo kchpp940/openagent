@@ -43,22 +43,17 @@ type ToolSession struct {
 }
 
 type ToolCallResponse struct {
-	Success    bool              `json:"success"`
-	Data       interface{}       `json:"data"`
-	Error      string            `json:"error,omitempty"`
-	ToolName   string            `json:"toolName"`
-	ServerName string            `json:"serverName,omitempty"`
-	ToolMeta   map[string]string `json:"toolMeta,omitempty"`
+	Success  bool        `json:"success"`
+	Data     interface{} `json:"data"`
+	Error    string      `json:"error,omitempty"`
+	ToolName string      `json:"toolName"`
 }
 
 type ToolCall struct {
-	Name       string            `json:"name"`
-	Arguments  string            `json:"arguments"`
-	Content    string            `json:"content"`
-	IsError    bool              `json:"isError"`
-	ServerName string            `json:"serverName,omitempty"`
-	ToolName   string            `json:"toolName,omitempty"`
-	ToolMeta   map[string]string `json:"toolMeta,omitempty"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+	Content   string `json:"content"`
+	IsError   bool   `json:"isError"`
 }
 
 const toolErrorRecoveryPrompt = "The previous tool call failed. Do not finish as if the task is complete. If possible, recover by calling the appropriate tool again with corrected arguments or a different tool. If recovery is not possible, clearly explain what is blocked and what input or condition is needed."
@@ -164,94 +159,6 @@ func normalizeToolCalls(toolSession *ToolSession) []openai.ToolCall {
 	return result
 }
 
-func resolveAndEnrichToolCall(toolCall openai.ToolCall, mcpToolSet *mcp.ToolSet, extraMeta ...map[string]string) (string, string, map[string]string) {
-	var serverName, toolName string
-	toolMeta := make(map[string]string)
-
-	for _, m := range extraMeta {
-		for k, v := range m {
-			if v != "" {
-				toolMeta[k] = v
-			}
-		}
-	}
-
-	if s, ok := toolMeta["serverName"]; ok && s != "" {
-		serverName = s
-	}
-	if t, ok := toolMeta["toolName"]; ok && t != "" {
-		toolName = t
-	}
-
-	id := toolCall.Function.Name
-	if id == "" {
-		id = toolMeta["toolId"]
-	}
-	if id != "" {
-		toolMeta["toolId"] = id
-	}
-
-	if serverName != "" && toolName != "" && id != "" {
-		if mcpToolSet != nil {
-			mcpToolSet.HydrateFromMetadata(id, mcp.ToolIdMetadata{
-				ServerName: serverName,
-				ToolName:   toolName,
-			})
-		} else {
-			mcp.RegisterToolIdMetadata(id, mcp.ToolIdMetadata{
-				ServerName: serverName,
-				ToolName:   toolName,
-			})
-		}
-	}
-
-	if (serverName == "" || toolName == "") && mcpToolSet != nil && id != "" {
-		if md, ok := mcpToolSet.LookupToolId(id); ok && md.ToolName != "" {
-			if serverName == "" {
-				serverName = md.ServerName
-			}
-			if toolName == "" {
-				toolName = md.ToolName
-			}
-		}
-	}
-
-	if (serverName == "" || toolName == "") && id != "" {
-		if md, ok := mcp.GetToolIdMetadata(id); ok && md.ToolName != "" {
-			if serverName == "" {
-				serverName = md.ServerName
-			}
-			if toolName == "" {
-				toolName = md.ToolName
-			}
-		}
-	}
-
-	if toolName == "" && id != "" {
-		s, t, parseErr := mcp.GetServerNameAndToolNameFromId(id)
-		if parseErr == nil && t != "" {
-			if serverName == "" {
-				serverName = s
-			}
-			toolName = t
-			md := mcp.ToolIdMetadata{ServerName: serverName, ToolName: toolName}
-			if mcpToolSet != nil {
-				mcpToolSet.RegisterToolId(id, md)
-			} else {
-				mcp.RegisterToolIdMetadata(id, md)
-			}
-		}
-	}
-
-	if serverName != "" {
-		toolMeta["serverName"] = serverName
-	}
-	if toolName != "" {
-		toolMeta["toolName"] = toolName
-	}
-	return serverName, toolName, toolMeta
-}
-
 func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {
 	var messages []*RawMessage
 
@@ -285,7 +192,7 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 		roundHasToolError := false
 		for _, toolCall := range toolCalls {
-			serverName, toolName, toolMeta := resolveAndEnrichToolCall(toolCall, toolSession.McpToolSet)
+			serverName, toolName, parseErr := mcp.GetServerNameAndToolNameFromId(toolCall.Function.Name)
 
 			messages = append(messages, &RawMessage{
 				Text:             "Call result from " + toolCall.Function.Name,
@@ -295,12 +202,22 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 			})
 
 			var toolFailed bool
-			messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolMeta, toolSession.McpToolSet, messages, writer, lang)
-			if err != nil {
-				return nil, err
-			}
-			if toolFailed {
-				roundHasToolError = true
+			if parseErr != nil {
+				messages, toolFailed, err = handleToolIdParseError(toolCall, parseErr, messages, writer, lang)
+				if err != nil {
+					return nil, err
+				}
+				if toolFailed {
+					roundHasToolError = true
+				}
+			} else {
+				messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
+				if err != nil {
+					return nil, err
+				}
+				if toolFailed {
+					roundHasToolError = true
+				}
 			}
 		}
 
@@ -369,37 +286,24 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 	return stop
 }
 
-func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, toolMeta map[string]string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
 	var arguments map[string]interface{}
 	ctx := context.Background()
 
-	displayToolName := toolName
-	if displayToolName == "" {
-		displayToolName = toolCall.Function.Name
-	}
-
 	toolStartData := ToolCall{
-		Name:       toolCall.Function.Name,
-		Arguments:  toolCall.Function.Arguments,
-		Content:    "",
-		IsError:    false,
-		ServerName: serverName,
-		ToolName:   toolName,
-		ToolMeta:   toolMeta,
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   "",
+		IsError:   false,
 	}
 	toolStartJSON, _ := json.Marshal(toolStartData)
 	if len(toolStartJSON) > 0 {
 		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
 	}
 
-	if toolName == "" {
-		errMsg := fmt.Sprintf(i18n.Translate(lang, "model:invalid tool id: cannot resolve server/tool name from id %s"), toolCall.Function.Name)
-		return emitToolError(toolCall, serverName, toolName, toolMeta, mcp.ToolCallErrInvalidID, errMsg, messages, writer, lang)
-	}
-
 	if parseErr := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); parseErr != nil {
 		errMsg := fmt.Sprintf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), parseErr)
-		return emitToolError(toolCall, serverName, toolName, toolMeta, mcp.ToolCallErrParseArgs, errMsg, messages, writer, lang)
+		return emitToolError(toolCall, mcp.ToolCallErrParseArgs, errMsg, messages, writer, lang)
 	}
 
 	var mu sync.Mutex
@@ -411,15 +315,30 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, toolMeta
 
 	if mcpToolSet == nil {
 		errMsg := i18n.Translate(lang, "model:MCP toolset is not initialized")
-		return emitToolError(toolCall, serverName, toolName, toolMeta, mcp.ToolCallErrToolNotAvailable, errMsg, messages, writer, lang)
+		return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
 	}
 
-	result, execErr = mcpToolSet.ExecuteTool(ctx, toolCall.Function.Name, arguments)
+	if serverName == "" {
+		if mcpToolSet.BuiltinTools == nil {
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:builtin tool registry is not available; cannot execute tool: %s"), toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
+		}
+		result, execErr = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
+	} else {
+		conn, ok := mcpToolSet.Connections[serverName]
+		if !ok {
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:no open MCP connection for server: %s (tool: %s)"), serverName, toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoConnection, errMsg, messages, writer, lang)
+		}
+		req := &protocol.CallToolRequest{
+			Name:      toolName,
+			Arguments: arguments,
+		}
+		result, execErr = conn.CallTool(ctx, req)
+	}
 
 	response := &ToolCallResponse{
-		ToolName:   displayToolName,
-		ServerName: serverName,
-		ToolMeta:   toolMeta,
+		ToolName: toolCall.Function.Name,
 	}
 
 	if execErr != nil {
@@ -468,17 +387,14 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, toolMeta
 		}
 	}
 
-	fmt.Printf("Tool Result: [%s] server=%s tool=%s\n", contentStr, serverName, toolName)
+	fmt.Printf("Tool Result: [%s]\n", contentStr)
 	isError := !response.Success
 
 	toolData := ToolCall{
-		Name:       toolCall.Function.Name,
-		Arguments:  toolCall.Function.Arguments,
-		Content:    contentStr,
-		IsError:    isError,
-		ServerName: serverName,
-		ToolName:   toolName,
-		ToolMeta:   toolMeta,
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   contentStr,
+		IsError:   isError,
 	}
 	toolJSON, _ := json.Marshal(toolData)
 	if len(toolJSON) > 0 {
@@ -491,17 +407,27 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, toolMeta
 	return messages, !response.Success, nil
 }
 
-func emitToolError(toolCall openai.ToolCall, serverName, toolName string, toolMeta map[string]string, errKind, errMsg string, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
-	displayToolName := toolName
-	if displayToolName == "" {
-		displayToolName = toolCall.Function.Name
+func handleToolIdParseError(toolCall openai.ToolCall, parseErr error, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+	toolStartData := ToolCall{
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   "",
+		IsError:   false,
 	}
+	toolStartJSON, _ := json.Marshal(toolStartData)
+	if len(toolStartJSON) > 0 {
+		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
+	}
+
+	errMsg := fmt.Sprintf(i18n.Translate(lang, "model:invalid tool id: %v"), parseErr)
+	return emitToolError(toolCall, mcp.ToolCallErrInvalidID, errMsg, messages, writer, lang)
+}
+
+func emitToolError(toolCall openai.ToolCall, errKind, errMsg string, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
 	response := &ToolCallResponse{
-		Success:    false,
-		ToolName:   displayToolName,
-		ServerName: serverName,
-		ToolMeta:   toolMeta,
-		Error:      fmt.Sprintf("[%s] %s", errKind, errMsg),
+		Success:  false,
+		ToolName: toolCall.Function.Name,
+		Error:    fmt.Sprintf("[%s] %s", errKind, errMsg),
 	}
 
 	responseJson, marshalErr := json.Marshal(response)
@@ -510,16 +436,13 @@ func emitToolError(toolCall openai.ToolCall, serverName, toolName string, toolMe
 	}
 
 	contentStr := response.Error
-	fmt.Printf("Tool Error [%s] server=%s tool=%s: %s\n", errKind, serverName, toolName, contentStr)
+	fmt.Printf("Tool Error [%s]: %s\n", errKind, contentStr)
 
 	toolData := ToolCall{
-		Name:       toolCall.Function.Name,
-		Arguments:  toolCall.Function.Arguments,
-		Content:    contentStr,
-		IsError:    true,
-		ServerName: serverName,
-		ToolName:   toolName,
-		ToolMeta:   toolMeta,
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   contentStr,
+		IsError:   true,
 	}
 	toolJSON, _ := json.Marshal(toolData)
 	if len(toolJSON) > 0 {
@@ -542,29 +465,6 @@ func GetToolCallsFromWriter(toolMessage string) []ToolCall {
 		}
 		var toolCall ToolCall
 		if err := json.Unmarshal([]byte(line), &toolCall); err == nil {
-			if toolCall.ToolName == "" || toolCall.ServerName == "" {
-				serverName, toolName, parseErr := mcp.GetServerNameAndToolNameFromId(toolCall.Name)
-				if parseErr == nil && toolName != "" {
-					if toolCall.ToolName == "" {
-						toolCall.ToolName = toolName
-					}
-					if toolCall.ServerName == "" {
-						toolCall.ServerName = serverName
-					}
-					if toolCall.ToolMeta == nil {
-						toolCall.ToolMeta = make(map[string]string)
-					}
-					if _, ok := toolCall.ToolMeta["toolId"]; !ok {
-						toolCall.ToolMeta["toolId"] = toolCall.Name
-					}
-					toolCall.ToolMeta["serverName"] = serverName
-					toolCall.ToolMeta["toolName"] = toolName
-					mcp.RegisterToolIdMetadata(toolCall.Name, mcp.ToolIdMetadata{
-						ServerName: serverName,
-						ToolName:   toolName,
-					})
-				}
-			}
 			toolCalls = append(toolCalls, toolCall)
 		}
 	}

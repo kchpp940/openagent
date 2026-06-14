@@ -355,6 +355,8 @@
     "Successfully undisliked": "Successfully undisliked",
     "Successfully unliked": "Successfully unliked",
     "Successfully uploaded": "Successfully uploaded",
+    "Uploaded successfully, but parsing failed": "Uploaded successfully, but parsing failed",
+    "Uploaded successfully, but no text was extracted": "Uploaded successfully, but no text was extracted",
     "Sure to delete": "Sure to delete",
     "Sure to delete all": "Sure to delete all",
     "Swagger": "API Docs",
@@ -896,7 +898,12 @@
     "Sub-criteria": "Sub-criteria",
     "Suggestion": "Suggestion",
     "Textbook": "Textbook",
-    "Unit Name": "Unit Name"
+    "Unit Name": "Unit Name",
+    "Document parsed successfully": "Document parsed successfully",
+    "No text extracted from document": "No text extracted from document",
+    "Document parsing failed": "Document parsing failed",
+    "Analysis failed": "Analysis failed",
+    "characters": "characters"
   },
   "tool": {
     "Chrome for Testing": "Chrome for Testing",

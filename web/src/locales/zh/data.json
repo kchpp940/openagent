@@ -355,6 +355,8 @@
     "Successfully undisliked": "取消点踩成功",
     "Successfully unliked": "取消点赞成功",
     "Successfully uploaded": "上传成功",
+    "Uploaded successfully, but parsing failed": "上传成功但解析失败",
+    "Uploaded successfully, but no text was extracted": "上传成功但未提取到文本",
     "Sure to delete": "确定删除",
     "Sure to delete all": "确定删除全部",
     "Swagger": "API文档",
@@ -896,7 +898,12 @@
     "Sub-criteria": "二级评价项",
     "Suggestion": "改进建议",
     "Textbook": "主要教材",
-    "Unit Name": "课题/单元名称"
+    "Unit Name": "课题/单元名称",
+    "Document parsed successfully": "文档解析成功",
+    "No text extracted from document": "未从文档中提取到文本",
+    "Document parsing failed": "文档解析失败",
+    "Analysis failed": "分析失败",
+    "characters": "字符"
   },
   "tool": {
     "Chrome for Testing": "测试版Chrome",

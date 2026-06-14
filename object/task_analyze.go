@@ -17,6 +17,8 @@ package object
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -64,6 +66,233 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
   ]
 }`
 
+func extractJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+
+	lower := strings.ToLower(raw)
+	idx := strings.Index(lower, "```json")
+	if idx == -1 {
+		idx = strings.Index(lower, "```")
+	}
+	if idx != -1 {
+		raw = raw[idx:]
+		endIdx := strings.LastIndex(raw, "```")
+		if endIdx != -1 && endIdx > idx {
+			raw = raw[:endIdx]
+		}
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```JSON")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
+	}
+
+	firstBrace := strings.Index(raw, "{")
+	firstBracket := strings.Index(raw, "[")
+	start := -1
+	end := -1
+
+	if firstBrace != -1 && (firstBracket == -1 || firstBrace < firstBracket) {
+		start = firstBrace
+		depth := 0
+		inString := false
+		escaped := false
+		for i := start; i < len(raw); i++ {
+			ch := raw[i]
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = !inString
+				continue
+			}
+			if inString {
+				continue
+			}
+			if ch == '{' {
+				depth++
+			} else if ch == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+	} else if firstBracket != -1 {
+		start = firstBracket
+		depth := 0
+		inString := false
+		escaped := false
+		for i := start; i < len(raw); i++ {
+			ch := raw[i]
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = !inString
+				continue
+			}
+			if inString {
+				continue
+			}
+			if ch == '[' {
+				depth++
+			} else if ch == ']' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+	}
+
+	if start != -1 && end != -1 && end > start {
+		return raw[start:end]
+	}
+
+	return raw
+}
+
+func parseFloat(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func parseString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+func normalizeTaskResult(result *TaskResult) {
+	if result == nil {
+		return
+	}
+
+	var allItemScores []float64
+
+	for i, cat := range result.Categories {
+		if cat == nil {
+			continue
+		}
+
+		var catItemScores []float64
+		for j, item := range cat.Items {
+			if item == nil {
+				continue
+			}
+			if item.Score <= 0 {
+				item.Score = 70
+			}
+			item.Score = math.Round(item.Score)
+			if item.Score < 60 {
+				item.Score = 60
+			}
+			if item.Score > 100 {
+				item.Score = 100
+			}
+			catItemScores = append(catItemScores, item.Score)
+			allItemScores = append(allItemScores, item.Score)
+			cat.Items[j] = item
+		}
+
+		if cat.Score <= 0 && len(catItemScores) > 0 {
+			sum := 0.0
+			for _, s := range catItemScores {
+				sum += s
+			}
+			cat.Score = math.Round((sum/float64(len(catItemScores)))*100) / 100
+		}
+		result.Categories[i] = cat
+	}
+
+	if result.Score <= 0 && len(allItemScores) > 0 {
+		sum := 0.0
+		for _, s := range allItemScores {
+			sum += s
+		}
+		result.Score = math.Round((sum/float64(len(allItemScores)))*10) / 10
+	}
+}
+
+func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
+	result := &TaskResult{
+		Title:         parseString(data["title"]),
+		Designer:      parseString(data["designer"]),
+		Stage:         parseString(data["stage"]),
+		Participants:  parseString(data["participants"]),
+		Grade:         parseString(data["grade"]),
+		Instructor:    parseString(data["instructor"]),
+		Subject:       parseString(data["subject"]),
+		School:        parseString(data["school"]),
+		OtherSubjects: parseString(data["otherSubjects"]),
+		Textbook:      parseString(data["textbook"]),
+		Score:         parseFloat(data["score"]),
+	}
+
+	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
+		for _, catRaw := range categoriesRaw {
+			if catMap, ok := catRaw.(map[string]interface{}); ok {
+				cat := &TaskResultCategory{
+					Name:  parseString(catMap["name"]),
+					Score: parseFloat(catMap["score"]),
+				}
+
+				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
+					for _, itemRaw := range itemsRaw {
+						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
+							item := &TaskResultItem{
+								Name:         parseString(itemMap["name"]),
+								Score:        parseFloat(itemMap["score"]),
+								Advantage:    parseString(itemMap["advantage"]),
+								Disadvantage: parseString(itemMap["disadvantage"]),
+								Suggestion:   parseString(itemMap["suggestion"]),
+							}
+							cat.Items = append(cat.Items, item)
+						}
+					}
+				}
+
+				result.Categories = append(result.Categories, cat)
+			}
+		}
+	}
+
+	normalizeTaskResult(result)
+	return result
+}
+
 func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	taskID := task.GetId()
 	logs.Info("[analyze-task] start task=%s provider=%s lang=%s", taskID, task.Provider, lang)
@@ -79,7 +308,13 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	scaleRunes := utf8.RuneCountInString(effectiveScale)
 	logs.Info("[analyze-task] rubric loaded task=%s scaleRef=%s rubricLen=%d runes", taskID, task.Scale, scaleRunes)
 
+	if task.DocumentError != "" {
+		return nil, fmt.Errorf("文档解析失败，无法进行分析: %s", task.DocumentError)
+	}
 	if task.DocumentText == "" {
+		if task.DocumentUrl != "" {
+			return nil, fmt.Errorf("任务文档已上传但未成功解析，请检查文档格式是否正确或尝试重新上传")
+		}
 		return nil, fmt.Errorf("任务文档不能为空，请先上传文档")
 	}
 	docRunes := utf8.RuneCountInString(task.DocumentText)
@@ -105,25 +340,16 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	}
 	logs.Info("[analyze-task] AI returned task=%s elapsed=%v answerLen=%d bytes", taskID, aiElapsed, len(answer))
 
-	answer = strings.TrimSpace(answer)
-	// Strip markdown code block if present
-	if strings.HasPrefix(answer, "```json") {
-		answer = strings.TrimPrefix(answer, "```json")
-		answer = strings.TrimSuffix(answer, "```")
-		answer = strings.TrimSpace(answer)
-	} else if strings.HasPrefix(answer, "```") {
-		answer = strings.TrimPrefix(answer, "```")
-		answer = strings.TrimSuffix(answer, "```")
-		answer = strings.TrimSpace(answer)
-	}
+	jsonStr := extractJSON(answer)
+	logs.Info("[analyze-task] extracted JSON task=%s jsonLen=%d bytes", taskID, len(jsonStr))
 
-	logs.Info("[analyze-task] parsing JSON task=%s bodyLen=%d bytes", taskID, len(answer))
-	var result TaskResult
-	if err = json.Unmarshal([]byte(answer), &result); err != nil {
-		logs.Error("[analyze-task] JSON unmarshal failed task=%s: %v", taskID, err)
+	var rawData map[string]interface{}
+	if err = json.Unmarshal([]byte(jsonStr), &rawData); err != nil {
+		logs.Error("[analyze-task] JSON unmarshal failed task=%s: %v\nraw: %s", taskID, err, jsonStr)
 		return nil, fmt.Errorf("解析AI分析结果为JSON失败: %v\n原始回复: %s", err, answer)
 	}
 
+	result := normalizeTaskResultFromMap(rawData)
 	logs.Info("[analyze-task] done task=%s score=%.2f categories=%d", taskID, result.Score, len(result.Categories))
-	return &result, nil
+	return result, nil
 }

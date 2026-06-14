@@ -15,7 +15,6 @@
 package object
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/the-open-agent/openagent/mcp"
@@ -55,136 +54,10 @@ func buildToolSetForBuiltinTool(toolName, user, origin, lang string) (*mcp.ToolS
 		return nil, nil
 	}
 
-	toolSet := mcp.NewToolSet()
-	toolSet.AddBuiltinTools(reg)
-	return toolSet, nil
-}
-
-func HydrateToolCallMetadata(tcs []model.ToolCall) {
-	for i := range tcs {
-		tc := &tcs[i]
-		if tc.ToolMeta == nil {
-			tc.ToolMeta = make(map[string]string)
-		}
-		if tc.Name != "" {
-			if _, ok := tc.ToolMeta["toolId"]; !ok {
-				tc.ToolMeta["toolId"] = tc.Name
-			}
-		}
-
-		if tc.ServerName != "" && tc.ToolName != "" {
-			mcp.RegisterToolIdMetadata(tc.Name, mcp.ToolIdMetadata{
-				ServerName: tc.ServerName,
-				ToolName:   tc.ToolName,
-			})
-			tc.ToolMeta["serverName"] = tc.ServerName
-			tc.ToolMeta["toolName"] = tc.ToolName
-			continue
-		}
-
-		if s, ok := tc.ToolMeta["serverName"]; ok && s != "" && tc.ServerName == "" {
-			tc.ServerName = s
-		}
-		if t, ok := tc.ToolMeta["toolName"]; ok && t != "" && tc.ToolName == "" {
-			tc.ToolName = t
-		}
-
-		if tc.ServerName != "" && tc.ToolName != "" {
-			mcp.RegisterToolIdMetadata(tc.Name, mcp.ToolIdMetadata{
-				ServerName: tc.ServerName,
-				ToolName:   tc.ToolName,
-			})
-			continue
-		}
-
-		serverName, toolName, parseErr := mcp.GetServerNameAndToolNameFromId(tc.Name)
-		if parseErr == nil && toolName != "" {
-			if tc.ServerName == "" {
-				tc.ServerName = serverName
-			}
-			if tc.ToolName == "" {
-				tc.ToolName = toolName
-			}
-			tc.ToolMeta["serverName"] = tc.ServerName
-			tc.ToolMeta["toolName"] = tc.ToolName
-			mcp.RegisterToolIdMetadata(tc.Name, mcp.ToolIdMetadata{
-				ServerName: tc.ServerName,
-				ToolName:   tc.ToolName,
-			})
-		}
-	}
-}
-
-type ToolCallValidationIssue struct {
-	Index   int
-	ToolID  string
-	Message string
-}
-
-func ValidateAndEnrichToolCalls(tcs []model.ToolCall, mcpToolSet *mcp.ToolSet) ([]ToolCallValidationIssue, bool) {
-	var issues []ToolCallValidationIssue
-	hasFatal := false
-
-	HydrateToolCallMetadata(tcs)
-
-	for i := range tcs {
-		tc := &tcs[i]
-		if tc.ToolMeta == nil {
-			tc.ToolMeta = make(map[string]string)
-		}
-		if tc.Name != "" {
-			tc.ToolMeta["toolId"] = tc.Name
-		}
-
-		missing := []string{}
-		if tc.Name == "" {
-			missing = append(missing, "toolId(name)")
-		}
-		if tc.ToolName == "" {
-			missing = append(missing, "toolName")
-		}
-
-		if mcpToolSet != nil && tc.Name != "" {
-			if md, ok := mcpToolSet.LookupToolId(tc.Name); ok && md.ToolName != "" {
-				if tc.ServerName == "" {
-					tc.ServerName = md.ServerName
-				}
-				if tc.ToolName == "" {
-					tc.ToolName = md.ToolName
-				}
-			}
-			mcpToolSet.HydrateFromMetadata(tc.Name, mcp.ToolIdMetadata{
-				ServerName: tc.ServerName,
-				ToolName:   tc.ToolName,
-			})
-		}
-
-		if len(missing) > 0 {
-			msg := fmt.Sprintf("missing metadata fields: %s", strings.Join(missing, ", "))
-			if tc.Content == "" {
-				tc.Content = fmt.Sprintf("[%s] %s for toolId=%s",
-					mcp.ToolCallErrMissingMetadata, msg, tc.Name)
-				tc.IsError = true
-			}
-			if tc.ToolName == "" && tc.Name != "" {
-				tc.ToolMeta["toolName"] = "(unknown)"
-			}
-			hasFatal = true
-			issues = append(issues, ToolCallValidationIssue{
-				Index:   i,
-				ToolID:  tc.Name,
-				Message: msg,
-			})
-		}
-
-		tc.ToolMeta["serverName"] = tc.ServerName
-		tc.ToolMeta["toolName"] = tc.ToolName
-		if tc.Name != "" {
-			tc.ToolMeta["toolId"] = tc.Name
-		}
-	}
-
-	return issues, hasFatal
+	return &mcp.ToolSet{
+		Tools:        allTools,
+		BuiltinTools: reg,
+	}, nil
 }
 
 func GetAnswerWithTool(modelProviderName, toolName, question, user, origin, lang string) (string, *model.ModelResult, error) {

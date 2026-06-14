@@ -74,8 +74,10 @@ type Task struct {
 
 	Result string `xorm:"mediumtext" json:"result"`
 
-	DocumentUrl  string `xorm:"varchar(500)" json:"documentUrl"`
-	DocumentText string `xorm:"mediumtext" json:"documentText"`
+	DocumentUrl      string `xorm:"varchar(500)" json:"documentUrl"`
+	DocumentText     string `xorm:"mediumtext" json:"documentText"`
+	DocumentError    string `xorm:"varchar(500)" json:"documentError"`
+	DocumentFileType string `xorm:"varchar(100)" json:"documentFileType"`
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {

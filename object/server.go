@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThinkInAIXYZ/go-mcp/client"
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/mcp"
@@ -230,6 +231,8 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 		return nil, err
 	}
 
+	// Determine which tools are allowed. If Tools is empty (not yet synced),
+	// allow everything; otherwise only include tools with IsAllowed = true.
 	allowedSet := make(map[string]bool)
 	hasFilter := len(s.Tools) > 0
 	for _, t := range s.Tools {
@@ -252,15 +255,19 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 			}
 		}
 		tCopy := *t
+		toolId, err := mcp.GetIdFromServerNameAndToolName(s.Name, t.Name)
+		if err != nil {
+			cli.Close()
+			return nil, fmt.Errorf("failed to construct tool id for server %s tool %s: %w", s.Name, t.Name, err)
+		}
+		tCopy.Name = toolId
 		filteredTools = append(filteredTools, &tCopy)
 	}
 
-	toolSet := mcp.NewToolSet()
-	if err := toolSet.AddServerTools(s.Name, filteredTools, cli); err != nil {
-		cli.Close()
-		return nil, err
-	}
-	return toolSet, nil
+	return &mcp.ToolSet{
+		Connections: map[string]*client.Client{s.Name: cli},
+		Tools:       filteredTools,
+	}, nil
 }
 
 // GetServerMcpToolSet loads the named MCP server and returns its tool set.

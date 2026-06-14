@@ -81,7 +81,7 @@ func GetGlobalMessages() ([]*Message, error) {
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 
@@ -91,7 +91,7 @@ func GetGlobalFailMessages() ([]*Message, error) {
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 
@@ -101,7 +101,7 @@ func GetGlobalMessagesByStoreName(storeName string) ([]*Message, error) {
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 
@@ -111,7 +111,7 @@ func GetChatMessages(chat string) ([]*Message, error) {
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 
@@ -138,7 +138,7 @@ func GetMessages(owner string, user string, storeName string) ([]*Message, error
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 
@@ -159,7 +159,6 @@ func getMessage(owner, name string) (*Message, error) {
 	}
 
 	if existed {
-		hydrateMessageToolCalls(&message)
 		return &message, nil
 	} else {
 		return nil, nil
@@ -185,10 +184,6 @@ func UpdateMessage(id string, message *Message, isHitOnly bool) (bool, error) {
 	}
 	if message == nil {
 		return false, nil
-	}
-
-	if !isHitOnly && len(message.ToolCalls) > 0 {
-		ValidateAndEnrichToolCalls(message.ToolCalls, nil)
 	}
 
 	if originMessage.TextTokenCount == 0 || originMessage.Text != message.Text {
@@ -302,9 +297,6 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 }
 
 func AddMessage(message *Message) (bool, error) {
-	if message != nil && len(message.ToolCalls) > 0 {
-		ValidateAndEnrichToolCalls(message.ToolCalls, nil)
-	}
 	size, err := getMessageTextTokenCount(message.ModelProvider, message.Text)
 	if err != nil {
 		return false, err
@@ -393,8 +385,6 @@ func GetRecentRawMessages(chat string, createdTime string, memoryLimit int) ([]*
 	}
 
 	for _, message := range messages {
-		hydrateMessageToolCalls(message)
-
 		rawTextTokenCount := message.TextTokenCount
 		if rawTextTokenCount == 0 {
 			rawTextTokenCount, err = getMessageTextTokenCount(message.ModelProvider, message.Text)
@@ -410,15 +400,6 @@ func GetRecentRawMessages(chat string, createdTime string, memoryLimit int) ([]*
 		res = append(res, rawMessage)
 	}
 	return res, nil
-}
-
-func hydrateMessageToolCalls(messages ...*Message) {
-	for _, m := range messages {
-		if m == nil || len(m.ToolCalls) == 0 {
-			continue
-		}
-		HydrateToolCallMetadata(m.ToolCalls)
-	}
 }
 
 type MyWriter struct {
@@ -492,7 +473,6 @@ func GetPaginationMessagesByStoreNames(storeNames []string, offset, limit int, f
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
 	return messages, nil
 }
 
@@ -516,7 +496,6 @@ func GetPaginationMessagesByUser(user, store string, offset, limit int, field, v
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
 	return messages, nil
 }
 
@@ -530,7 +509,7 @@ func GetPaginationMessages(owner string, offset, limit int, field, value, sortFi
 	if err != nil {
 		return messages, err
 	}
-	hydrateMessageToolCalls(messages...)
+
 	return messages, nil
 }
 

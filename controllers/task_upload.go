@@ -17,6 +17,7 @@ package controllers
 import (
 	"encoding/base64"
 	"fmt"
+	"mime"
 	"path/filepath"
 	"strings"
 
@@ -24,6 +25,64 @@ import (
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/txt"
 )
+
+func detectFileExtension(fileName, fileType string, supportedTypes []string) string {
+	ext := strings.ToLower(filepath.Ext(fileName))
+
+	extFromMime := ""
+	if fileType != "" {
+		exts, _ := mime.ExtensionsByType(fileType)
+		if len(exts) > 0 {
+			extFromMime = strings.ToLower(exts[0])
+		}
+	}
+
+	if ext == "" && extFromMime != "" {
+		ext = extFromMime
+	}
+
+	for _, supported := range supportedTypes {
+		if ext == supported {
+			return ext
+		}
+	}
+
+	if extFromMime != "" {
+		for _, supported := range supportedTypes {
+			if extFromMime == supported {
+				return extFromMime
+			}
+		}
+	}
+
+	return ""
+}
+
+func decodeFileBase64(fileBase64 string) ([]byte, error) {
+	data := fileBase64
+
+	if idx := strings.Index(data, ","); idx != -1 {
+		data = data[idx+1:]
+	}
+
+	data = strings.TrimSpace(data)
+
+	dec, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		dec, err = base64.URLEncoding.DecodeString(data)
+		if err != nil {
+			dec, err = base64.RawStdEncoding.DecodeString(data)
+			if err != nil {
+				dec, err = base64.RawURLEncoding.DecodeString(data)
+				if err != nil {
+					return nil, fmt.Errorf("invalid base64 data: %v", err)
+				}
+			}
+		}
+	}
+
+	return dec, nil
+}
 
 // UploadTaskDocument
 // @Title UploadTaskDocument
@@ -46,12 +105,11 @@ func (c *ApiController) UploadTaskDocument() {
 	fileType := c.GetString("type")
 	fileName := c.GetString("name")
 
-	if taskId == "" || fileBase64 == "" || fileType == "" || fileName == "" {
+	if taskId == "" || fileBase64 == "" || fileName == "" {
 		c.ResponseError(c.T("application:Missing required parameters"))
 		return
 	}
 
-	// Get the task to verify ownership
 	task, err := object.GetTask(taskId)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -62,7 +120,6 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	// Check ownership for non-admins
 	if !c.IsAdmin() {
 		if task.Owner != userName {
 			c.ResponseError(c.T("auth:Unauthorized operation"))
@@ -70,9 +127,10 @@ func (c *ApiController) UploadTaskDocument() {
 		}
 	}
 
-	// Validate file extension - only .docx and .pdf allowed
-	ext := strings.ToLower(filepath.Ext(fileName))
+	supportedTypes := txt.GetSupportedFileTypes()
 	allowedExtensions := []string{".docx", ".pdf"}
+	ext := detectFileExtension(fileName, fileType, supportedTypes)
+
 	isValid := false
 	for _, allowed := range allowedExtensions {
 		if ext == allowed {
@@ -85,21 +143,12 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	// Decode base64 file data
-	index := strings.Index(fileBase64, ",")
-	if index == -1 {
-		c.ResponseError(c.T("resource:Invalid file data format"))
-		return
-	}
-
-	fileBytes, err := base64.StdEncoding.DecodeString(fileBase64[index+1:])
+	fileBytes, err := decodeFileBase64(fileBase64)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	// Upload file to storage
-	// Replace '+' with '_' to avoid '+'-as-space ambiguity in CDN URLs
 	safeFileName := strings.ReplaceAll(fileName, "+", "_")
 	filePath := fmt.Sprintf("openagent/task-documents/%s/%s", userName, safeFileName)
 	host := c.Ctx.Request.Host
@@ -110,23 +159,23 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	// Record the upload as a resource
 	resource := object.NewResourceFromUpload("admin", userName, "document", fileName, "application", ext, fileUrl, filePath, len(fileBytes), "task", taskId)
 	if _, addErr := object.AddResource(resource); addErr != nil {
 		logs.Warning("Failed to save resource record for task document: %v", addErr)
 	}
 
-	// Parse document text
+	task.DocumentUrl = fileUrl
+	task.DocumentFileType = ext
+	task.DocumentError = ""
+	task.DocumentText = ""
+
 	documentText, err := txt.GetParsedTextFromUrl(fileUrl, ext, c.GetAcceptLanguage())
 	if err != nil {
-		// Log error but don't fail the upload
 		logs.Error("Failed to parse text from %s: %v", fileUrl, err)
-		documentText = ""
+		task.DocumentError = fmt.Sprintf("文档解析失败: %v", err)
+	} else {
+		task.DocumentText = documentText
 	}
-
-	// Update task with document URL and text
-	task.DocumentUrl = fileUrl
-	task.DocumentText = documentText
 
 	success, err := object.UpdateTask(taskId, task)
 	if err != nil {
@@ -139,10 +188,12 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	// Return both URL and parsed text
 	result := map[string]interface{}{
-		"url":  fileUrl,
-		"text": documentText,
+		"url":          fileUrl,
+		"text":         task.DocumentText,
+		"error":        task.DocumentError,
+		"fileType":     task.DocumentFileType,
+		"parseSuccess": task.DocumentError == "" && task.DocumentText != "",
 	}
 	c.ResponseOk(result)
 }
