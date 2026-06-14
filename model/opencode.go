@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/proxy"
 )
 
@@ -64,9 +65,9 @@ URL: https://opencode.ai`
 }
 
 func (p *OpenCodeProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {
-	ssew, err := GetSSEEventWriter(writer, lang)
-	if err != nil {
-		return nil, err
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	if strings.HasPrefix(question, "$OpenAgentDryRun$") {
@@ -122,7 +123,7 @@ func (p *OpenCodeProvider) QueryText(question string, writer io.Writer, history 
 	resultCh := make(chan sseResult, 1)
 	readyCh := make(chan struct{})
 	go func() {
-		r, e := p.readSSEStream(ctx, sessionID, question, ssew, readyCh)
+		r, e := p.readSSEStream(ctx, sessionID, question, writer, flusher, readyCh)
 		resultCh <- sseResult{r, e}
 	}()
 
@@ -234,7 +235,7 @@ func (p *OpenCodeProvider) sendMessageAsync(sessionID string, systemPrompt strin
 	return nil
 }
 
-func (p *OpenCodeProvider) readSSEStream(ctx context.Context, sessionID string, question string, ssew SSEEventWriter, ready chan<- struct{}) (*ModelResult, error) {
+func (p *OpenCodeProvider) readSSEStream(ctx context.Context, sessionID string, question string, writer io.Writer, flusher http.Flusher, ready chan<- struct{}) (*ModelResult, error) {
 	// OpenCode only exposes global SSE endpoints (/event and /global/event).
 	// There is no session-scoped SSE endpoint, so we filter by sessionID
 	// client-side. This is the intended design — events include a sessionID
@@ -340,11 +341,12 @@ func (p *OpenCodeProvider) readSSEStream(ctx context.Context, sessionID string, 
 			partType := partTypes[partID]
 
 			if partType == "reasoning" {
-				ssew.WriteSSEEvent("reason", delta)
+				fmt.Fprintf(writer, "event: reason\ndata: %s\n\n", delta)
 			} else {
 				fullText.WriteString(delta)
-				ssew.WriteSSEEvent("message", delta)
+				fmt.Fprintf(writer, "event: message\ndata: %s\n\n", delta)
 			}
+			flusher.Flush()
 
 		case "session.status":
 			evtSessionID, _ := event.Properties["sessionID"].(string)

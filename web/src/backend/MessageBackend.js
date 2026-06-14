@@ -46,40 +46,14 @@ export function getChatMessages(owner, chat) {
 
 const eventSourceMap = new Map();
 
-export function safeJsonParse(str, fallback = null) {
-  if (str === null || str === undefined) {
-    return fallback;
-  }
-  if (typeof str !== "string") {
-    return str;
-  }
-  const trimmed = str.trim();
-  if (trimmed === "") {
-    return fallback;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch (e) {
-    console.warn("[MessageBackend] JSON parse failed, raw input:", str.slice(0, 200), "error:", e.message);
-    return fallback;
-  }
-}
-
 export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd, onInfo, onChat, onToolDelta) {
-  const key = `${owner}/${name}`;
-  if (eventSourceMap.has(key)) {
+  if (eventSourceMap.has(`${owner}/${name}`)) {
     return;
   }
-
   const eventSource = new EventSource(`${Setting.ServerUrl}/api/get-message-answer?id=${owner}/${encodeURIComponent(name)}`, {
     withCredentials: true,
   });
-  eventSourceMap.set(key, eventSource);
-
-  const cleanup = () => {
-    eventSource.close();
-    eventSourceMap.delete(key);
-  };
+  eventSourceMap.set(`${owner}/${name}`, eventSource);
 
   eventSource.addEventListener("message", (e) => {
     onMessage(e.data);
@@ -121,16 +95,18 @@ export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSea
 
   if (onChat) {
     eventSource.addEventListener("chat", (e) => {
-      const parsed = safeJsonParse(e.data, null);
-      if (parsed !== null) {
-        onChat(parsed);
+      try {
+        onChat(JSON.parse(e.data));
+      } catch {
+        // ignore malformed chat events
       }
     });
   }
 
   eventSource.addEventListener("myerror", (e) => {
     onError(e.data);
-    cleanup();
+    eventSource.close();
+    eventSourceMap.delete(`${owner}/${name}`);
   });
 
   eventSource.addEventListener("error", (e) => {
@@ -139,12 +115,14 @@ export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSea
       error = "Unknown error";
     }
     onError(error);
-    cleanup();
+    eventSource.close();
+    eventSourceMap.delete(`${owner}/${name}`);
   });
 
   eventSource.addEventListener("end", (e) => {
     onEnd(e.data);
-    cleanup();
+    eventSource.close();
+    eventSourceMap.delete(`${owner}/${name}`);
   });
 }
 
@@ -184,11 +162,8 @@ export function closeMessageEventSource(owner, name, cancel = false) {
   const key = `${owner}/${name}`;
   const found = eventSourceMap.has(key);
   if (found) {
-    const es = eventSourceMap.get(key);
+    eventSourceMap.get(key).close();
     eventSourceMap.delete(key);
-    if (es && typeof es.close === "function") {
-      es.close();
-    }
   }
   if (cancel) {
     cancelMessageAnswer(owner, name).catch(() => {});

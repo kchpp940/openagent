@@ -17,6 +17,7 @@ package model
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -71,13 +72,17 @@ func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, hist
 		return nil, err
 	}
 
-	ssew, err := GetSSEEventWriter(writer, lang)
-	if err != nil {
-		return nil, err
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	flushData := func(data string) error {
-		return ssew.WriteSSEEvent("message", data)
+		if _, err = fmt.Fprintf(writer, "event: message\ndata: %s\n\n", data); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
 	}
 
 	if strings.HasPrefix(question, "$OpenAgentDryRun$") {

@@ -15,24 +15,62 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
-func GetServerNameAndToolNameFromId(id string) (string, string) {
-	tokens := strings.Split(id, "__")
+const oldSeparator = "__"
 
-	if len(tokens) == 1 {
-		return "", tokens[0]
-	}
-
-	if len(tokens) > 2 {
-		panic(errors.New("GetServerNameAndToolNameFromId() error, wrong token count for ID: " + id))
-	}
-
-	return tokens[0], tokens[1]
+type toolIdPayload struct {
+	Server string `json:"s"`
+	Tool   string `json:"t"`
 }
 
-func GetIdFromServerNameAndToolName(serverName, toolName string) string {
-	return serverName + "__" + toolName
+func GetServerNameAndToolNameFromId(id string) (string, string, error) {
+	if id == "" {
+		return "", "", errors.New("tool id is empty")
+	}
+
+	if strings.HasPrefix(id, "[") && strings.HasSuffix(id, "]") {
+		var payload toolIdPayload
+		if err := json.Unmarshal([]byte(id), &payload); err == nil {
+			if payload.Tool == "" {
+				return "", "", fmt.Errorf("decoded tool id has empty tool name: %s", id)
+			}
+			return payload.Server, payload.Tool, nil
+		}
+	}
+
+	if strings.Count(id, oldSeparator) == 1 {
+		idx := strings.Index(id, oldSeparator)
+		serverName := id[:idx]
+		toolName := id[idx+len(oldSeparator):]
+		if toolName == "" {
+			return "", "", fmt.Errorf("tool name is empty after splitting id: %s", id)
+		}
+		return serverName, toolName, nil
+	}
+
+	if !strings.Contains(id, oldSeparator) {
+		return "", id, nil
+	}
+
+	return "", "", fmt.Errorf("invalid tool id format, cannot parse: %s", id)
+}
+
+func GetIdFromServerNameAndToolName(serverName, toolName string) (string, error) {
+	if toolName == "" {
+		return "", errors.New("tool name cannot be empty when constructing tool id")
+	}
+	payload := toolIdPayload{
+		Server: serverName,
+		Tool:   toolName,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode tool id: %w", err)
+	}
+	return string(data), nil
 }

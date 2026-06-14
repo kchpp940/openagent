@@ -390,29 +390,30 @@ func (p *GeminiModelProvider) QueryText(question string, writer io.Writer, histo
 		return nil, err
 	}
 
-	ssew, err := GetSSEEventWriter(writer, lang)
-	if err != nil {
-		return nil, err
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	flushData := func(data []*genai.Part) error {
 		for _, part := range data {
+			var output string
 			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
 				mime := part.InlineData.MIMEType
 				if mime == "" {
 					mime = "image/png"
 				}
 				b64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-				output := fmt.Sprintf("<img src=\"data:%s;base64,%s\" width=\"100%%\" height=\"auto\">", mime, b64)
-				if _, err := fmt.Fprint(ssew, output); err != nil {
+				output = fmt.Sprintf("<img src=\"data:%s;base64,%s\" width=\"100%%\" height=\"auto\">", mime, b64)
+				if _, err := fmt.Fprint(writer, output); err != nil {
 					return err
 				}
-				ssew.Flush()
 			} else if part.Text != "" {
-				if err := ssew.WriteSSEEvent("message", part.Text); err != nil {
+				if _, err := fmt.Fprintf(writer, "event: message\ndata: %s\n\n", part.Text); err != nil {
 					return err
 				}
 			}
+			flusher.Flush()
 		}
 		return nil
 	}

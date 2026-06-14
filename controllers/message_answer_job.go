@@ -52,16 +52,16 @@ func (m *messageAnswerJobManager) getOrStart(id string, host string, lang string
 
 	job := newMessageAnswerJob(id)
 	if message, err := object.GetMessage(id); err != nil {
-		job.appendChunk(encodeSSEFrame("myerror", err.Error()))
+		job.appendChunk([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", err.Error())))
 		job.finish()
 		return job
 	} else if message != nil && message.Text != "" {
 		jsonData, err := ConvertMessageDataToJSON(message.Text)
 		if err != nil {
-			job.appendChunk(encodeSSEFrame("myerror", err.Error()))
+			job.appendChunk([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", err.Error())))
 		} else {
-			job.appendChunk(encodeSSEFrame("message", string(jsonData)))
-			job.appendChunk(encodeSSEFrame("end", "end"))
+			job.appendChunk([]byte(fmt.Sprintf("event: message\ndata: %s\n\n", jsonData)))
+			job.appendChunk([]byte("event: end\ndata: end\n\n"))
 		}
 		job.finish()
 		return job
@@ -221,7 +221,7 @@ func (j *messageAnswerJob) cancel() {
 	j.cancelFunc()
 	j.mu.Unlock()
 
-	j.appendChunk(encodeSSEFrame("end", "canceled"))
+	j.appendChunk([]byte("event: end\ndata: canceled\n\n"))
 	j.finish()
 }
 

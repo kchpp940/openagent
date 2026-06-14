@@ -23,11 +23,8 @@ export function trimToolArguments(argumentsText, limit = TOOL_DELTA_PREVIEW_LIMI
 }
 
 function isPendingDeltaForTool(toolCall, toolEvent) {
-  if (toolCall.content) {
+  if (!toolCall.generatingArguments || toolCall.content) {
     return false;
-  }
-  if (toolEvent.index !== undefined && toolCall.index !== undefined) {
-    return toolCall.index === toolEvent.index;
   }
   if (!toolEvent.name) {
     return true;
@@ -135,21 +132,4 @@ export function applyToolEvent(toolCalls, jsonData) {
   };
   toolCalls.push(toolCall);
   return toolCall;
-}
-
-export function finalizeToolCalls(toolCalls) {
-  if (!toolCalls || toolCalls.length === 0) {
-    return toolCalls;
-  }
-  return toolCalls.map(tc => {
-    if (tc.generatingArguments && !tc.content) {
-      return {
-        ...tc,
-        generatingArguments: false,
-        arguments: tc.arguments || "",
-        content: tc.content || "",
-      };
-    }
-    return tc;
-  });
 }

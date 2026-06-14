@@ -192,7 +192,7 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 		roundHasToolError := false
 		for _, toolCall := range toolCalls {
-			serverName, toolName := mcp.GetServerNameAndToolNameFromId(toolCall.Function.Name)
+			serverName, toolName, parseErr := mcp.GetServerNameAndToolNameFromId(toolCall.Function.Name)
 
 			messages = append(messages, &RawMessage{
 				Text:             "Call result from " + toolCall.Function.Name,
@@ -202,12 +202,22 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 			})
 
 			var toolFailed bool
-			messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
-			if err != nil {
-				return nil, err
-			}
-			if toolFailed {
-				roundHasToolError = true
+			if parseErr != nil {
+				messages, toolFailed, err = handleToolIdParseError(toolCall, parseErr, messages, writer, lang)
+				if err != nil {
+					return nil, err
+				}
+				if toolFailed {
+					roundHasToolError = true
+				}
+			} else {
+				messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
+				if err != nil {
+					return nil, err
+				}
+				if toolFailed {
+					roundHasToolError = true
+				}
 			}
 		}
 
@@ -238,8 +248,10 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 	fmt.Printf("LLM Decision: [Final Answer — no more tool calls after round %d]\n", round)
 
-	for _, conn := range toolSession.McpToolSet.Connections {
-		conn.Close()
+	if toolSession.McpToolSet != nil {
+		for _, conn := range toolSession.McpToolSet.Connections {
+			conn.Close()
+		}
 	}
 	return modelResult, nil
 }
@@ -261,10 +273,7 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 			select {
 			case <-ticker.C:
 				mu.Lock()
-				if ssew, ok := writer.(SSEEventWriter); ok {
-					_, _ = ssew.Write([]byte(":keepalive\n\n"))
-					ssew.Flush()
-				} else if flusher, ok := writer.(http.Flusher); ok {
+				if flusher, ok := writer.(http.Flusher); ok {
 					_, _ = fmt.Fprint(writer, ":keepalive\n\n")
 					flusher.Flush()
 				}
@@ -281,82 +290,101 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 	var arguments map[string]interface{}
 	ctx := context.Background()
 
-	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); err != nil {
-		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), err)
-	}
-
-	// Send tool-start event immediately so the frontend can show the tool call before execution
 	toolStartData := ToolCall{
 		Name:      toolCall.Function.Name,
 		Arguments: toolCall.Function.Arguments,
 		Content:   "",
 		IsError:   false,
 	}
-	toolStartJSON, err := json.Marshal(toolStartData)
-	if err == nil {
+	toolStartJSON, _ := json.Marshal(toolStartData)
+	if len(toolStartJSON) > 0 {
 		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
+	}
+
+	if parseErr := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); parseErr != nil {
+		errMsg := fmt.Sprintf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), parseErr)
+		return emitToolError(toolCall, mcp.ToolCallErrParseArgs, errMsg, messages, writer, lang)
 	}
 
 	var mu sync.Mutex
 	var result *protocol.CallToolResult
+	var execErr error
 
 	heartbeat := startHeartbeat(writer, &mu)
 	defer close(heartbeat)
 
+	if mcpToolSet == nil {
+		errMsg := i18n.Translate(lang, "model:MCP toolset is not initialized")
+		return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
+	}
+
 	if serverName == "" {
-		// builtin tools
 		if mcpToolSet.BuiltinTools == nil {
-			return messages, false, nil
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:builtin tool registry is not available; cannot execute tool: %s"), toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
 		}
-		result, err = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
+		result, execErr = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
 	} else {
-		// MCP server tools
 		conn, ok := mcpToolSet.Connections[serverName]
 		if !ok {
-			return messages, false, nil
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:no open MCP connection for server: %s (tool: %s)"), serverName, toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoConnection, errMsg, messages, writer, lang)
 		}
 		req := &protocol.CallToolRequest{
 			Name:      toolName,
 			Arguments: arguments,
 		}
-		result, err = conn.CallTool(ctx, req)
+		result, execErr = conn.CallTool(ctx, req)
 	}
 
 	response := &ToolCallResponse{
 		ToolName: toolCall.Function.Name,
 	}
 
-	if err != nil {
+	if execErr != nil {
 		response.Success = false
-		response.Error = err.Error()
+		if tce, ok := mcp.IsToolCallError(execErr); ok {
+			response.Error = fmt.Sprintf("[%s] %s", tce.Kind, tce.Message)
+		} else {
+			response.Error = execErr.Error()
+		}
+	} else if result == nil {
+		response.Success = false
+		response.Error = i18n.Translate(lang, "model:tool returned nil result")
 	} else if result.IsError {
 		response.Success = false
-		contentBytes, err := json.Marshal(result.Content)
-		if err != nil {
-			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal error content: %v"), err)
+		contentBytes, marshalErr := json.Marshal(result.Content)
+		if marshalErr != nil {
+			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal error content: %v"), marshalErr)
 		} else {
 			response.Error = string(contentBytes)
 		}
 	} else {
 		response.Success = true
-		contentBytes, err := json.Marshal(result.Content)
-		if err != nil {
-			response.Data = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal content: %v"), err)
+		contentBytes, marshalErr := json.Marshal(result.Content)
+		if marshalErr != nil {
+			response.Success = false
+			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal content: %v"), marshalErr)
 		} else {
 			response.Data = string(contentBytes)
 		}
 	}
 
-	responseJson, err := json.Marshal(response)
-	if err != nil {
-		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool response: %v"), err)
+	responseJson, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool response: %v"), marshalErr)
 	}
 
 	var contentStr string
 	if !response.Success {
 		contentStr = response.Error
 	} else {
-		contentStr = response.Data.(string)
+		if dataStr, ok := response.Data.(string); ok {
+			contentStr = dataStr
+		} else {
+			dataBytes, _ := json.Marshal(response.Data)
+			contentStr = string(dataBytes)
+		}
 	}
 
 	fmt.Printf("Tool Result: [%s]\n", contentStr)
@@ -368,16 +396,61 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 		Content:   contentStr,
 		IsError:   isError,
 	}
-	toolJSON, err := json.Marshal(toolData)
-	if err == nil {
+	toolJSON, _ := json.Marshal(toolData)
+	if len(toolJSON) > 0 {
 		mu.Lock()
-		if err := flushDataThink(string(toolJSON), "tool", writer, lang); err == nil {
-		}
+		_ = flushDataThink(string(toolJSON), "tool", writer, lang)
 		mu.Unlock()
 	}
 
 	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
 	return messages, !response.Success, nil
+}
+
+func handleToolIdParseError(toolCall openai.ToolCall, parseErr error, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+	toolStartData := ToolCall{
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   "",
+		IsError:   false,
+	}
+	toolStartJSON, _ := json.Marshal(toolStartData)
+	if len(toolStartJSON) > 0 {
+		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
+	}
+
+	errMsg := fmt.Sprintf(i18n.Translate(lang, "model:invalid tool id: %v"), parseErr)
+	return emitToolError(toolCall, mcp.ToolCallErrInvalidID, errMsg, messages, writer, lang)
+}
+
+func emitToolError(toolCall openai.ToolCall, errKind, errMsg string, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+	response := &ToolCallResponse{
+		Success:  false,
+		ToolName: toolCall.Function.Name,
+		Error:    fmt.Sprintf("[%s] %s", errKind, errMsg),
+	}
+
+	responseJson, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool error response: %v"), marshalErr)
+	}
+
+	contentStr := response.Error
+	fmt.Printf("Tool Error [%s]: %s\n", errKind, contentStr)
+
+	toolData := ToolCall{
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   contentStr,
+		IsError:   true,
+	}
+	toolJSON, _ := json.Marshal(toolData)
+	if len(toolJSON) > 0 {
+		_ = flushDataThink(string(toolJSON), "tool", writer, lang)
+	}
+
+	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
+	return messages, true, nil
 }
 
 func GetToolCallsFromWriter(toolMessage string) []ToolCall {

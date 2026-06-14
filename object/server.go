@@ -255,7 +255,12 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 			}
 		}
 		tCopy := *t
-		tCopy.Name = mcp.GetIdFromServerNameAndToolName(s.Name, t.Name)
+		toolId, err := mcp.GetIdFromServerNameAndToolName(s.Name, t.Name)
+		if err != nil {
+			cli.Close()
+			return nil, fmt.Errorf("failed to construct tool id for server %s tool %s: %w", s.Name, t.Name, err)
+		}
+		tCopy.Name = toolId
 		filteredTools = append(filteredTools, &tCopy)
 	}
 

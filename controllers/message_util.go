@@ -53,7 +53,11 @@ func writeMessageErrorStream(responseWriter http.ResponseWriter, lang string, me
 		}
 	}
 
-	_, err = responseWriter.Write(encodeSSEFrame("myerror", errorText))
+	// SSE requires newlines in data to be escaped as "\ndata: " so the event
+	// is not prematurely terminated (a blank line ends an SSE event).
+	sseData := strings.ReplaceAll(errorText, "\n", "\ndata: ")
+	event := fmt.Sprintf("event: myerror\ndata: %s\n\n", sseData)
+	_, err = responseWriter.Write([]byte(event))
 	if err != nil {
 		return err
 	}
@@ -80,7 +84,8 @@ func clearMessageChatGenerating(message *object.Message) error {
 }
 
 func writeInfoStream(responseWriter http.ResponseWriter, infoText string) error {
-	_, err := responseWriter.Write(encodeSSEFrame("myinfo", infoText))
+	event := fmt.Sprintf("event: myinfo\ndata: %s\n\n", infoText)
+	_, err := responseWriter.Write([]byte(event))
 	if err != nil {
 		return err
 	}
@@ -105,7 +110,7 @@ func writeChatUpdateStream(responseWriter http.ResponseWriter, chat *object.Chat
 		return err
 	}
 
-	_, err = responseWriter.Write(encodeSSEFrame("chat", string(payload)))
+	_, err = responseWriter.Write([]byte(fmt.Sprintf("event: chat\ndata: %s\n\n", payload)))
 	if err != nil {
 		return err
 	}

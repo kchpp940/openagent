@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -237,9 +238,9 @@ func (p *VolcengineModelProvider) buildMessages(question string, history []*RawM
 
 func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {
 	ctx := context.Background()
-	ssew, err := GetSSEEventWriter(writer, lang)
-	if err != nil {
-		return nil, err
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	client := arkruntime.NewClientWithApiKey(p.apiKey)
@@ -261,7 +262,11 @@ func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, h
 	request.Thinking = &model.Thinking{Type: thinkingType}
 
 	flushData := func(data, eventType string) error {
-		return ssew.WriteSSEEvent(eventType, data)
+		if _, err := fmt.Fprintf(writer, "event: %s\ndata: %s\n\n", eventType, data); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
 	}
 
 	stream, err := client.CreateChatCompletionStream(ctx, request)
