@@ -164,40 +164,91 @@ func normalizeToolCalls(toolSession *ToolSession) []openai.ToolCall {
 	return result
 }
 
-func resolveAndEnrichToolCall(toolCall openai.ToolCall, mcpToolSet *mcp.ToolSet) (string, string, map[string]string) {
+func resolveAndEnrichToolCall(toolCall openai.ToolCall, mcpToolSet *mcp.ToolSet, extraMeta ...map[string]string) (string, string, map[string]string) {
 	var serverName, toolName string
-	var err error
 	toolMeta := make(map[string]string)
 
-	if mcpToolSet != nil {
-		if md, ok := mcpToolSet.LookupToolId(toolCall.Function.Name); ok {
-			serverName = md.ServerName
-			toolName = md.ToolName
-		}
-	}
-	if toolName == "" {
-		serverName, toolName, err = mcp.GetServerNameAndToolNameFromId(toolCall.Function.Name)
-		if err == nil && toolName != "" {
-			if mcpToolSet != nil {
-				mcpToolSet.RegisterToolId(toolCall.Function.Name, mcp.ToolIdMetadata{
-					ServerName: serverName,
-					ToolName:   toolName,
-				})
-			} else {
-				mcp.RegisterToolIdMetadata(toolCall.Function.Name, mcp.ToolIdMetadata{
-					ServerName: serverName,
-					ToolName:   toolName,
-				})
+	for _, m := range extraMeta {
+		for k, v := range m {
+			if v != "" {
+				toolMeta[k] = v
 			}
 		}
 	}
+
+	if s, ok := toolMeta["serverName"]; ok && s != "" {
+		serverName = s
+	}
+	if t, ok := toolMeta["toolName"]; ok && t != "" {
+		toolName = t
+	}
+
+	id := toolCall.Function.Name
+	if id == "" {
+		id = toolMeta["toolId"]
+	}
+	if id != "" {
+		toolMeta["toolId"] = id
+	}
+
+	if serverName != "" && toolName != "" && id != "" {
+		if mcpToolSet != nil {
+			mcpToolSet.HydrateFromMetadata(id, mcp.ToolIdMetadata{
+				ServerName: serverName,
+				ToolName:   toolName,
+			})
+		} else {
+			mcp.RegisterToolIdMetadata(id, mcp.ToolIdMetadata{
+				ServerName: serverName,
+				ToolName:   toolName,
+			})
+		}
+	}
+
+	if (serverName == "" || toolName == "") && mcpToolSet != nil && id != "" {
+		if md, ok := mcpToolSet.LookupToolId(id); ok && md.ToolName != "" {
+			if serverName == "" {
+				serverName = md.ServerName
+			}
+			if toolName == "" {
+				toolName = md.ToolName
+			}
+		}
+	}
+
+	if (serverName == "" || toolName == "") && id != "" {
+		if md, ok := mcp.GetToolIdMetadata(id); ok && md.ToolName != "" {
+			if serverName == "" {
+				serverName = md.ServerName
+			}
+			if toolName == "" {
+				toolName = md.ToolName
+			}
+		}
+	}
+
+	if toolName == "" && id != "" {
+		s, t, parseErr := mcp.GetServerNameAndToolNameFromId(id)
+		if parseErr == nil && t != "" {
+			if serverName == "" {
+				serverName = s
+			}
+			toolName = t
+			md := mcp.ToolIdMetadata{ServerName: serverName, ToolName: toolName}
+			if mcpToolSet != nil {
+				mcpToolSet.RegisterToolId(id, md)
+			} else {
+				mcp.RegisterToolIdMetadata(id, md)
+			}
+		}
+	}
+
 	if serverName != "" {
 		toolMeta["serverName"] = serverName
 	}
 	if toolName != "" {
 		toolMeta["toolName"] = toolName
 	}
-	toolMeta["toolId"] = toolCall.Function.Name
 	return serverName, toolName, toolMeta
 }
 

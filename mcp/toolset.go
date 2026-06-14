@@ -175,6 +175,23 @@ func (ts *ToolSet) AddBuiltinTools(builtinReg *tool.ToolRegistry) {
 	}
 }
 
+func (ts *ToolSet) HydrateFromMetadata(id string, md ToolIdMetadata) bool {
+	if id == "" || md.ToolName == "" {
+		return false
+	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if ts.toolIdToMeta == nil {
+		ts.toolIdToMeta = make(map[string]ToolIdMetadata)
+	}
+	if existing, ok := ts.toolIdToMeta[id]; ok {
+		return existing.ServerName == md.ServerName && existing.ToolName == md.ToolName
+	}
+	ts.toolIdToMeta[id] = md
+	RegisterToolIdMetadata(id, md)
+	return true
+}
+
 func (ts *ToolSet) resolveToolId(toolId string) (string, string, error) {
 	if md, ok := ts.LookupToolId(toolId); ok && md.ToolName != "" {
 		return md.ServerName, md.ToolName, nil
