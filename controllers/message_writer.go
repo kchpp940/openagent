@@ -45,9 +45,90 @@ func encodeSSEFrame(eventType, data string) []byte {
 	return buf.Bytes()
 }
 
+type sseFrame struct {
+	event string
+	data  string
+}
+
+type sseBuffer struct {
+	raw []byte
+}
+
+func newSSEBuffer() *sseBuffer {
+	return &sseBuffer{raw: make([]byte, 0, 4096)}
+}
+
+func (b *sseBuffer) Write(p []byte) {
+	b.raw = append(b.raw, p...)
+}
+
+func (b *sseBuffer) ReadFrames() []sseFrame {
+	var frames []sseFrame
+	for {
+		idx := bytes.Index(b.raw, []byte("\n\n"))
+		if idx == -1 {
+			break
+		}
+		frameBytes := b.raw[:idx]
+		b.raw = b.raw[idx+2:]
+		if len(frameBytes) == 0 {
+			continue
+		}
+		frame := parseSSEFrame(frameBytes)
+		if frame.event != "" || frame.data != "" {
+			frames = append(frames, frame)
+		}
+	}
+	return frames
+}
+
+func (b *sseBuffer) Remaining() []byte {
+	return b.raw
+}
+
+func parseSSEFrame(frameBytes []byte) sseFrame {
+	frame := sseFrame{}
+	lines := bytes.Split(frameBytes, []byte("\n"))
+	var dataLines []string
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		if line[0] == ':' {
+			continue
+		}
+		sepIdx := bytes.Index(line, []byte(": "))
+		if sepIdx == -1 {
+			sepIdx = bytes.IndexByte(line, ':')
+			if sepIdx == -1 {
+				continue
+			}
+		}
+		field := string(line[:sepIdx])
+		var value string
+		if sepIdx+1 < len(line) && line[sepIdx+1] == ' ' {
+			value = string(line[sepIdx+2:])
+		} else {
+			value = string(line[sepIdx+1:])
+		}
+		switch field {
+		case "event":
+			frame.event = value
+		case "data":
+			dataLines = append(dataLines, value)
+		}
+	}
+	frame.data = strings.Join(dataLines, "\n")
+	if frame.event == "" && len(dataLines) > 0 {
+		frame.event = "message"
+	}
+	return frame
+}
+
 type RefinedWriter struct {
 	context.Response
 	writerCleaner Cleaner
+	sseBuf        *sseBuffer
 	buf           []byte
 	messageBuf    []byte
 	reasonBuf     []byte
@@ -59,6 +140,7 @@ func newRefinedWriter(w context.Response) *RefinedWriter {
 	return &RefinedWriter{
 		Response:      w,
 		writerCleaner: *NewCleaner(6),
+		sseBuf:        newSSEBuffer(),
 		buf:           []byte{},
 		messageBuf:    []byte{},
 		reasonBuf:     []byte{},
@@ -69,18 +151,26 @@ func newRefinedWriter(w context.Response) *RefinedWriter {
 
 func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 	originalLen := len(p)
-	if len(p) > 0 && p[0] == ':' {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	if p[0] == ':' {
 		_, err = w.ResponseWriter.Write(p)
 		if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 			flusher.Flush()
 		}
 		return originalLen, err
 	}
-	_, err = w.ResponseWriter.Write(p)
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
+
+	w.sseBuf.Write(p)
+	frames := w.sseBuf.ReadFrames()
+	for _, frame := range frames {
+		if err := w.WriteSSEEvent(frame.event, frame.data); err != nil {
+			return originalLen, err
+		}
 	}
-	return originalLen, err
+	return originalLen, nil
 }
 
 func (w *RefinedWriter) Flush() {
@@ -156,6 +246,21 @@ func (w *RefinedWriter) writeSSEFrameToResponse(eventType, data string) error {
 }
 
 func (w *RefinedWriter) FlushRemaining() error {
+	remaining := w.sseBuf.Remaining()
+	if len(remaining) == 0 {
+		return nil
+	}
+	frameStr := string(remaining)
+	var frame sseFrame
+	if strings.HasPrefix(frameStr, "event:") {
+		frame = parseSSEFrame(remaining)
+	} else {
+		frame.event = "message"
+		frame.data = frameStr
+	}
+	if frame.data != "" || frame.event != "" {
+		return w.WriteSSEEvent(frame.event, frame.data)
+	}
 	return nil
 }
 
