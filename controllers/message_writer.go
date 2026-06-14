@@ -420,3 +420,54 @@ func (w *RefinedWriter) FinalizeReasoningStep() {
 	w.ExecutionTracer.EndStep(w.reasonStepId, object.StepStatusCompleted, fmt.Sprintf("%d chars", len(w.reasonBuf)), "")
 	w.reasonStepId = ""
 }
+
+func (w *RefinedWriter) WriteVectorEvent(vectorScores []object.VectorScore) error {
+	if w.ExecutionTracer != nil && len(vectorScores) > 0 {
+		metadata := make([]map[string]interface{}, 0, len(vectorScores))
+		for _, vs := range vectorScores {
+			metadata = append(metadata, map[string]interface{}{
+				"vector": vs.Vector,
+				"score":  vs.Score,
+			})
+		}
+		summary := fmt.Sprintf("%d sources", len(vectorScores))
+		w.ExecutionTracer.AddSimpleStep(object.StepTypeKnowledgeRetrieval, "Vector Sources", summary, map[string]interface{}{
+			"sources": metadata,
+		})
+	}
+	bytes, err := json.Marshal(vectorScores)
+	if err != nil {
+		return err
+	}
+	_, err = w.ResponseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return err
+}
+
+func (w *RefinedWriter) WriteMyErrorEvent(errorText string) error {
+	if w.ExecutionTracer != nil {
+		w.ExecutionTracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
+	}
+	sseData, err := ConvertMessageDataToJSON(errorText)
+	if err != nil {
+		return err
+	}
+	_, err = w.ResponseWriter.Write([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", sseData)))
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return err
+}
+
+func (w *RefinedWriter) WriteEndEvent(data string) error {
+	if w.ExecutionTracer != nil {
+		w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, "Stream Ended", data, nil)
+	}
+	_, err := w.ResponseWriter.Write([]byte(fmt.Sprintf("event: end\ndata: %s\n\n", data)))
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return err
+}

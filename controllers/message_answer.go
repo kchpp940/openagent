@@ -138,22 +138,11 @@ func streamMessageAnswerJob(responseWriter http.ResponseWriter, request *http.Re
 }
 
 func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host string, lang string, signedIn bool, responseError func(string, ...interface{})) {
-	message, err := object.GetMessage(id)
-	if err != nil {
-		if err := writeMessageErrorStream(responseWriter, lang, message, err.Error()); err != nil {
-			if responseError != nil {
-				responseError(err.Error())
-			}
-		}
-		return
-	}
-
 	executionTracer := object.NewExecutionTracer(id)
 	var writer *RefinedWriter
-	shouldSaveExecutionSteps := true
 
 	saveExecutionSteps := func() {
-		if !shouldSaveExecutionSteps || message == nil || executionTracer == nil {
+		if executionTracer == nil {
 			return
 		}
 		if writer != nil {
@@ -164,22 +153,40 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			fmt.Printf("failed to marshal execution steps: %s\n", jsonErr.Error())
 			return
 		}
-		message.ExecutionSteps = stepsJson
-		if _, updateErr := object.UpdateMessage(id, message, true); updateErr != nil {
+		msg, getErr := object.GetMessage(id)
+		if getErr != nil || msg == nil {
+			fmt.Printf("saveExecutionSteps: cannot get message %s: %v\n", id, getErr)
+			return
+		}
+		if msg.ExecutionSteps == stepsJson {
+			return
+		}
+		msg.ExecutionSteps = stepsJson
+		if _, updateErr := object.UpdateMessage(id, msg, true); updateErr != nil {
 			fmt.Printf("failed to save execution steps: %s\n", updateErr.Error())
 		}
 	}
 	defer saveExecutionSteps()
 
-	responseErrorStream := func(message *object.Message, errorText string) {
+	responseErrorStream := func(msg *object.Message, errorText string) {
 		if executionTracer != nil {
 			executionTracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
 		}
-		if err := writeMessageErrorStream(responseWriter, lang, message, errorText); err != nil {
-			if responseError != nil {
-				responseError(err.Error())
+		if writer != nil {
+			_ = writer.WriteMyErrorEvent(errorText)
+		} else {
+			if err := writeMessageErrorStream(responseWriter, lang, msg, errorText); err != nil {
+				if responseError != nil {
+					responseError(err.Error())
+				}
 			}
 		}
+	}
+
+	message, err := object.GetMessage(id)
+	if err != nil {
+		responseErrorStream(message, err.Error())
+		return
 	}
 
 	if message == nil {
@@ -477,10 +484,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	}
 
 	if len(vectorScores) > 0 {
-		bytes, err := json.Marshal(vectorScores)
-		if err == nil {
-			_, _ = responseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
-		}
+		_ = writer.WriteVectorEvent(vectorScores)
 	}
 
 	if writer.writerCleaner.cleaned == false {
@@ -509,12 +513,16 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 
 	answer := writer.MessageString()
 	defer func() {
-		event := fmt.Sprintf("event: end\ndata: %s\n\n", "end")
-		if _, writeErr := responseWriter.Write([]byte(event)); writeErr != nil {
-			fmt.Printf("write end SSE event failed: %s\n", writeErr.Error())
-		}
-		if flusher, ok := responseWriter.(http.Flusher); ok {
-			flusher.Flush()
+		if writer != nil {
+			_ = writer.WriteEndEvent("end")
+		} else {
+			event := fmt.Sprintf("event: end\ndata: %s\n\n", "end")
+			if _, writeErr := responseWriter.Write([]byte(event)); writeErr != nil {
+				fmt.Printf("write end SSE event failed: %s\n", writeErr.Error())
+			}
+			if flusher, ok := responseWriter.(http.Flusher); ok {
+				flusher.Flush()
+			}
 		}
 	}()
 	message.ReasonText = writer.ReasonString()

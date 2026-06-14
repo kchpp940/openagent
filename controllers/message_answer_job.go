@@ -52,12 +52,14 @@ func (m *messageAnswerJobManager) getOrStart(id string, host string, lang string
 
 	job := newMessageAnswerJob(id)
 	if message, err := object.GetMessage(id); err != nil {
+		saveErrorExecutionSteps(id, err.Error())
 		job.appendChunk([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", err.Error())))
 		job.finish()
 		return job
 	} else if message != nil && message.Text != "" {
 		jsonData, err := ConvertMessageDataToJSON(message.Text)
 		if err != nil {
+			saveErrorExecutionSteps(id, err.Error())
 			job.appendChunk([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", err.Error())))
 		} else {
 			job.appendChunk([]byte(fmt.Sprintf("event: message\ndata: %s\n\n", jsonData)))
@@ -259,4 +261,23 @@ func (w *messageAnswerJobWriter) Context() context.Context {
 		return context.Background()
 	}
 	return w.job.ctx
+}
+
+func saveErrorExecutionSteps(messageId string, errorText string) {
+	tracer := object.NewExecutionTracer(messageId)
+	tracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
+	stepsJson, err := tracer.ToJSON()
+	if err != nil {
+		fmt.Printf("saveErrorExecutionSteps: failed to marshal steps for %s: %s\n", messageId, err.Error())
+		return
+	}
+	message, getErr := object.GetMessage(messageId)
+	if getErr != nil || message == nil {
+		fmt.Printf("saveErrorExecutionSteps: cannot get message %s: %v\n", messageId, getErr)
+		return
+	}
+	message.ExecutionSteps = stepsJson
+	if _, updateErr := object.UpdateMessage(messageId, message, true); updateErr != nil {
+		fmt.Printf("saveErrorExecutionSteps: failed to save steps for %s: %s\n", messageId, updateErr.Error())
+	}
 }
