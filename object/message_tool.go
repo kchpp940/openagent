@@ -54,10 +54,41 @@ func buildToolSetForBuiltinTool(toolName, user, origin, lang string) (*mcp.ToolS
 		return nil, nil
 	}
 
-	return &mcp.ToolSet{
-		Tools:        allTools,
-		BuiltinTools: reg,
-	}, nil
+	toolSet := mcp.NewToolSet()
+	toolSet.AddBuiltinTools(reg)
+	return toolSet, nil
+}
+
+func HydrateToolCallMetadata(tcs []model.ToolCall) {
+	for i := range tcs {
+		tc := &tcs[i]
+		if tc.ServerName != "" && tc.ToolName != "" {
+			mcp.RegisterToolIdMetadata(tc.Name, mcp.ToolIdMetadata{
+				ServerName: tc.ServerName,
+				ToolName:   tc.ToolName,
+			})
+			continue
+		}
+		serverName, toolName, parseErr := mcp.GetServerNameAndToolNameFromId(tc.Name)
+		if parseErr == nil && toolName != "" {
+			if tc.ServerName == "" {
+				tc.ServerName = serverName
+			}
+			if tc.ToolName == "" {
+				tc.ToolName = toolName
+			}
+			if tc.ToolMeta == nil {
+				tc.ToolMeta = make(map[string]string)
+			}
+			tc.ToolMeta["serverName"] = serverName
+			tc.ToolMeta["toolName"] = toolName
+			tc.ToolMeta["toolId"] = tc.Name
+			mcp.RegisterToolIdMetadata(tc.Name, mcp.ToolIdMetadata{
+				ServerName: serverName,
+				ToolName:   toolName,
+			})
+		}
+	}
 }
 
 func GetAnswerWithTool(modelProviderName, toolName, question, user, origin, lang string) (string, *model.ModelResult, error) {

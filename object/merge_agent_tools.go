@@ -69,25 +69,20 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool, user, origin, lang string) *mcp.ToolSet {
 	if webSearchEnabled {
 		if mcpToolSet == nil {
-			mcpToolSet = &mcp.ToolSet{}
+			mcpToolSet = mcp.NewToolSet()
 		}
 		mcpToolSet.WebSearchEnabled = true
 	}
 
 	reg := buildMergedBuiltinRegistry(store, user, origin, lang)
-	allTools := reg.GetToolsAsProtocolTools()
-	if len(allTools) == 0 {
+	if len(reg.GetAllTools()) == 0 {
 		return mcpToolSet
 	}
 
 	if mcpToolSet == nil {
-		return &mcp.ToolSet{
-			Tools:        allTools,
-			BuiltinTools: reg,
-		}
+		mcpToolSet = mcp.NewToolSet()
 	}
 
-	mcpToolSet.Tools = append(mcpToolSet.Tools, allTools...)
-	mcpToolSet.BuiltinTools = reg
+	mcpToolSet.AddBuiltinTools(reg)
 	return mcpToolSet
 }
