@@ -375,28 +375,18 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	embeddingResult := &embedding.EmbeddingResult{}
 
 	if chat.Tool == "" && store.KnowledgeCount != 0 && embeddingProviderObj != nil {
-		knowledgeStepId := executionTracer.StartStep(object.StepTypeKnowledgeRetrieval, "Knowledge Retrieval", map[string]interface{}{
-			"store":          store.Name,
-			"knowledgeCount": store.KnowledgeCount,
-		})
 		knowledge, vectorScores, embeddingResult, err = object.GetNearestKnowledge(store.Name, store.VectorStores, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, store.Owner, question, store.KnowledgeCount, lang)
 		if err != nil && err.Error() != "no knowledge vectors found" {
 			err = fmt.Errorf(i18n.Translate(lang, "message_answer:object.GetNearestKnowledge() error, %s"), err.Error())
-			executionTracer.EndStep(knowledgeStepId, object.StepStatusFailed, "", err.Error())
 			responseErrorStream(message, err.Error())
 			return
 		}
 		if embeddingResult == nil {
 			embeddingResult = &embedding.EmbeddingResult{}
 		}
-		executionTracer.EndStep(knowledgeStepId, object.StepStatusCompleted, fmt.Sprintf("%d chunks", len(knowledge)), "")
 	}
 
 	writer = newRefinedWriter(context.Response{ResponseWriter: responseWriter}, executionTracer)
-
-	if len(knowledge) > 0 || len(vectorScores) > 0 {
-		writer.RecordVectorResult(vectorScores, knowledge)
-	}
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -458,6 +448,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			"model": modelProviderName,
 			"round": 0,
 		})
+		executionTracer.Persist()
 		if isReasonModel(modelProvider.SubType) {
 			modelResult, err = QueryCarrierText(question, writer, history, prompt, knowledge, modelProviderObj, chat.NeedTitle, store.SuggestionCount, lang)
 		} else {
@@ -468,6 +459,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		} else {
 			executionTracer.EndStep(modelStepId, object.StepStatusCompleted, fmt.Sprintf("%d tokens", modelResult.TotalTokenCount), "")
 		}
+		executionTracer.Persist()
 	}
 	if err != nil {
 		if errors.Is(err, errMessageAnswerCanceled) {
@@ -483,8 +475,8 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		return
 	}
 
-	if len(vectorScores) > 0 {
-		_ = writer.WriteVectorEvent(vectorScores)
+	if len(vectorScores) > 0 || len(knowledge) > 0 {
+		_ = writer.WriteVectorEvent(vectorScores, knowledge)
 	}
 
 	if writer.writerCleaner.cleaned == false {
@@ -568,6 +560,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		"price":      message.Price,
 		"currency":   message.Currency,
 	})
+	executionTracer.Persist()
 
 	// Normalize price precision before persisting or creating transactions
 	message.Price = model.AddPrices(message.Price, 0)

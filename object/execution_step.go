@@ -67,9 +67,9 @@ type ExecutionStep struct {
 }
 
 type ExecutionTracer struct {
-	mu     sync.Mutex
-	steps  []*ExecutionStep
-	stepMap map[string]*ExecutionStep
+	mu        sync.Mutex
+	steps     []*ExecutionStep
+	stepMap   map[string]*ExecutionStep
 	messageId string
 }
 
@@ -78,6 +78,37 @@ func NewExecutionTracer(messageId string) *ExecutionTracer {
 		steps:     make([]*ExecutionStep, 0),
 		stepMap:   make(map[string]*ExecutionStep),
 		messageId: messageId,
+	}
+}
+
+func (t *ExecutionTracer) Persist() {
+	t.mu.Lock()
+	messageId := t.messageId
+	t.mu.Unlock()
+
+	if messageId == "" {
+		return
+	}
+
+	stepsJson, err := t.ToJSON()
+	if err != nil {
+		fmt.Printf("ExecutionTracer.Persist: failed to marshal steps for %s: %s\n", messageId, err.Error())
+		return
+	}
+
+	message, getErr := GetMessage(messageId)
+	if getErr != nil || message == nil {
+		fmt.Printf("ExecutionTracer.Persist: cannot get message %s: %v\n", messageId, getErr)
+		return
+	}
+
+	if message.ExecutionSteps == stepsJson {
+		return
+	}
+
+	message.ExecutionSteps = stepsJson
+	if _, updateErr := UpdateMessage(messageId, message, true); updateErr != nil {
+		fmt.Printf("ExecutionTracer.Persist: failed to save steps for %s: %s\n", messageId, updateErr.Error())
 	}
 }
 
