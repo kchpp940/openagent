@@ -59,13 +59,6 @@ type TaskResult struct {
 	Categories    []*TaskResultCategory `json:"categories"`
 }
 
-type AnalyzeTaskResponse struct {
-	AnalysisStatus  string      `json:"analysisStatus"`
-	AnalysisError   string      `json:"analysisError"`
-	AnalysisRawText string      `json:"analysisRawText"`
-	Result          *TaskResult `json:"result"`
-}
-
 type Task struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
@@ -90,246 +83,22 @@ type Task struct {
 
 	Result string `xorm:"mediumtext" json:"result"`
 
-	DocumentUrl            string `xorm:"varchar(500)" json:"documentUrl"`
-	DocumentText           string `xorm:"mediumtext" json:"documentText"`
-	DocumentFileType       string `xorm:"varchar(100)" json:"documentFileType"`
-	DocumentMimeType       string `xorm:"varchar(200)" json:"documentMimeType"`
-	DocumentFileSize       int64  `xorm:"bigint" json:"documentFileSize"`
-	DocumentResourceId     string `xorm:"varchar(200)" json:"documentResourceId"`
-	DocumentFileName       string `xorm:"varchar(500)" json:"documentFileName"`
-	DocumentUploadSuccess  bool   `xorm:"bool" json:"documentUploadSuccess"`
-	DocumentParseStatus    string `xorm:"varchar(50)" json:"documentParseStatus"`
-	DocumentError          string `xorm:"varchar(500)" json:"documentError"`
-	DocumentTypeSource     string `xorm:"varchar(50)" json:"documentTypeSource"`
-	DocumentTypeConflict   bool   `xorm:"bool" json:"documentTypeConflict"`
-	DocumentConflictMsg    string `xorm:"varchar(500)" json:"documentConflictMsg"`
-	AnalysisStatus         string `xorm:"varchar(50)" json:"analysisStatus"`
-	AnalysisError          string `xorm:"varchar(500)" json:"analysisError"`
-	AnalysisRawText        string `xorm:"mediumtext" json:"analysisRawText"`
-	AnalyzeError           string `xorm:"varchar(500)" json:"analyzeError"`
-}
-
-const (
-	AnalysisStatusNone    = ""
-	AnalysisStatusPending = "pending"
-	AnalysisStatusSuccess = "success"
-	AnalysisStatusFailed  = "failed"
-)
-
-func (task *Task) ResetDocumentFields() {
-	task.DocumentUrl = ""
-	task.DocumentText = ""
-	task.DocumentFileType = ""
-	task.DocumentMimeType = ""
-	task.DocumentFileSize = 0
-	task.DocumentResourceId = ""
-	task.DocumentFileName = ""
-	task.DocumentUploadSuccess = false
-	task.DocumentParseStatus = DocumentParseStatusNone
-	task.DocumentError = ""
-	task.DocumentTypeSource = ""
-	task.DocumentTypeConflict = false
-	task.DocumentConflictMsg = ""
-	task.AnalysisStatus = AnalysisStatusNone
-	task.AnalysisError = ""
-	task.AnalysisRawText = ""
-	task.AnalyzeError = ""
-}
-
-type DocumentUploadInfo struct {
-	FileName      string
-	MimeType      string
-	FileType      string
-	FileUrl       string
-	ResourceId    string
-	FileSize      int64
-	TypeSource    string
-	TypeConflict  bool
-	ConflictMsg   string
-}
-
-type DocumentParseResult struct {
-	Status       string
-	Error        string
-	Text         string
-}
-
-// SyncDocumentStatus updates both Task and Resource in a single unified call.
-// upload=nil means upload failed (clears all document fields).
-// parse=nil means only upload info should be recorded (parse pending).
-// parse!=nil means final parse result should be applied.
-func SyncDocumentStatus(taskId string, task *Task, upload *DocumentUploadInfo, parse *DocumentParseResult) error {
-	if task == nil {
-		return nil
-	}
-
-	if upload == nil {
-		task.DocumentUploadSuccess = false
-		task.DocumentParseStatus = DocumentParseStatusFailed
-		task.DocumentError = ""
-		task.DocumentUrl = ""
-		task.DocumentText = ""
-		task.DocumentResourceId = ""
-		task.DocumentFileSize = 0
-		task.DocumentFileName = ""
-		task.DocumentMimeType = ""
-		task.DocumentFileType = ""
-		task.DocumentTypeSource = ""
-		task.DocumentTypeConflict = false
-		task.DocumentConflictMsg = ""
-		task.AnalyzeError = ""
-
-		if parse != nil {
-			task.DocumentError = parse.Error
-		}
-
-		_, err := UpdateTask(taskId, task)
-		return err
-	}
-
-	task.DocumentUploadSuccess = true
-	task.DocumentFileName = upload.FileName
-	task.DocumentMimeType = upload.MimeType
-	task.DocumentFileType = upload.FileType
-	task.DocumentUrl = upload.FileUrl
-	task.DocumentResourceId = upload.ResourceId
-	task.DocumentFileSize = upload.FileSize
-	task.DocumentTypeSource = upload.TypeSource
-	task.DocumentTypeConflict = upload.TypeConflict
-	task.DocumentConflictMsg = upload.ConflictMsg
-	task.DocumentError = ""
-	task.DocumentText = ""
-	task.AnalyzeError = ""
-
-	if parse == nil {
-		task.DocumentParseStatus = DocumentParseStatusPending
-	} else {
-		task.DocumentParseStatus = parse.Status
-		task.DocumentError = parse.Error
-		task.DocumentText = parse.Text
-	}
-
-	if upload.ResourceId != "" {
-		resource, resErr := GetResource(upload.ResourceId)
-		if resErr == nil && resource != nil {
-			resource.ParseStatus = task.DocumentParseStatus
-			resource.ParseError = task.DocumentError
-			_, _ = UpdateResource(upload.ResourceId, resource)
-		}
-	}
-
-	_, err := UpdateTask(taskId, task)
-	return err
+	DocumentUrl           string `xorm:"varchar(500)" json:"documentUrl"`
+	DocumentText          string `xorm:"mediumtext" json:"documentText"`
+	DocumentFileType      string `xorm:"varchar(100)" json:"documentFileType"`
+	DocumentParseStatus   string `xorm:"varchar(50)" json:"documentParseStatus"`
+	DocumentError         string `xorm:"varchar(500)" json:"documentError"`
+	DocumentTypeSource    string `xorm:"varchar(50)" json:"documentTypeSource"`
+	DocumentTypeConflict  bool   `xorm:"bool" json:"documentTypeConflict"`
+	DocumentConflictMsg   string `xorm:"varchar(500)" json:"documentConflictMsg"`
+	AnalyzeError          string `xorm:"varchar(500)" json:"analyzeError"`
 }
 
 func (task *Task) IsDocumentReadyForAnalysis() bool {
 	if task == nil {
 		return false
 	}
-	return task.DocumentParseStatus == DocumentParseStatusSuccess
-}
-
-type DocumentStatusResponse struct {
-	Url              string `json:"url"`
-	Text             string `json:"text"`
-	ParseStatus      string `json:"parseStatus"`
-	Error            string `json:"error"`
-	FileType         string `json:"fileType"`
-	MimeType         string `json:"mimeType"`
-	FileSize         int64  `json:"fileSize"`
-	FileName         string `json:"fileName"`
-	ResourceId       string `json:"resourceId"`
-	TypeSource       string `json:"typeSource"`
-	TypeConflict     bool   `json:"typeConflict"`
-	ConflictMessage  string `json:"conflictMessage"`
-	FileNameExt      string `json:"fileNameExt"`
-	MimeTypeExt      string `json:"mimeTypeExt"`
-	ParseSuccess     bool   `json:"parseSuccess"`
-	UploadSuccess    bool   `json:"uploadSuccess"`
-}
-
-func (task *Task) BuildDocumentStatusResponse(extra *DocumentTypeDetectionExtra) *DocumentStatusResponse {
-	if task == nil {
-		return &DocumentStatusResponse{
-			ParseStatus:   DocumentParseStatusNone,
-			UploadSuccess: false,
-			ParseSuccess:  false,
-		}
-	}
-
-	resp := &DocumentStatusResponse{
-		Url:             task.DocumentUrl,
-		Text:            task.DocumentText,
-		ParseStatus:     task.DocumentParseStatus,
-		Error:           task.DocumentError,
-		FileType:        task.DocumentFileType,
-		MimeType:        task.DocumentMimeType,
-		FileSize:        task.DocumentFileSize,
-		FileName:        task.DocumentFileName,
-		ResourceId:      task.DocumentResourceId,
-		TypeSource:      task.DocumentTypeSource,
-		TypeConflict:    task.DocumentTypeConflict,
-		ConflictMessage: task.DocumentConflictMsg,
-		UploadSuccess:   task.DocumentUploadSuccess,
-		ParseSuccess:    task.DocumentParseStatus == DocumentParseStatusSuccess,
-	}
-
-	if extra != nil {
-		resp.FileNameExt = extra.FileNameExt
-		resp.MimeTypeExt = extra.MimeTypeExt
-	}
-
-	return resp
-}
-
-type DocumentTypeDetectionExtra struct {
-	FileNameExt string
-	MimeTypeExt string
-}
-
-func (task *Task) SetAnalysisStatus(status, errMsg, rawText string) {
-	task.AnalysisStatus = status
-	task.AnalysisError = errMsg
-	task.AnalysisRawText = rawText
-	task.AnalyzeError = errMsg
-}
-
-func (task *Task) SetAnalysisSuccess(rawText string) {
-	task.AnalysisStatus = AnalysisStatusSuccess
-	task.AnalysisError = ""
-	task.AnalysisRawText = rawText
-	task.AnalyzeError = ""
-}
-
-func (task *Task) SetAnalysisFailed(errMsg, rawText string) {
-	task.AnalysisStatus = AnalysisStatusFailed
-	task.AnalysisError = errMsg
-	task.AnalysisRawText = rawText
-	task.AnalyzeError = errMsg
-}
-
-func (task *Task) ResetAnalysis() {
-	task.AnalysisStatus = AnalysisStatusNone
-	task.AnalysisError = ""
-	task.AnalysisRawText = ""
-	task.AnalyzeError = ""
-	task.Result = ""
-}
-
-func (task *Task) IsAnalysisReady() bool {
-	if task == nil {
-		return false
-	}
-	return task.AnalysisStatus == AnalysisStatusSuccess && task.Result != ""
-}
-
-func (task *Task) BuildAnalysisResponse(result *TaskResult) *AnalyzeTaskResponse {
-	return &AnalyzeTaskResponse{
-		AnalysisStatus:  task.AnalysisStatus,
-		AnalysisError:   task.AnalysisError,
-		AnalysisRawText: task.AnalysisRawText,
-		Result:          result,
-	}
+	return task.DocumentParseStatus == DocumentParseStatusSuccess && task.DocumentText != ""
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {

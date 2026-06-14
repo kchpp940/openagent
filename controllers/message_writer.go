@@ -22,20 +22,25 @@ import (
 	"strings"
 
 	"github.com/beego/beego/context"
+	"github.com/the-open-agent/openagent/model"
+	"github.com/the-open-agent/openagent/object"
 )
+
+var _ model.ExecutionRecorder = (*RefinedWriter)(nil)
 
 type RefinedWriter struct {
 	context.Response
-	writerCleaner Cleaner
-	buf           []byte
-	messageBuf    []byte
-	reasonBuf     []byte
-	toolBuf       []byte
-	searchBuf     []byte
+	writerCleaner   Cleaner
+	buf             []byte
+	messageBuf      []byte
+	reasonBuf       []byte
+	toolBuf         []byte
+	searchBuf       []byte
+	ExecutionTracer *object.ExecutionTracer
 }
 
-func newRefinedWriter(w context.Response) *RefinedWriter {
-	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
+func newRefinedWriter(w context.Response, tracer *object.ExecutionTracer) *RefinedWriter {
+	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, tracer}
 }
 
 func (w *RefinedWriter) Write(p []byte) (n int, err error) {
@@ -218,4 +223,90 @@ func checkFirstPart(firstPart, secondPart string, keywords []string) string {
 		}
 	}
 	return firstPart
+}
+
+func (w *RefinedWriter) StartModelCall(modelName string, round int) string {
+	if w.ExecutionTracer == nil {
+		return ""
+	}
+	title := "Model Call"
+	if modelName != "" {
+		title = fmt.Sprintf("Model: %s", modelName)
+	}
+	metadata := map[string]interface{}{
+		"round": round,
+	}
+	if modelName != "" {
+		metadata["model"] = modelName
+	}
+	return w.ExecutionTracer.StartStep(object.StepTypeModelStart, title, metadata)
+}
+
+func (w *RefinedWriter) EndModelCall(stepId string, tokenCount int, err error) {
+	if w.ExecutionTracer == nil || stepId == "" {
+		return
+	}
+	status := object.StepStatusCompleted
+	output := fmt.Sprintf("%d tokens", tokenCount)
+	errorMsg := ""
+	if err != nil {
+		status = object.StepStatusFailed
+		errorMsg = err.Error()
+	}
+	w.ExecutionTracer.EndStep(stepId, status, output, errorMsg)
+}
+
+func (w *RefinedWriter) StartToolCall(toolName string, arguments string, round int) string {
+	if w.ExecutionTracer == nil {
+		return ""
+	}
+	title := fmt.Sprintf("Tool: %s", toolName)
+	metadata := map[string]interface{}{
+		"round":    round,
+		"toolName": toolName,
+	}
+	stepId := w.ExecutionTracer.StartStep(object.StepTypeToolCallStart, title, metadata)
+	w.ExecutionTracer.UpdateStep(stepId, map[string]interface{}{
+		"input": truncateString(arguments, 500),
+	})
+	return stepId
+}
+
+func (w *RefinedWriter) EndToolCall(stepId string, result string, err error) {
+	if w.ExecutionTracer == nil || stepId == "" {
+		return
+	}
+	status := object.StepStatusCompleted
+	output := truncateString(result, 1000)
+	errorMsg := ""
+	if err != nil {
+		status = object.StepStatusFailed
+		errorMsg = err.Error()
+	}
+	w.ExecutionTracer.UpdateStep(stepId, map[string]interface{}{
+		"status": status,
+		"type":   object.StepTypeToolCallEnd,
+	})
+	w.ExecutionTracer.EndStep(stepId, status, output, errorMsg)
+}
+
+func (w *RefinedWriter) AddInfoStep(title string, description string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, title, description, nil)
+}
+
+func (w *RefinedWriter) AddErrorStep(title string, errMsg string) {
+	if w.ExecutionTracer == nil {
+		return
+	}
+	w.ExecutionTracer.AddSimpleStep(object.StepTypeError, title, errMsg, nil)
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

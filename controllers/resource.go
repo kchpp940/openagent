@@ -234,7 +234,7 @@ func (c *ApiController) UploadResource() {
 	defer file.Close()
 
 	fileName := header.Filename
-	fileSize := int64(header.Size)
+	fileSize := int(header.Size)
 
 	fileBytes := make([]byte, fileSize)
 	_, err = file.Read(fileBytes)

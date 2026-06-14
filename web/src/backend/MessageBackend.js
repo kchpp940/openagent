@@ -146,6 +146,16 @@ export function getMessage(owner, name) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
+export function getMessageExecutionSteps(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/get-message-execution-steps?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
 export function updateMessage(owner, name, message, isHitOnly = false) {
   const newMessage = Setting.deepCopy(message);
   return fetch(`${Setting.ServerUrl}/api/update-message?id=${owner}/${encodeURIComponent(name)}&isHitOnly=${isHitOnly}`, {

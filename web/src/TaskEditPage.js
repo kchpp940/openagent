@@ -79,19 +79,6 @@ class TaskEditPage extends React.Component {
     t = t.scale === undefined || t.scale === null ? {...t, scale: ""} : t;
     t = t.documentError === undefined || t.documentError === null ? {...t, documentError: ""} : t;
     t = t.documentFileType === undefined || t.documentFileType === null ? {...t, documentFileType: ""} : t;
-    t = t.documentMimeType === undefined || t.documentMimeType === null ? {...t, documentMimeType: ""} : t;
-    t = t.documentFileSize === undefined || t.documentFileSize === null ? {...t, documentFileSize: 0} : t;
-    t = t.documentResourceId === undefined || t.documentResourceId === null ? {...t, documentResourceId: ""} : t;
-    t = t.documentFileName === undefined || t.documentFileName === null ? {...t, documentFileName: ""} : t;
-    t = t.documentUploadSuccess === undefined || t.documentUploadSuccess === null ? {...t, documentUploadSuccess: false} : t;
-    t = t.documentParseStatus === undefined || t.documentParseStatus === null ? {...t, documentParseStatus: ""} : t;
-    t = t.documentTypeSource === undefined || t.documentTypeSource === null ? {...t, documentTypeSource: ""} : t;
-    t = t.documentTypeConflict === undefined || t.documentTypeConflict === null ? {...t, documentTypeConflict: false} : t;
-    t = t.documentConflictMsg === undefined || t.documentConflictMsg === null ? {...t, documentConflictMsg: ""} : t;
-    t = t.analysisStatus === undefined || t.analysisStatus === null ? {...t, analysisStatus: ""} : t;
-    t = t.analysisError === undefined || t.analysisError === null ? {...t, analysisError: ""} : t;
-    t = t.analysisRawText === undefined || t.analysisRawText === null ? {...t, analysisRawText: ""} : t;
-    t = t.analyzeError === undefined || t.analyzeError === null ? {...t, analyzeError: ""} : t;
     if (!t.result) {
       return t;
     }
@@ -137,14 +124,7 @@ class TaskEditPage extends React.Component {
       return;
     }
     this.analyzeStartTime = Date.now();
-    this.setState({analyzing: true, analyzeProgress: 0});
-    const task = this.state.task;
-    task.analysisStatus = "pending";
-    task.analysisError = "";
-    task.analysisRawText = "";
-    task.result = null;
-    task.score = 0;
-    this.setState({task: task});
+    this.setState({analyzing: true, analyzeProgress: 0, analyzeError: ""});
     const durationMs = ANALYZE_PROGRESS_DURATION_SEC * 1000;
     this.analyzeProgressIntervalId = setInterval(() => {
       const elapsed = Date.now() - this.analyzeStartTime;
@@ -154,43 +134,18 @@ class TaskEditPage extends React.Component {
     TaskBackend.analyzeTask(this.state.task.owner, this.state.task.name)
       .then((res) => {
         if (res.status === "ok") {
-          const t = this.state.task;
-          const data = res.data;
-          t.analysisStatus = data.analysisStatus;
-          t.analysisError = data.analysisError;
-          t.analysisRawText = data.analysisRawText;
-          if (data.result) {
-            t.result = data.result;
-            t.score = data.result.score;
-          } else {
-            t.result = null;
-            t.score = 0;
-          }
-          this.setState({task: t});
-          if (data.analysisStatus === "success") {
-            Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${data.analysisError}`);
-          }
+          const task = this.state.task;
+          task.result = res.data;
+          task.score = res.data.score;
+          this.setState({task: task});
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
         } else {
-          const t = this.state.task;
-          t.analysisStatus = "failed";
-          t.analysisError = res.msg || i18next.t("general:Failed to get");
-          t.analysisRawText = "";
-          t.result = null;
-          t.score = 0;
-          this.setState({task: t});
+          this.setState({analyzeError: res.msg || i18next.t("general:Failed to get")});
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       })
       .catch(err => {
-        const t = this.state.task;
-        t.analysisStatus = "failed";
-        t.analysisError = err.message || i18next.t("general:Failed to get");
-        t.analysisRawText = "";
-        t.result = null;
-        t.score = 0;
-        this.setState({task: t});
+        this.setState({analyzeError: err.message || i18next.t("general:Failed to get")});
         Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
       })
       .finally(() => {
@@ -210,9 +165,6 @@ class TaskEditPage extends React.Component {
     const task = this.state.task;
     task.result = null;
     task.score = 0;
-    task.analysisStatus = "";
-    task.analysisError = "";
-    task.analysisRawText = "";
     this.setState({task: task, analyzeError: ""});
   };
 
@@ -285,50 +237,24 @@ class TaskEditPage extends React.Component {
         if (res.status === "ok") {
           const result = res.data;
           const task = this.state.task;
-          task.documentUrl = result.url || "";
-          task.documentText = result.text || "";
+          task.documentUrl = result.url;
+          task.documentText = result.text;
           task.documentError = result.error || "";
           task.documentFileType = result.fileType || "";
-          task.documentMimeType = result.mimeType || "";
-          task.documentFileSize = result.fileSize || 0;
-          task.documentResourceId = result.resourceId || "";
-          task.documentFileName = result.fileName || "";
-          task.documentUploadSuccess = result.uploadSuccess || false;
-          task.documentParseStatus = result.parseStatus || "";
-          task.documentTypeSource = result.typeSource || "";
-          task.documentTypeConflict = result.typeConflict || false;
-          task.documentConflictMsg = result.conflictMessage || "";
-          task.analyzeError = "";
           this.setState({task: task});
 
-          if (result.uploadSuccess && result.parseSuccess) {
+          if (result.parseSuccess) {
             Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
-          } else if (result.uploadSuccess && result.parseStatus === "unsupported" && result.error) {
-            Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but file type not supported")}: ${result.error}`);
-          } else if (result.uploadSuccess && result.error) {
+          } else if (result.error) {
             Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
-          } else if (result.uploadSuccess) {
-            Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
           } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${result.error || "Unknown error"}`);
+            Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
           }
         } else {
-          const task = this.state.task;
-          task.documentUploadSuccess = false;
-          task.documentParseStatus = "failed";
-          task.documentError = res.msg || "";
-          task.analyzeError = "";
-          this.setState({task: task});
           Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
         }
       })
       .catch(err => {
-        const task = this.state.task;
-        task.documentUploadSuccess = false;
-        task.documentParseStatus = "failed";
-        task.documentError = err.message || "";
-        task.analyzeError = "";
-        this.setState({task: task});
         Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${err.message}`);
       })
       .finally(() => {
@@ -342,25 +268,11 @@ class TaskEditPage extends React.Component {
     task.documentText = "";
     task.documentError = "";
     task.documentFileType = "";
-    task.documentMimeType = "";
-    task.documentFileSize = 0;
-    task.documentResourceId = "";
-    task.documentFileName = "";
-    task.documentUploadSuccess = false;
-    task.documentParseStatus = "";
-    task.documentTypeSource = "";
-    task.documentTypeConflict = false;
-    task.documentConflictMsg = "";
-    task.analyzeError = "";
-    this.setState({task: task, analyzeError: ""});
+    this.setState({task: task});
   };
 
   getDocumentFileName() {
-    const task = this.state.task;
-    if (task?.documentFileName) {
-      return task.documentFileName;
-    }
-    const url = task?.documentUrl || "";
+    const url = this.state.task?.documentUrl || "";
     try {
       const path = new URL(url).pathname || url;
       const encoded = path.split("/").filter(Boolean).pop() || url;
@@ -393,42 +305,6 @@ class TaskEditPage extends React.Component {
     );
   }
 
-  getDocumentStatusInfo(parseStatus) {
-    const statusMap = {
-      "success": {
-        color: "#52c41a",
-        icon: <CheckCircleOutlined />,
-        text: i18next.t("task:Document parsed successfully"),
-        level: "success"
-      },
-      "failed": {
-        color: "#ff4d4f",
-        icon: <CloseCircleOutlined />,
-        text: i18next.t("task:Document parsing failed"),
-        level: "error"
-      },
-      "empty": {
-        color: "#faad14",
-        icon: <WarningOutlined />,
-        text: i18next.t("task:No text extracted from document"),
-        level: "warning"
-      },
-      "unsupported": {
-        color: "#fa8c16",
-        icon: <WarningOutlined />,
-        text: i18next.t("task:Uploaded but unsupported document type"),
-        level: "warning"
-      },
-      "pending": {
-        color: "#1890ff",
-        icon: <Spin size="small" />,
-        text: i18next.t("task:Document parsing in progress"),
-        level: "info"
-      }
-    };
-    return statusMap[parseStatus] || null;
-  }
-
   renderTask() {
     const task = this.state.task;
     const rowGutter = [16, 8];
@@ -445,12 +321,6 @@ class TaskEditPage extends React.Component {
         {desc && <div style={{fontSize: "13px", color: "var(--ant-color-text-tertiary)", fontWeight: 400, marginTop: "2px"}}>{desc}</div>}
       </div>
     );
-
-    const docStatusInfo = this.getDocumentStatusInfo(task.documentParseStatus);
-    const docHasError = task.documentParseStatus === "failed" || task.documentParseStatus === "unsupported" || task.documentParseStatus === "empty";
-    const docBackgroundColor = docStatusInfo?.level === "error" ? "#fff1f0" :
-                               docStatusInfo?.level === "warning" ? "#fff7e6" :
-                               undefined;
 
     return (
       <div>
@@ -530,50 +400,37 @@ class TaskEditPage extends React.Component {
             ) : null}
             {this.renderTaskField(
               Setting.getLabel(i18next.t("store:File"), i18next.t("store:File - Tooltip")),
-              task.documentUploadSuccess ? (
+              task.documentUrl ? (
                 <Card
                   size="small"
-                  style={{
-                    display: "inline-block",
-                    width: "auto",
-                    maxWidth: "100%",
-                    verticalAlign: "top",
-                    borderColor: docHasError ? (docStatusInfo?.color || "#faad14") : undefined,
-                    background: docBackgroundColor
-                  }}
+                  style={{display: "inline-block", width: "auto", maxWidth: "100%", verticalAlign: "top", borderColor: task.documentError ? "#faad14" : undefined}}
                 >
                   <div style={{display: "flex", alignItems: "center", gap: 12, flexWrap: "nowrap", minWidth: 0}}>
-                    <span style={{
-                      fontSize: 28,
-                      flexShrink: 0,
-                      color: docStatusInfo ? docStatusInfo.color : "#1890ff"
-                    }}>
-                      {docStatusInfo ? docStatusInfo.icon : (task.documentFileType === ".pdf" ? <FilePdfOutlined /> : <FileWordOutlined />)}
+                    <span style={{fontSize: 28, flexShrink: 0, color: task.documentError ? "#faad14" : (task.documentUrl.endsWith(".pdf") ? "#cf1322" : "#1890ff")}}>
+                      {task.documentError ? <WarningOutlined /> : (task.documentUrl.endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />)}
                     </span>
                     <div style={{minWidth: 0, maxWidth: "min(960px, calc(100vw - 220px))", flex: "0 1 auto"}}>
-                      <Typography.Text ellipsis={{tooltip: true}} style={{width: "100%", fontWeight: task.documentError || docHasError ? 500 : "normal"}}>
+                      <Typography.Text ellipsis={{tooltip: true}} style={{width: "100%", fontWeight: task.documentError ? 500 : "normal"}}>
                         {this.getDocumentFileName()}
                       </Typography.Text>
-                      {docStatusInfo ? (
-                        <div style={{fontSize: "12px", color: docStatusInfo.color, marginTop: "2px"}}>
-                          {docStatusInfo.icon}
-                          <span style={{marginLeft: "4px"}}>{docStatusInfo.text}</span>
-                          {docStatusInfo.level === "success" && task.documentText && (
-                            <span> ({task.documentText.length.toLocaleString()} {i18next.t("task:characters")})</span>
-                          )}
+                      {task.documentError ? (
+                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
+                          <WarningOutlined style={{marginRight: "4px"}} />
+                          {task.documentError}
+                        </div>
+                      ) : task.documentText ? (
+                        <div style={{fontSize: "12px", color: "#52c41a", marginTop: "2px"}}>
+                          <CheckCircleOutlined style={{marginRight: "4px"}} />
+                          {i18next.t("task:Document parsed successfully")} ({task.documentText.length.toLocaleString()} {i18next.t("task:characters")})
                         </div>
                       ) : (
-                        <div style={{fontSize: "12px", color: "#8c8c8c", marginTop: "2px"}}>
-                          {i18next.t("task:Document status unknown")}
-                        </div>
-                      )}
-                      {task.documentTypeConflict && task.documentConflictMsg && (
-                        <div style={{fontSize: "11px", color: "#fa8c16", marginTop: "4px", fontStyle: "italic"}}>
-                          ⚠️ {task.documentConflictMsg}
+                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
+                          <WarningOutlined style={{marginRight: "4px"}} />
+                          {i18next.t("task:No text extracted from document")}
                         </div>
                       )}
                     </div>
-                    <Button type="link" size="small" icon={<DownloadOutlined />} href={task.documentUrl || undefined} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}} disabled={!task.documentUrl}>
+                    <Button type="link" size="small" icon={<DownloadOutlined />} href={task.documentUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}}>
                       {i18next.t("general:Download")}
                     </Button>
                     <Button type="text" size="small" danger icon={<CloseOutlined />} onClick={this.clearDocument} aria-label={i18next.t("general:Delete")} style={{flexShrink: 0}} />
@@ -604,12 +461,12 @@ class TaskEditPage extends React.Component {
                 )}
               </>
             )}
-            {task.type !== "Labeling" && task.documentUploadSuccess ? this.renderTaskField(
+            {task.type !== "Labeling" && task.documentUrl ? this.renderTaskField(
               Setting.getLabel(i18next.t("task:Report"), i18next.t("task:Report - Tooltip")),
               <div>
                 <Button
                   loading={this.state.analyzing}
-                  disabled={task.documentParseStatus !== "success" || task.analysisStatus === "pending" || task.analysisStatus === "success" || !String(task.scale || "").trim()}
+                  disabled={task.documentError || !task.documentText || !!task.result || !String(task.scale || "").trim()}
                   style={{marginBottom: "20px", width: "200px"}}
                   type="primary"
                   icon={<BarChartOutlined />}
@@ -617,61 +474,27 @@ class TaskEditPage extends React.Component {
                 >
                   {i18next.t("task:Analyze")}
                 </Button>
-                {task.result || task.analysisStatus ? (
+                {task.result ? (
                   <Button style={{marginBottom: "20px", marginLeft: "8px", width: "200px"}} icon={<ClearOutlined />} onClick={this.clearReport}>
                     {i18next.t("general:Clear")}
                   </Button>
                 ) : null}
-                {task.documentParseStatus === "failed" && !this.state.analyzing && !task.result && (
+                {task.documentError && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px"}}>
+                    <WarningOutlined style={{marginRight: "4px"}} />
+                    {i18next.t("task:Document parsing failed")}: {task.documentError}
+                  </div>
+                )}
+                {!task.documentError && !task.documentText && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px"}}>
+                    <WarningOutlined style={{marginRight: "4px"}} />
+                    {i18next.t("task:No text extracted from document")}
+                  </div>
+                )}
+                {this.state.analyzeError && !this.state.analyzing && !task.result && (
                   <div style={{color: "#ff4d4f", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff1f0", borderRadius: "4px", border: "1px solid #ffccc7"}}>
                     <CloseCircleOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:Document parsing failed")}：</strong>{task.documentError}
-                    <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:Please check the file format and try re-uploading")}
-                    </div>
-                  </div>
-                )}
-                {task.documentParseStatus === "unsupported" && !this.state.analyzing && !task.result && (
-                  <div style={{color: "#fa8c16", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff7e6", borderRadius: "4px", border: "1px solid #ffd591"}}>
-                    <WarningOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:Uploaded but unsupported document type")}：</strong>{task.documentError}
-                    <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:File was uploaded successfully but cannot be analyzed")}
-                      {task.documentUrl ? (
-                        <span style={{marginLeft: "8px"}}>
-                          <a href={task.documentUrl} target="_blank" rel="noopener noreferrer" style={{color: "#fa8c16", textDecoration: "underline"}}>
-                            {i18next.t("general:Download uploaded file")}
-                          </a>
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-                {task.documentParseStatus === "empty" && !this.state.analyzing && !task.result && (
-                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fffbe6", borderRadius: "4px", border: "1px solid #ffe58f"}}>
-                    <WarningOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:No text extracted from document")}：</strong>{task.documentError}
-                    <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:If this is a scanned document, please convert it to text format first")}
-                    </div>
-                  </div>
-                )}
-                {task.documentParseStatus === "pending" && !this.state.analyzing && !task.result && (
-                  <div style={{color: "#1890ff", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#e6f7ff", borderRadius: "4px", border: "1px solid #91d5ff"}}>
-                    <Spin size="small" style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:Document parsing in progress")}</strong>
-                    <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:Please wait or try re-uploading if this takes too long")}
-                    </div>
-                  </div>
-                )}
-                {task.analysisStatus === "failed" && !this.state.analyzing && (
-                  <div style={{color: "#ff4d4f", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff1f0", borderRadius: "4px", border: "1px solid #ffccc7"}}>
-                    <CloseCircleOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:AI analysis failed")}：</strong>{task.analysisError}
-                    <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:This is an AI model error, please try again later")}
-                    </div>
+                    {i18next.t("task:Analysis failed")}: {this.state.analyzeError}
                   </div>
                 )}
                 {this.state.analyzing && (
@@ -682,14 +505,10 @@ class TaskEditPage extends React.Component {
                     <Spin style={{marginLeft: "16px"}} tip={i18next.t("task:Analyzing")} />
                   </>
                 )}
-                {(task.result || task.analysisStatus) && task.documentUploadSuccess && (
+                {task.result && (
                   <TaskAnalysisReport
                     result={task.result}
                     downloadFileName={`${task.owner}_${task.name}_report.docx`}
-                    analysisStatus={task.analysisStatus}
-                    analysisError={task.analysisError}
-                    documentParseStatus={task.documentParseStatus}
-                    documentError={task.documentError}
                   />
                 )}
               </div>,

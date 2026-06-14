@@ -16,7 +16,7 @@ import React, {useEffect, useMemo, useState} from "react";
 import {useHistory} from "react-router-dom";
 import {Bubble} from "@ant-design/x";
 import {Alert, Avatar, Button, Space} from "antd";
-import {FileTextOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons";
+import {FileTextOutlined, GlobalOutlined, InfoCircleOutlined, ClockCircleOutlined} from "@ant-design/icons";
 import moment from "moment";
 import * as Setting from "../Setting";
 import i18next from "i18next";
@@ -30,6 +30,8 @@ import KnowledgeSourcesDrawer from "./KnowledgeSourcesDrawer";
 import ToolCallSection from "./ToolCallSection";
 import ReasoningSection from "./ReasoningSection";
 import GeneratedResourceList, {extractGeneratedResources} from "./GeneratedResourceList";
+import ExecutionTimeline from "./ExecutionTimeline";
+import * as MessageBackend from "../backend/MessageBackend";
 
 const MessageItem = ({
   message,
@@ -55,6 +57,9 @@ const MessageItem = ({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [searchDrawerVisible, setSearchDrawerVisible] = useState(false);
   const [knowledgeDrawerVisible, setKnowledgeDrawerVisible] = useState(false);
+  const [executionSteps, setExecutionSteps] = useState(null);
+  const [loadingExecutionSteps, setLoadingExecutionSteps] = useState(false);
+  const [executionTimelineVisible, setExecutionTimelineVisible] = useState(false);
   const themeColor = Setting.getThemeColor();
 
   const mergedSearchResults = useMemo(() => {
@@ -102,6 +107,43 @@ const MessageItem = ({
 
   const aiBubbleBg = isDark ? "#2a2d35" : "#f4f6fa";
   const aiBubbleBorder = isDark ? "1px solid #383d47" : "1px solid #eaedf3";
+
+  const loadExecutionSteps = () => {
+    if (executionSteps || loadingExecutionSteps) {
+      setExecutionTimelineVisible(v => !v);
+      return;
+    }
+
+    if (message.executionSteps) {
+      try {
+        const steps = typeof message.executionSteps === "string"
+          ? JSON.parse(message.executionSteps)
+          : message.executionSteps;
+        setExecutionSteps(steps);
+      } catch (e) {
+        setExecutionSteps([]);
+      }
+      setExecutionTimelineVisible(true);
+      return;
+    }
+
+    setLoadingExecutionSteps(true);
+    setExecutionTimelineVisible(true);
+    MessageBackend.getMessageExecutionSteps(message.owner, message.name)
+      .then(res => {
+        if (res && res.data) {
+          setExecutionSteps(res.data);
+        } else {
+          setExecutionSteps([]);
+        }
+      })
+      .catch(() => {
+        setExecutionSteps([]);
+      })
+      .finally(() => {
+        setLoadingExecutionSteps(false);
+      });
+  };
 
   const renderThinkingAnimation = () => {
     return (
@@ -343,6 +385,14 @@ const MessageItem = ({
                 </div>
               )}
               {renderMessageContent()}
+              {executionTimelineVisible && message.author === "AI" && (
+                <ExecutionTimeline
+                  steps={executionSteps}
+                  isDark={isDark}
+                  themeColor={themeColor}
+                  loading={loadingExecutionSteps}
+                />
+              )}
             </div>
           }
           footer={
@@ -396,6 +446,22 @@ const MessageItem = ({
                       }}
                     >
                       {message.vectorScores.length} {i18next.t("chat:Knowledge sources")}
+                    </Button>
+                  )}
+                  {message.author === "AI" && message.text && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<ClockCircleOutlined />}
+                      onClick={loadExecutionSteps}
+                      style={{
+                        fontSize: "12px",
+                        color: executionTimelineVisible ? themeColor : "#8c8c8c",
+                        padding: "0 8px",
+                        height: "24px",
+                      }}
+                    >
+                      {i18next.t("chat:Execution trace")}
                     </Button>
                   )}
                 </div>

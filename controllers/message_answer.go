@@ -152,6 +152,8 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		return
 	}
 
+	executionTracer := object.NewExecutionTracer(id)
+
 	if message == nil {
 		responseErrorStream(message, fmt.Sprintf("The message: %s is not found", id))
 		return
@@ -338,18 +340,27 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	embeddingResult := &embedding.EmbeddingResult{}
 
 	if chat.Tool == "" && store.KnowledgeCount != 0 && embeddingProviderObj != nil {
+		knowledgeStepId := executionTracer.StartStep(object.StepTypeKnowledgeRetrieval, "Knowledge Retrieval", map[string]interface{}{
+			"store":          store.Name,
+			"knowledgeCount": store.KnowledgeCount,
+		})
 		knowledge, vectorScores, embeddingResult, err = object.GetNearestKnowledge(store.Name, store.VectorStores, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, store.Owner, question, store.KnowledgeCount, lang)
 		if err != nil && err.Error() != "no knowledge vectors found" {
 			err = fmt.Errorf(i18n.Translate(lang, "message_answer:object.GetNearestKnowledge() error, %s"), err.Error())
+			executionTracer.EndStep(knowledgeStepId, object.StepStatusFailed, "", err.Error())
 			responseErrorStream(message, err.Error())
 			return
 		}
 		if embeddingResult == nil {
 			embeddingResult = &embedding.EmbeddingResult{}
 		}
+		executionTracer.UpdateStep(knowledgeStepId, map[string]interface{}{
+			"output": fmt.Sprintf("%d knowledge chunks retrieved", len(knowledge)),
+		})
+		executionTracer.EndStep(knowledgeStepId, object.StepStatusCompleted, fmt.Sprintf("%d chunks", len(knowledge)), "")
 	}
 
-	writer := &RefinedWriter{context.Response{ResponseWriter: responseWriter}, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
+	writer := &RefinedWriter{context.Response{ResponseWriter: responseWriter}, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, executionTracer}
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -401,15 +412,25 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			ToolCalls: nil,
 		}
 		toolSession := &model.ToolSession{
-			McpToolSet:   mcpToolSet,
-			ToolMessages: messages,
+			McpToolSet:        mcpToolSet,
+			ToolMessages:      messages,
+			ExecutionRecorder: writer,
 		}
 		modelResult, err = model.QueryTextWithTools(modelProviderObj, question, writer, history, prompt, knowledge, toolSession, lang)
 	} else {
+		modelStepId := executionTracer.StartStep(object.StepTypeModelStart, fmt.Sprintf("Model: %s", modelProviderName), map[string]interface{}{
+			"model": modelProviderName,
+			"round": 0,
+		})
 		if isReasonModel(modelProvider.SubType) {
 			modelResult, err = QueryCarrierText(question, writer, history, prompt, knowledge, modelProviderObj, chat.NeedTitle, store.SuggestionCount, lang)
 		} else {
 			modelResult, err = modelProviderObj.QueryText(question, writer, history, prompt, knowledge, nil, lang)
+		}
+		if err != nil {
+			executionTracer.EndStep(modelStepId, object.StepStatusFailed, "", err.Error())
+		} else {
+			executionTracer.EndStep(modelStepId, object.StepStatusCompleted, fmt.Sprintf("%d tokens", modelResult.TotalTokenCount), "")
 		}
 	}
 	if err != nil {
@@ -502,6 +523,15 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	message.Suggestions = textSuggestions
 
 	message.VectorScores = vectorScores
+
+	executionTracer.AddSimpleStep(object.StepTypeFinalOutput, "Final Output", fmt.Sprintf("%d chars", len(message.Text)), map[string]interface{}{
+		"tokenCount": message.TokenCount,
+		"price":      message.Price,
+		"currency":   message.Currency,
+	})
+
+	executionStepsJson, _ := executionTracer.ToJSON()
+	message.ExecutionSteps = executionStepsJson
 
 	// Normalize price precision before persisting or creating transactions
 	message.Price = model.AddPrices(message.Price, 0)

@@ -38,8 +38,9 @@ type ToolMessages struct {
 }
 
 type ToolSession struct {
-	McpToolSet   *mcp.ToolSet
-	ToolMessages *ToolMessages
+	McpToolSet        *mcp.ToolSet
+	ToolMessages      *ToolMessages
+	ExecutionRecorder ExecutionRecorder
 }
 
 type ToolCallResponse struct {
@@ -54,6 +55,15 @@ type ToolCall struct {
 	Arguments string `json:"arguments"`
 	Content   string `json:"content"`
 	IsError   bool   `json:"isError"`
+}
+
+type ExecutionRecorder interface {
+	StartModelCall(modelName string, round int) string
+	EndModelCall(stepId string, tokenCount int, err error)
+	StartToolCall(toolName string, arguments string, round int) string
+	EndToolCall(stepId string, result string, err error)
+	AddInfoStep(title string, description string)
+	AddErrorStep(title string, errMsg string)
 }
 
 const toolErrorRecoveryPrompt = "The previous tool call failed. Do not finish as if the task is complete. If possible, recover by calling the appropriate tool again with corrected arguments or a different tool. If recovery is not possible, clearly explain what is blocked and what input or condition is needed."
@@ -161,6 +171,10 @@ func normalizeToolCalls(toolSession *ToolSession) []openai.ToolCall {
 
 func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {
 	var messages []*RawMessage
+	var recorder ExecutionRecorder
+	if toolSession != nil {
+		recorder = toolSession.ExecutionRecorder
+	}
 
 	toolCount := 0
 	if toolSession.McpToolSet != nil {
@@ -171,9 +185,19 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 	}
 	fmt.Printf("\n--- LLM Call (Round 0) | Tools available: [%d] ---\n", toolCount)
 
+	modelStepId := ""
+	if recorder != nil {
+		modelStepId = recorder.StartModelCall("", 0)
+	}
 	modelResult, err := p.QueryText(question, writer, history, prompt, knowledgeMessages, toolSession, lang)
 	if err != nil {
+		if recorder != nil {
+			recorder.EndModelCall(modelStepId, 0, err)
+		}
 		return nil, err
+	}
+	if recorder != nil {
+		recorder.EndModelCall(modelStepId, modelResult.TotalTokenCount, nil)
 	}
 
 	toolCalls := normalizeToolCalls(toolSession)
@@ -203,6 +227,11 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 			var toolFailed bool
 			if parseErr != nil {
+				var toolStepId string
+				if recorder != nil {
+					toolStepId = recorder.StartToolCall(toolCall.Function.Name, toolCall.Function.Arguments, round)
+					recorder.EndToolCall(toolStepId, "", parseErr)
+				}
 				messages, toolFailed, err = handleToolIdParseError(toolCall, parseErr, messages, writer, lang)
 				if err != nil {
 					return nil, err
@@ -211,7 +240,7 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 					roundHasToolError = true
 				}
 			} else {
-				messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
+				messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang, recorder, round)
 				if err != nil {
 					return nil, err
 				}
@@ -223,9 +252,20 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 		toolSession.ToolMessages.Messages = messages
 		fmt.Printf("\n--- LLM Call (Round %d) | Tool results fed back ---\n", round)
+
+		modelStepId = ""
+		if recorder != nil {
+			modelStepId = recorder.StartModelCall("", round)
+		}
 		modelResult, err = p.QueryText(question, writer, history, prompt, knowledgeMessages, toolSession, lang)
 		if err != nil {
+			if recorder != nil {
+				recorder.EndModelCall(modelStepId, 0, err)
+			}
 			return nil, err
+		}
+		if recorder != nil {
+			recorder.EndModelCall(modelStepId, modelResult.TotalTokenCount, nil)
 		}
 
 		toolCalls = normalizeToolCalls(toolSession)
@@ -237,9 +277,24 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 			toolSession.ToolMessages.Messages = messages
 
 			fmt.Printf("\n--- LLM Call (Round %d recovery) | Tool error recovery prompt added ---\n", round)
+
+			if recorder != nil {
+				recorder.AddInfoStep("Tool error recovery", "Retrying with recovery prompt after tool error")
+			}
+
+			modelStepId = ""
+			if recorder != nil {
+				modelStepId = recorder.StartModelCall("", round)
+			}
 			modelResult, err = p.QueryText(question, writer, history, prompt, knowledgeMessages, toolSession, lang)
 			if err != nil {
+				if recorder != nil {
+					recorder.EndModelCall(modelStepId, 0, err)
+				}
 				return nil, err
+			}
+			if recorder != nil {
+				recorder.EndModelCall(modelStepId, modelResult.TotalTokenCount, nil)
 			}
 
 			toolCalls = normalizeToolCalls(toolSession)
@@ -286,7 +341,7 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 	return stop
 }
 
-func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string, recorder ExecutionRecorder, round int) ([]*RawMessage, bool, error) {
 	var arguments map[string]interface{}
 	ctx := context.Background()
 
@@ -301,8 +356,16 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
 	}
 
+	var stepId string
+	if recorder != nil {
+		stepId = recorder.StartToolCall(toolCall.Function.Name, toolCall.Function.Arguments, round)
+	}
+
 	if parseErr := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); parseErr != nil {
 		errMsg := fmt.Sprintf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), parseErr)
+		if recorder != nil {
+			recorder.EndToolCall(stepId, "", parseErr)
+		}
 		return emitToolError(toolCall, mcp.ToolCallErrParseArgs, errMsg, messages, writer, lang)
 	}
 
@@ -315,12 +378,18 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 
 	if mcpToolSet == nil {
 		errMsg := i18n.Translate(lang, "model:MCP toolset is not initialized")
+		if recorder != nil {
+			recorder.EndToolCall(stepId, "", fmt.Errorf(errMsg))
+		}
 		return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
 	}
 
 	if serverName == "" {
 		if mcpToolSet.BuiltinTools == nil {
 			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:builtin tool registry is not available; cannot execute tool: %s"), toolName)
+			if recorder != nil {
+				recorder.EndToolCall(stepId, "", fmt.Errorf(errMsg))
+			}
 			return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
 		}
 		result, execErr = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
@@ -328,6 +397,9 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 		conn, ok := mcpToolSet.Connections[serverName]
 		if !ok {
 			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:no open MCP connection for server: %s (tool: %s)"), serverName, toolName)
+			if recorder != nil {
+				recorder.EndToolCall(stepId, "", fmt.Errorf(errMsg))
+			}
 			return emitToolError(toolCall, mcp.ToolCallErrNoConnection, errMsg, messages, writer, lang)
 		}
 		req := &protocol.CallToolRequest{
@@ -389,6 +461,14 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 
 	fmt.Printf("Tool Result: [%s]\n", contentStr)
 	isError := !response.Success
+
+	if recorder != nil {
+		if isError {
+			recorder.EndToolCall(stepId, "", fmt.Errorf(contentStr))
+		} else {
+			recorder.EndToolCall(stepId, contentStr, nil)
+		}
+	}
 
 	toolData := ToolCall{
 		Name:      toolCall.Function.Name,

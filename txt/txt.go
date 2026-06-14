@@ -46,39 +46,13 @@ func GetSupportedFileTypes() []string {
 	return []string{".txt", ".md", ".yaml", ".csv", ".pdf", ".docx", ".xlsx", ".pptx"}
 }
 
-func GetParserSupportedTypes() map[string]bool {
-	return map[string]bool{
-		".txt":  true,
-		".md":   true,
-		".yaml": true,
-		".csv":  true,
-		".pdf":  true,
-		".docx": true,
-		".xlsx": true,
-		".pptx": true,
-	}
-}
-
-var mimeTypeToExtension = map[string]string{
-	"application/pdf":                     ".pdf",
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   ".docx",
-	"application/msword":                  ".docx",
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         ".xlsx",
-	"application/vnd.ms-excel":            ".xlsx",
-	"application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-	"application/vnd.ms-powerpoint":       ".pptx",
-	"text/plain":                          ".txt",
-	"text/markdown":                       ".md",
-	"text/csv":                            ".csv",
-	"text/yaml":                           ".yaml",
-	"application/x-yaml":                  ".yaml",
-	"application/yaml":                    ".yaml",
-	"application/octet-stream":            "",
-}
-
 func isSupportedType(ext string) bool {
-	supported := GetParserSupportedTypes()
-	return supported[strings.ToLower(ext)]
+	for _, supported := range GetSupportedFileTypes() {
+		if strings.EqualFold(ext, supported) {
+			return true
+		}
+	}
+	return false
 }
 
 func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []string) *DocumentTypeDetection {
@@ -87,23 +61,9 @@ func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []strin
 	result.FileNameExt = strings.ToLower(filepath.Ext(fileName))
 
 	if mimeType != "" {
-		mimeTypeNormalized := strings.TrimSpace(strings.ToLower(mimeType))
-		if ext, ok := mimeTypeToExtension[mimeTypeNormalized]; ok && ext != "" {
-			result.MimeTypeExt = ext
-		} else {
-			exts, _ := mime.ExtensionsByType(mimeType)
-			if len(exts) > 0 {
-				for _, ext := range exts {
-					extLower := strings.ToLower(ext)
-					if isSupportedType(extLower) {
-						result.MimeTypeExt = extLower
-						break
-					}
-				}
-				if result.MimeTypeExt == "" {
-					result.MimeTypeExt = strings.ToLower(exts[0])
-				}
-			}
+		exts, _ := mime.ExtensionsByType(mimeType)
+		if len(exts) > 0 {
+			result.MimeTypeExt = strings.ToLower(exts[0])
 		}
 	}
 
@@ -115,10 +75,8 @@ func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []strin
 	if result.FileNameExt != "" && result.MimeTypeExt != "" && result.FileNameExt != result.MimeTypeExt {
 		extSupported := isSupportedType(result.FileNameExt)
 		mimeSupported := isSupportedType(result.MimeTypeExt)
-		extAllowed := len(allowedExtensions) == 0 || allowedMap[result.FileNameExt]
-		mimeAllowed := len(allowedExtensions) == 0 || allowedMap[result.MimeTypeExt]
 
-		if extSupported && extAllowed && (!mimeSupported || !mimeAllowed) {
+		if extSupported && !mimeSupported {
 			result.DetectedType = result.FileNameExt
 			result.Source = TypeSourceFileName
 			result.Conflict = true
@@ -126,7 +84,7 @@ func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []strin
 				"文件名后缀 %s 与 MIME 类型 %s (解析为 %s) 不一致，已按文件名后缀处理",
 				result.FileNameExt, mimeType, result.MimeTypeExt,
 			)
-		} else if mimeSupported && mimeAllowed && (!extSupported || !extAllowed) {
+		} else if !extSupported && mimeSupported {
 			result.DetectedType = result.MimeTypeExt
 			result.Source = TypeSourceMimeType
 			result.Conflict = true
@@ -134,7 +92,7 @@ func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []strin
 				"文件名后缀 %s 与 MIME 类型 %s (解析为 %s) 不一致，已按 MIME 类型处理",
 				result.FileNameExt, mimeType, result.MimeTypeExt,
 			)
-		} else if extSupported && extAllowed && mimeSupported && mimeAllowed {
+		} else if extSupported && mimeSupported {
 			result.DetectedType = result.FileNameExt
 			result.Source = TypeSourceFileName
 			result.Conflict = true
@@ -165,8 +123,8 @@ func DetectTaskDocumentType(fileName, mimeType string, allowedExtensions []strin
 	if !isSupportedType(result.DetectedType) {
 		result.Unsupported = true
 		result.UnsupportedReason = fmt.Sprintf(
-			"检测到的文件类型 %s (来源: %s) 不在解析器支持列表中 (支持: %v)",
-			result.DetectedType, result.Source, GetSupportedFileTypes(),
+			"检测到的文件类型 %s (来源: %s) 不在解析器支持列表中",
+			result.DetectedType, result.Source,
 		)
 		return result
 	}

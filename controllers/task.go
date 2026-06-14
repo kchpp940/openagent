@@ -277,34 +277,34 @@ func (c *ApiController) AnalyzeTask() {
 		}
 	}
 
-	resp := object.AnalyzeTask(task, c.GetAcceptLanguage())
-
-	if resp.AnalysisStatus == object.AnalysisStatusSuccess {
-		logs.Info("[analyze-task] success id=%s score=%.2f", id, resp.Result.Score)
-	} else {
-		logs.Error("[analyze-task] failed id=%s status=%s err=%s", id, resp.AnalysisStatus, resp.AnalysisError)
-	}
-
-	if resp.Result != nil {
-		resultBytes, err := json.Marshal(resp.Result)
-		if err != nil {
-			logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
-			task.Result = ""
-			task.Score = 0
-		} else {
-			task.Result = string(resultBytes)
-			task.Score = resp.Result.Score
+	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
+	if err != nil {
+		logs.Error("[analyze-task] AnalyzeTask failed id=%s: %v", id, err)
+		task.Result = ""
+		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
+			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
 		}
+		c.ResponseError(err.Error())
+		return
 	}
 
-	task.AnalysisStatus = resp.AnalysisStatus
-	task.AnalysisError = resp.AnalysisError
-	task.AnalysisRawText = resp.AnalysisRawText
-
-	logs.Info("[analyze-task] saving task id=%s status=%s", id, resp.AnalysisStatus)
-	if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
-		logs.Error("[analyze-task] failed to save analysis state id=%s: %v", id, updateErr)
+	logs.Info("[analyze-task] serializing result id=%s", id)
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
+		c.ResponseError(err.Error())
+		return
+	}
+	task.Result = string(resultBytes)
+	task.Score = result.Score
+	logs.Info("[analyze-task] saving task id=%s resultBytes=%d", id, len(resultBytes))
+	_, err = object.UpdateTask(id, task)
+	if err != nil {
+		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)
+		c.ResponseError(err.Error())
+		return
 	}
 
-	c.ResponseOk(resp)
+	logs.Info("[analyze-task] HTTP OK id=%s", id)
+	c.ResponseOk(result)
 }

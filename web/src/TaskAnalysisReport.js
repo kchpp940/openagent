@@ -14,7 +14,7 @@
 
 import React, {useRef, useState} from "react";
 import {Button, Modal, Table, Tag} from "antd";
-import {DownloadOutlined, FullscreenOutlined, CloseCircleOutlined, WarningOutlined} from "@ant-design/icons";
+import {DownloadOutlined, FullscreenOutlined} from "@ant-design/icons";
 import i18next from "i18next";
 import TaskAnalysisRadarChart from "./TaskAnalysisRadarChart";
 import TaskAnalysisBarChart from "./TaskAnalysisBarChart";
@@ -51,65 +51,13 @@ const taskChartCaptionStyle = {
   position: "relative",
 };
 
-export default function TaskAnalysisReport({result, downloadFileName, analysisStatus, analysisError, documentParseStatus, documentError}) {
+export default function TaskAnalysisReport({result, downloadFileName}) {
   const radarRef = useRef(null);
   const barRef = useRef(null);
   const pieRef = useRef(null);
   const lowScoreBarRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [fullscreenChart, setFullscreenChart] = useState(null);
-
-  if (analysisStatus === "failed") {
-    return (
-      <div style={{marginTop: "16px", padding: "16px", background: "#fff1f0", border: "1px solid #ffccc7", borderRadius: "4px"}}>
-        <div style={{color: "#ff4d4f", fontSize: "14px", fontWeight: 500, marginBottom: "8px"}}>
-          <CloseCircleOutlined style={{marginRight: "4px"}} />
-          {i18next.t("task:AI analysis failed")}
-        </div>
-        <div style={{color: "#cf1322", fontSize: "13px"}}>
-          {analysisError || i18next.t("task:Unknown error")}
-        </div>
-      </div>
-    );
-  }
-
-  if (analysisStatus === "pending") {
-    return (
-      <div style={{marginTop: "16px", padding: "16px", background: "#e6f7ff", border: "1px solid #91d5ff", borderRadius: "4px"}}>
-        <div style={{color: "#1890ff", fontSize: "14px", fontWeight: 500, marginBottom: "8px"}}>
-          <svg className="animate-spin" style={{marginRight: "4px", width: "14px", height: "14px", display: "inline-block", verticalAlign: "middle"}} viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
-          {i18next.t("task:AI analysis in progress")}
-        </div>
-        <div style={{color: "#0050b3", fontSize: "13px"}}>
-          {i18next.t("task:Please wait while the AI analyzes the document")}
-        </div>
-      </div>
-    );
-  }
-
-  if (documentParseStatus && documentParseStatus !== "success") {
-    let errorColor = "#faad14";
-    let errorTitle = i18next.t("task:Document issue");
-    if (documentParseStatus === "failed" || documentParseStatus === "unsupported") {
-      errorColor = "#ff4d4f";
-      errorTitle = i18next.t("task:Document error");
-    }
-    return (
-      <div style={{marginTop: "16px", padding: "16px", background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "4px"}}>
-        <div style={{color: errorColor, fontSize: "14px", fontWeight: 500, marginBottom: "8px"}}>
-          <WarningOutlined style={{marginRight: "4px"}} />
-          {errorTitle}
-        </div>
-        <div style={{color: "#d46b08", fontSize: "13px"}}>
-          {documentError || i18next.t("task:Document not ready for analysis")}
-        </div>
-      </div>
-    );
-  }
-
   if (!result) {
     return null;
   }

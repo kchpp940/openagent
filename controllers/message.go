@@ -489,3 +489,41 @@ func (c *ApiController) DeleteWelcomeMessage() {
 	}
 	c.ResponseOk(success)
 }
+
+// GetMessageExecutionSteps
+// @Title GetMessageExecutionSteps
+// @Tag Message API
+// @Description get execution steps for a message
+// @Param id query string true "The id of message"
+// @Success 200 {array} object.ExecutionStep The Response object
+// @router /get-message-execution-steps [get]
+func (c *ApiController) GetMessageExecutionSteps() {
+	id := c.Input().Get("id")
+
+	message, err := object.GetMessage(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if message == nil {
+		c.ResponseError("Message not found")
+		return
+	}
+
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if username != message.User {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
+	steps, err := object.GetMessageExecutionSteps(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(steps)
+}

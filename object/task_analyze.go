@@ -69,62 +69,22 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
 func extractJSON(raw string) string {
 	raw = strings.TrimSpace(raw)
 
-	raw = strings.ReplaceAll(raw, "\\\n", "")
-	raw = strings.ReplaceAll(raw, "\\\r", "")
-
-	jsonCandidates := findAllJSONObjects(raw)
-
-	if len(jsonCandidates) == 0 {
-		lower := strings.ToLower(raw)
-		codeFencePatterns := []string{
-			"```json",
-			"``` json",
-			"```javascript",
-			"``` javascript",
-			"```typescript",
-			"``` typescript",
-			"```js",
-			"``` js",
-			"```ts",
-			"``` ts",
-			"```",
-		}
-		fenceIdx := -1
-		fenceLen := 0
-		for _, pattern := range codeFencePatterns {
-			idx := strings.Index(lower, pattern)
-			if idx != -1 {
-				if fenceIdx == -1 || idx < fenceIdx {
-					fenceIdx = idx
-					fenceLen = len(pattern)
-				}
-			}
-		}
-		if fenceIdx != -1 {
-			afterFence := raw[fenceIdx+fenceLen:]
-			endIdx := strings.Index(afterFence, "```")
-			if endIdx != -1 {
-				raw = strings.TrimSpace(afterFence[:endIdx])
-				jsonCandidates = findAllJSONObjects(raw)
-			}
-		}
+	lower := strings.ToLower(raw)
+	idx := strings.Index(lower, "```json")
+	if idx == -1 {
+		idx = strings.Index(lower, "```")
 	}
-
-	if len(jsonCandidates) == 1 {
-		return strings.TrimSpace(jsonCandidates[0])
-	}
-
-	if len(jsonCandidates) > 1 {
-		bestIdx := 0
-		bestScore := -1
-		for i, candidate := range jsonCandidates {
-			score := scoreJSONCandidate(candidate)
-			if score > bestScore {
-				bestScore = score
-				bestIdx = i
-			}
+	if idx != -1 {
+		raw = raw[idx:]
+		endIdx := strings.LastIndex(raw, "```")
+		if endIdx != -1 && endIdx > idx {
+			raw = raw[:endIdx]
 		}
-		return strings.TrimSpace(jsonCandidates[bestIdx])
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```JSON")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
 	}
 
 	firstBrace := strings.Index(raw, "{")
@@ -199,127 +159,10 @@ func extractJSON(raw string) string {
 	}
 
 	if start != -1 && end != -1 && end > start {
-		extracted := raw[start:end]
-		return strings.TrimSpace(extracted)
+		return raw[start:end]
 	}
 
-	return strings.TrimSpace(raw)
-}
-
-func findAllJSONObjects(raw string) []string {
-	var results []string
-	inString := false
-	escaped := false
-	depth := 0
-	start := -1
-
-	for i := 0; i < len(raw); i++ {
-		ch := raw[i]
-
-		if escaped {
-			escaped = false
-			continue
-		}
-		if ch == '\\' {
-			escaped = true
-			continue
-		}
-		if ch == '"' {
-			inString = !inString
-			continue
-		}
-		if inString {
-			continue
-		}
-
-		if ch == '{' || ch == '[' {
-			if depth == 0 {
-				start = i
-			}
-			depth++
-		} else if ch == '}' || ch == ']' {
-			depth--
-			if depth == 0 && start != -1 {
-				candidate := raw[start : i+1]
-				if isValidJSON(candidate) {
-					results = append(results, candidate)
-				}
-				start = -1
-			}
-		}
-	}
-
-	return results
-}
-
-func isValidJSON(s string) bool {
-	var obj interface{}
-	return json.Unmarshal([]byte(s), &obj) == nil
-}
-
-func scoreJSONCandidate(s string) int {
-	score := 0
-
-	var data interface{}
-	if err := json.Unmarshal([]byte(s), &data); err != nil {
-		return -1
-	}
-
-	obj, ok := data.(map[string]interface{})
-	if !ok {
-		_, isArray := data.([]interface{})
-		if isArray {
-			return 1
-		}
-		return 0
-	}
-
-	score += 10
-
-	topLevelKeys := []string{
-		"score", "Score", "totalScore", "average",
-		"categories", "Categories", "dimensions", "Dimensions",
-		"title", "Title", "subject", "topic",
-		"items", "Items", "criteria", "Criteria",
-		"name", "Name",
-	}
-	for _, key := range topLevelKeys {
-		if _, ok := obj[key]; ok {
-			score += 5
-		}
-	}
-
-	if catsRaw, ok := obj["categories"]; ok {
-		if cats, ok := catsRaw.([]interface{}); ok && len(cats) > 0 {
-			score += 20
-			for _, cat := range cats {
-				if catMap, ok := cat.(map[string]interface{}); ok {
-					if itemsRaw, ok := catMap["items"]; ok {
-						if items, ok := itemsRaw.([]interface{}); ok && len(items) > 0 {
-							score += 10
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if catsRaw, ok := obj["Categories"]; ok {
-		if cats, ok := catsRaw.([]interface{}); ok && len(cats) > 0 {
-			score += 20
-		}
-	}
-
-	if _, ok := obj["score"]; ok {
-		score += 8
-	}
-
-	if _, ok := obj["Score"]; ok {
-		score += 8
-	}
-
-	return score
+	return raw
 }
 
 func parseFloat(v interface{}) float64 {
@@ -332,13 +175,8 @@ func parseFloat(v interface{}) float64 {
 		return float64(val)
 	case int64:
 		return float64(val)
-	case int32:
-		return float64(val)
 	case string:
-		s := strings.TrimSpace(val)
-		s = strings.Trim(s, "\"'`")
-		s = strings.ReplaceAll(s, ",", "")
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
 			return f
 		}
 	}
@@ -351,25 +189,10 @@ func parseString(v interface{}) string {
 	}
 	switch val := v.(type) {
 	case string:
-		return strings.TrimSpace(val)
+		return val
 	default:
-		return strings.TrimSpace(fmt.Sprintf("%v", val))
+		return fmt.Sprintf("%v", val)
 	}
-}
-
-func getFieldIgnoreCase(data map[string]interface{}, keys ...string) interface{} {
-	for _, key := range keys {
-		if v, ok := data[key]; ok && v != nil {
-			return v
-		}
-		lowerKey := strings.ToLower(key)
-		for k, v := range data {
-			if strings.ToLower(k) == lowerKey && v != nil {
-				return v
-			}
-		}
-	}
-	return nil
 }
 
 func normalizeTaskResult(result *TaskResult) {
@@ -425,36 +248,36 @@ func normalizeTaskResult(result *TaskResult) {
 
 func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
 	result := &TaskResult{
-		Title:         parseString(getFieldIgnoreCase(data, "title", "Title", "subject", "topic")),
-		Designer:      parseString(getFieldIgnoreCase(data, "designer", "Designer", "author", "Author")),
-		Stage:         parseString(getFieldIgnoreCase(data, "stage", "Stage", "section", "Section")),
-		Participants:  parseString(getFieldIgnoreCase(data, "participants", "Participants", "student", "students")),
-		Grade:         parseString(getFieldIgnoreCase(data, "grade", "Grade", "class", "Class")),
-		Instructor:    parseString(getFieldIgnoreCase(data, "instructor", "Instructor", "teacher", "Teacher", "guide", "Guide")),
-		Subject:       parseString(getFieldIgnoreCase(data, "subject", "Subject", "discipline", "Discipline")),
-		School:        parseString(getFieldIgnoreCase(data, "school", "School", "institution", "Institution")),
-		OtherSubjects: parseString(getFieldIgnoreCase(data, "otherSubjects", "other_subjects", "OtherSubjects", "other", "Other")),
-		Textbook:      parseString(getFieldIgnoreCase(data, "textbook", "Textbook", "material", "Material", "courseware", "Courseware")),
-		Score:         parseFloat(getFieldIgnoreCase(data, "score", "Score", "totalScore", "total_score", "average", "Average")),
+		Title:         parseString(data["title"]),
+		Designer:      parseString(data["designer"]),
+		Stage:         parseString(data["stage"]),
+		Participants:  parseString(data["participants"]),
+		Grade:         parseString(data["grade"]),
+		Instructor:    parseString(data["instructor"]),
+		Subject:       parseString(data["subject"]),
+		School:        parseString(data["school"]),
+		OtherSubjects: parseString(data["otherSubjects"]),
+		Textbook:      parseString(data["textbook"]),
+		Score:         parseFloat(data["score"]),
 	}
 
-	if categoriesRaw, ok := getFieldIgnoreCase(data, "categories", "Categories", "dimensions", "Dimensions", "sections", "Sections").([]interface{}); ok {
+	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
 		for _, catRaw := range categoriesRaw {
 			if catMap, ok := catRaw.(map[string]interface{}); ok {
 				cat := &TaskResultCategory{
-					Name:  parseString(getFieldIgnoreCase(catMap, "name", "Name", "title", "Title")),
-					Score: parseFloat(getFieldIgnoreCase(catMap, "score", "Score", "average", "Average")),
+					Name:  parseString(catMap["name"]),
+					Score: parseFloat(catMap["score"]),
 				}
 
-				if itemsRaw, ok := getFieldIgnoreCase(catMap, "items", "Items", "subitems", "SubItems", "criteria", "Criteria").([]interface{}); ok {
+				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
 					for _, itemRaw := range itemsRaw {
 						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
 							item := &TaskResultItem{
-								Name:         parseString(getFieldIgnoreCase(itemMap, "name", "Name", "title", "Title", "criterion", "Criterion")),
-								Score:        parseFloat(getFieldIgnoreCase(itemMap, "score", "Score", "point", "Point", "mark", "Mark")),
-								Advantage:    parseString(getFieldIgnoreCase(itemMap, "advantage", "Advantage", "strength", "Strength", "merit", "Merit", "highlight", "Highlight")),
-								Disadvantage: parseString(getFieldIgnoreCase(itemMap, "disadvantage", "Disadvantage", "weakness", "Weakness", "shortcoming", "Shortcoming", "problem", "Problem")),
-								Suggestion:   parseString(getFieldIgnoreCase(itemMap, "suggestion", "Suggestion", "recommendation", "Recommendation", "advice", "Advice", "improvement", "Improvement")),
+								Name:         parseString(itemMap["name"]),
+								Score:        parseFloat(itemMap["score"]),
+								Advantage:    parseString(itemMap["advantage"]),
+								Disadvantage: parseString(itemMap["disadvantage"]),
+								Suggestion:   parseString(itemMap["suggestion"]),
 							}
 							cat.Items = append(cat.Items, item)
 						}
@@ -470,82 +293,43 @@ func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
 	return result
 }
 
-func validateTaskResult(result *TaskResult) error {
-	if result == nil {
-		return fmt.Errorf("分析结果为空")
-	}
-
-	if len(result.Categories) == 0 {
-		return fmt.Errorf("AI返回的分析结果中没有评价维度，请检查文档内容或稍后重试")
-	}
-
-	hasItems := false
-	for _, cat := range result.Categories {
-		if cat != nil && len(cat.Items) > 0 {
-			hasItems = true
-			break
-		}
-	}
-	if !hasItems {
-		return fmt.Errorf("AI返回的分析结果中没有二级评价项，请检查文档内容或稍后重试")
-	}
-
-	return nil
-}
-
-func AnalyzeTask(task *Task, lang string) *AnalyzeTaskResponse {
+func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	taskID := task.GetId()
 	logs.Info("[analyze-task] start task=%s provider=%s lang=%s", taskID, task.Provider, lang)
-
-	task.ResetAnalysis()
 
 	effectiveScale, err := GetTaskEffectiveScale(task)
 	if err != nil {
 		logs.Error("[analyze-task] GetTaskEffectiveScale failed task=%s: %v", taskID, err)
-		errMsg := fmt.Sprintf("获取评价量表失败: %v", err)
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = fmt.Sprintf("获取评价量表失败: %v", err)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 	if effectiveScale == "" {
-		errMsg := "任务量表不能为空"
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = "任务量表不能为空"
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 	scaleRunes := utf8.RuneCountInString(effectiveScale)
 	logs.Info("[analyze-task] rubric loaded task=%s scaleRef=%s rubricLen=%d runes", taskID, task.Scale, scaleRunes)
 
-	if !task.DocumentUploadSuccess {
-		errMsg := "任务文档不能为空，请先上传文档"
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
-	}
-
 	switch task.DocumentParseStatus {
-	case DocumentParseStatusNone:
-		errMsg := "任务文档已上传但未进行解析，请重新上传文档以触发解析"
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusFailed:
-		errMsg := fmt.Sprintf("文档解析失败，无法进行分析: %s", task.DocumentError)
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = fmt.Sprintf("文档解析失败，无法进行分析: %s", task.DocumentError)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	case DocumentParseStatusEmpty:
-		errMsg := "文档已上传但未提取到文本内容，可能是扫描件或空文档"
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = "文档已上传但未提取到文本内容，可能是扫描件或空文档"
+		return nil, fmt.Errorf(task.AnalyzeError)
 	case DocumentParseStatusUnsupported:
-		errMsg := fmt.Sprintf("文档类型不支持: %s", task.DocumentError)
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
-	case DocumentParseStatusPending:
-		errMsg := "文档解析中，请稍候再试"
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = fmt.Sprintf("文档类型不支持: %s", task.DocumentError)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	case DocumentParseStatusSuccess:
 	default:
-		errMsg := fmt.Sprintf("未知的文档解析状态: %s，请重新上传文档", task.DocumentParseStatus)
-		task.SetAnalysisFailed(errMsg, "")
-		return task.BuildAnalysisResponse(nil)
+		if task.DocumentUrl != "" && task.DocumentText == "" {
+			task.AnalyzeError = "任务文档已上传但未成功解析，请检查文档格式是否正确或尝试重新上传"
+			return nil, fmt.Errorf(task.AnalyzeError)
+		}
+		if task.DocumentUrl == "" {
+			task.AnalyzeError = "任务文档不能为空，请先上传文档"
+			return nil, fmt.Errorf(task.AnalyzeError)
+		}
 	}
 
 	docRunes := utf8.RuneCountInString(task.DocumentText)
@@ -554,8 +338,6 @@ func AnalyzeTask(task *Task, lang string) *AnalyzeTaskResponse {
 	question := fmt.Sprintf(analyzeTaskPrompt, effectiveScale, task.DocumentText)
 	promptRunes := utf8.RuneCountInString(question)
 	logs.Info("[analyze-task] prompt built task=%s fullPromptLen=%d runes (rubric+template+document)", taskID, promptRunes)
-
-	task.SetAnalysisStatus(AnalysisStatusPending, "", "")
 
 	var answer string
 	aiStart := time.Now()
@@ -569,9 +351,8 @@ func AnalyzeTask(task *Task, lang string) *AnalyzeTaskResponse {
 	aiElapsed := time.Since(aiStart)
 	if err != nil {
 		logs.Error("[analyze-task] AI call failed task=%s after %v: %v", taskID, aiElapsed, err)
-		errMsg := fmt.Sprintf("从AI模型获取分析失败: %v", err)
-		task.SetAnalysisFailed(errMsg, answer)
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = fmt.Sprintf("从AI模型获取分析失败: %v", err)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 	logs.Info("[analyze-task] AI returned task=%s elapsed=%v answerLen=%d bytes", taskID, aiElapsed, len(answer))
 
@@ -585,24 +366,17 @@ func AnalyzeTask(task *Task, lang string) *AnalyzeTaskResponse {
 		if len(truncated) > 500 {
 			truncated = truncated[:500] + "..."
 		}
-		errMsg := fmt.Sprintf("AI返回的JSON解析失败: %v。请稍后重试。", err)
-		task.SetAnalysisFailed(errMsg, answer)
-		return task.BuildAnalysisResponse(nil)
+		task.AnalyzeError = fmt.Sprintf("AI返回的JSON解析失败: %v。请稍后重试。原始回复片段: %s", err, truncated)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
 	result := normalizeTaskResultFromMap(rawData)
-
-	if validateErr := validateTaskResult(result); validateErr != nil {
-		logs.Error("[analyze-task] result validation failed task=%s: %v", taskID, validateErr)
-		errMsg := fmt.Sprintf("AI返回的分析结果格式异常: %v", validateErr)
-		task.SetAnalysisFailed(errMsg, answer)
-		return task.BuildAnalysisResponse(nil)
+	if len(result.Categories) == 0 {
+		task.AnalyzeError = "AI返回的分析结果中没有评价维度，请检查文档内容或稍后重试"
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
-	resultJSON, _ := json.Marshal(result)
-	task.SetAnalysisSuccess(string(resultJSON))
-	task.Result = string(resultJSON)
-
+	task.AnalyzeError = ""
 	logs.Info("[analyze-task] done task=%s score=%.2f categories=%d", taskID, result.Score, len(result.Categories))
-	return task.BuildAnalysisResponse(result)
+	return result, nil
 }
