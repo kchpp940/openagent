@@ -120,19 +120,20 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 	}
 
 	if isLeaf {
-		err = storageProviderObj.DeleteObject(key)
+		resolvedKey := ResolveFileObjectKey(store.Name, key)
+
+		err = storageProviderObj.DeleteObject(resolvedKey)
 		if err != nil {
 			return false, err
 		}
 
-		_, err = DeleteVectorsByFile(store.Owner, store.Name, key)
+		_, err = DeleteVectorsByFile(store.Owner, store.Name, resolvedKey)
 		if err != nil {
-			logs.Error("Failed to delete vectors for file %s: %v", key, err)
+			logs.Error("Failed to delete vectors for file %s: %v", resolvedKey, err)
 			return false, err
 		}
 
-		// Delete file record from the file table
-		if err := deleteFileRecord(owner, name, key); err != nil {
+		if err := deleteFileRecord(owner, store.Name, resolvedKey); err != nil {
 			return false, err
 		}
 	} else {
@@ -142,19 +143,20 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 		}
 
 		for _, object := range objects {
-			err = storageProviderObj.DeleteObject(object.Key)
+			resolvedKey := ResolveFileObjectKey(store.Name, object.Key)
+
+			err = storageProviderObj.DeleteObject(resolvedKey)
 			if err != nil {
 				return false, err
 			}
 
-			_, err = DeleteVectorsByFile(store.Owner, store.Name, object.Key)
+			_, err = DeleteVectorsByFile(store.Owner, store.Name, resolvedKey)
 			if err != nil {
-				logs.Error("Failed to delete vectors for file %s: %v", object.Key, err)
+				logs.Error("Failed to delete vectors for file %s: %v", resolvedKey, err)
 				return false, err
 			}
 
-			// Delete file record from the file table
-			if err := deleteFileRecord(owner, name, object.Key); err != nil {
+			if err := deleteFileRecord(owner, store.Name, resolvedKey); err != nil {
 				return false, err
 			}
 		}

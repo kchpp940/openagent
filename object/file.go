@@ -71,7 +71,7 @@ func populateFileVectorCounts(files []*File) error {
 	}
 
 	for _, file := range files {
-		objectKey := file.getObjectKey()
+		objectKey := file.ResolveObjectKey()
 		file.VectorCount = countMap[file.Store+"/"+objectKey]
 	}
 	return nil
@@ -159,7 +159,7 @@ func AddFile(file *File) (bool, error) {
 }
 
 func DeleteFile(file *File, lang string) (bool, error) {
-	objectKey := file.getObjectKey()
+	objectKey := file.ResolveObjectKey()
 	if objectKey == "" {
 		return false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
 	}
@@ -195,19 +195,20 @@ func getFileName(storeName string, objectKey string) string {
 	return fmt.Sprintf("%s_%s", storeName, objectKey)
 }
 
-func getObjectKey(storeName string, fileName string) string {
+func ResolveFileObjectKey(storeName string, fileName string) string {
 	if storeName == "" {
-		return fileName
+		return strings.TrimLeft(fileName, "/")
 	}
 	prefix := fmt.Sprintf("%s_", storeName)
+	resolved := fileName
 	if strings.HasPrefix(fileName, prefix) {
-		return strings.TrimPrefix(fileName, prefix)
+		resolved = strings.TrimPrefix(fileName, prefix)
 	}
-	return fileName
+	return strings.TrimLeft(resolved, "/")
 }
 
-func (file *File) getObjectKey() string {
-	return getObjectKey(file.Store, file.Name)
+func (file *File) ResolveObjectKey() string {
+	return ResolveFileObjectKey(file.Store, file.Name)
 }
 
 func GetFileCount(owner, store, field, value string) (int64, error) {
@@ -368,7 +369,7 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 
 	fileRecord := &File{
 		Owner:           owner,
-		Name:            objectKey,
+		Name:            getFileName(storeName, objectKey),
 		CreatedTime:     util.GetCurrentTime(),
 		Filename:        filename,
 		Size:            fileSize,
