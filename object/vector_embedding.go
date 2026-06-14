@@ -203,7 +203,24 @@ func RebuildFileVectors(store *Store, objectKey string, fileUrl string, lang str
 		return addVectorsForFile(embeddingProviderObj, store.Name, resolvedKey, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
 	})
 
+	if errors.Is(err, ErrFileNotFound) {
+		cleanErr := CleanOrphanVectors(store.Owner, store.Name, resolvedKey)
+		if cleanErr != nil {
+			return ok, errors.Join(err, cleanErr)
+		}
+	}
+
 	return ok, err
+}
+
+func CleanOrphanVectors(owner string, storeName string, resolvedKey string) error {
+	_, err := DeleteVectorsByFile(owner, storeName, resolvedKey)
+	if err != nil {
+		logs.Warn("Failed to clean orphan vectors for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
+		return err
+	}
+	logs.Info("Cleaned orphan vectors for store: [%s], file: [%s]", storeName, resolvedKey)
+	return nil
 }
 
 func withFileStatus(owner string, storeName string, resolvedKey string, op func() (bool, int, error)) (bool, error) {

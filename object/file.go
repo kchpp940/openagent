@@ -38,6 +38,7 @@ const (
 )
 
 var ErrFileAlreadyProcessing = fmt.Errorf("file is already being processed")
+var ErrFileNotFound = fmt.Errorf("file record not found")
 
 type File struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
@@ -234,7 +235,7 @@ func findFileRecordName(owner string, storeName string, objectKey string) (strin
 		return resolved, nil
 	}
 
-	return prefixed, nil
+	return "", fmt.Errorf("%w: %s", ErrFileNotFound, resolved)
 }
 
 func GetFileCount(owner, store, field, value string) (int64, error) {
@@ -303,25 +304,32 @@ func tryAcquireProcessingStatus(owner string, storeName string, objectKey string
 		}
 	}
 
-	existing := &File{Owner: owner, Name: candidates[0]}
-	has, getErr := adapter.engine.Get(existing)
-	if getErr != nil {
-		return "", false, getErr
-	}
-	if has && existing.Status == FileStatusProcessing {
-		return candidates[0], false, ErrFileAlreadyProcessing
+	var foundName string
+	var foundProcessing bool
+	for _, name := range candidates {
+		existing := &File{Owner: owner, Name: name}
+		has, getErr := adapter.engine.Get(existing)
+		if getErr != nil {
+			return "", false, getErr
+		}
+		if has {
+			foundName = name
+			if existing.Status == FileStatusProcessing {
+				foundProcessing = true
+			}
+			break
+		}
 	}
 
-	existing2 := &File{Owner: owner, Name: candidates[1]}
-	has2, getErr2 := adapter.engine.Get(existing2)
-	if getErr2 != nil {
-		return "", false, getErr2
-	}
-	if has2 && existing2.Status == FileStatusProcessing {
-		return candidates[1], false, ErrFileAlreadyProcessing
+	if foundName == "" {
+		return "", false, fmt.Errorf("%w: %s", ErrFileNotFound, resolved)
 	}
 
-	return candidates[0], false, ErrFileAlreadyProcessing
+	if foundProcessing {
+		return foundName, false, ErrFileAlreadyProcessing
+	}
+
+	return foundName, false, ErrFileAlreadyProcessing
 }
 
 func finalizeFileStatus(owner string, recordName string, status FileStatus, errorText string, tokenCount int) error {

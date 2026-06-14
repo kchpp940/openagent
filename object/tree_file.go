@@ -16,6 +16,7 @@ package object
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -135,6 +136,10 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 
 		recordName, recErr := findFileRecordName(owner, store.Name, resolvedKey)
 		if recErr != nil {
+			if errors.Is(recErr, ErrFileNotFound) {
+				logs.Warn("File record not found for deletion, storage and vectors already cleaned: %s", resolvedKey)
+				return true, nil
+			}
 			return false, recErr
 		}
 		if err := deleteFileRecord(owner, recordName); err != nil {
@@ -162,6 +167,10 @@ func DeleteTreeFile(storeId string, key string, isLeaf bool, lang string) (bool,
 
 			recordName, recErr := findFileRecordName(owner, store.Name, resolvedKey)
 			if recErr != nil {
+				if errors.Is(recErr, ErrFileNotFound) {
+					logs.Warn("File record not found for deletion, storage and vectors already cleaned: %s", resolvedKey)
+					continue
+				}
 				return false, recErr
 			}
 			if err := deleteFileRecord(owner, recordName); err != nil {
