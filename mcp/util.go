@@ -26,6 +26,9 @@ import (
 const (
 	safeIdPrefix = "mcp_"
 	oldSeparator = "__"
+
+	metaMarkerPrefix = " \u200b[mcp-meta:"
+	metaMarkerSuffix = "]"
 )
 
 type ToolIdMetadata struct {
@@ -58,6 +61,61 @@ func encodeBase36(v uint64) string {
 
 func metadataKey(serverName, toolName string) string {
 	return serverName + "\x00" + toolName
+}
+
+func EmbedMetadataInDescription(description string, md ToolIdMetadata) string {
+	tag := fmt.Sprintf("%ss=%s&t=%s%s",
+		metaMarkerPrefix,
+		encodeMetaValue(md.ServerName),
+		encodeMetaValue(md.ToolName),
+		metaMarkerSuffix)
+	if description == "" {
+		return strings.TrimSpace(tag)
+	}
+	return description + tag
+}
+
+func ExtractMetadataFromDescription(description string) (string, ToolIdMetadata, bool) {
+	start := strings.LastIndex(description, metaMarkerPrefix)
+	if start < 0 {
+		return description, ToolIdMetadata{}, false
+	}
+	tail := description[start+len(metaMarkerPrefix):]
+	end := strings.Index(tail, metaMarkerSuffix)
+	if end < 0 {
+		return description, ToolIdMetadata{}, false
+	}
+	raw := tail[:end]
+	md := ToolIdMetadata{}
+	for _, pair := range strings.Split(raw, "&") {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		switch kv[0] {
+		case "s":
+			md.ServerName = decodeMetaValue(kv[1])
+		case "t":
+			md.ToolName = decodeMetaValue(kv[1])
+		}
+	}
+	if md.ToolName == "" {
+		return description, ToolIdMetadata{}, false
+	}
+	clean := strings.TrimRight(description[:start], " \t\n\r\u200b")
+	return clean, md, true
+}
+
+func encodeMetaValue(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "=", "&eq;")
+	return s
+}
+
+func decodeMetaValue(s string) string {
+	s = strings.ReplaceAll(s, "&eq;", "=")
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	return s
 }
 
 func (r *toolIdRegistry) getOrCreate(serverName, toolName string) (string, error) {
@@ -142,6 +200,42 @@ func GetIdFromServerNameAndToolName(serverName, toolName string) (string, error)
 	return globalToolIdRegistry.getOrCreate(serverName, toolName)
 }
 
+func parseLegacyDoubleUnderscoreId(id string) (string, string, error) {
+	if !strings.Contains(id, oldSeparator) {
+		return "", "", fmt.Errorf("no %s found in legacy id", oldSeparator)
+	}
+
+	idxFirst := strings.Index(id, oldSeparator)
+	idxLast := strings.LastIndex(id, oldSeparator)
+
+	if idxFirst == idxLast {
+		serverName := id[:idxFirst]
+		toolName := id[idxFirst+len(oldSeparator):]
+		if toolName == "" {
+			return "", "", fmt.Errorf("tool name is empty after splitting legacy id: %s", id)
+		}
+		return serverName, toolName, nil
+	}
+
+	candidateServerFirst := id[:idxFirst]
+	candidateToolFirst := id[idxFirst+len(oldSeparator):]
+	candidateServerLast := id[:idxLast]
+	candidateToolLast := id[idxLast+len(oldSeparator):]
+
+	if candidateToolFirst == "" && candidateToolLast == "" {
+		return "", "", fmt.Errorf("ambiguous legacy id with multiple separators, both produce empty tool: %s", id)
+	}
+
+	if candidateToolLast != "" && (candidateToolFirst == "" || strings.Contains(candidateToolFirst, oldSeparator)) {
+		return candidateServerLast, candidateToolLast, nil
+	}
+	if candidateToolFirst != "" && !strings.Contains(candidateServerFirst, oldSeparator) {
+		return candidateServerFirst, candidateToolFirst, nil
+	}
+
+	return "", "", fmt.Errorf("ambiguous legacy id with multiple separators; cannot determine server/tool boundary: %s", id)
+}
+
 func GetServerNameAndToolNameFromId(id string) (string, string, error) {
 	if id == "" {
 		return "", "", errors.New("tool id is empty")
@@ -154,22 +248,20 @@ func GetServerNameAndToolNameFromId(id string) (string, string, error) {
 			}
 			return md.ServerName, md.ToolName, nil
 		}
-		return "", "", fmt.Errorf("unknown mcp_ tool id (not registered in any registry): %s", id)
+		return "", "", fmt.Errorf("unknown mcp_ tool id (not registered in any registry): %s. If this is a historical tool call, ensure metadata (serverName/toolName) is embedded in the persisted ToolCall or tool description", id)
 	}
 
-	if strings.Count(id, oldSeparator) == 1 {
-		idx := strings.Index(id, oldSeparator)
-		serverName := id[:idx]
-		toolName := id[idx+len(oldSeparator):]
-		if toolName == "" {
-			return "", "", fmt.Errorf("tool name is empty after splitting legacy id: %s", id)
+	if strings.Contains(id, oldSeparator) {
+		serverName, toolName, err := parseLegacyDoubleUnderscoreId(id)
+		if err != nil {
+			return "", "", err
 		}
 		md := ToolIdMetadata{ServerName: serverName, ToolName: toolName}
 		globalToolIdRegistry.register(id, md)
 		return serverName, toolName, nil
 	}
 
-	if !strings.Contains(id, oldSeparator) && !strings.Contains(id, "{") && !strings.HasPrefix(id, "[") {
+	if !strings.Contains(id, "{") && !strings.HasPrefix(id, "[") {
 		md := ToolIdMetadata{ServerName: "", ToolName: id}
 		globalToolIdRegistry.register(id, md)
 		return "", id, nil

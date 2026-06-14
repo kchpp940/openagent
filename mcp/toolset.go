@@ -51,6 +51,7 @@ const (
 	ToolCallErrRemoteCall       = "remote_call"
 	ToolCallErrEmptyToolName    = "empty_tool_name"
 	ToolCallErrToolNotAvailable = "tool_not_available"
+	ToolCallErrMissingMetadata  = "missing_tool_metadata"
 )
 
 func NewToolCallError(kind, message string, err ...error) *ToolCallError {
@@ -108,6 +109,51 @@ func (ts *ToolSet) LookupToolId(toolId string) (ToolIdMetadata, bool) {
 	return md, ok
 }
 
+func (ts *ToolSet) HydrateFromMetadata(id string, md ToolIdMetadata) bool {
+	if id == "" || md.ToolName == "" {
+		return false
+	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if ts.toolIdToMeta == nil {
+		ts.toolIdToMeta = make(map[string]ToolIdMetadata)
+	}
+	if existing, ok := ts.toolIdToMeta[id]; ok {
+		return existing.ServerName == md.ServerName && existing.ToolName == md.ToolName
+	}
+	ts.toolIdToMeta[id] = md
+	RegisterToolIdMetadata(id, md)
+	return true
+}
+
+func (ts *ToolSet) HydrateFromToolDescriptions() int {
+	if ts == nil {
+		return 0
+	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	count := 0
+	for _, pt := range ts.Tools {
+		if pt == nil {
+			continue
+		}
+		cleanDesc, md, ok := ExtractMetadataFromDescription(pt.Description)
+		if !ok {
+			continue
+		}
+		pt.Description = cleanDesc
+		if ts.toolIdToMeta == nil {
+			ts.toolIdToMeta = make(map[string]ToolIdMetadata)
+		}
+		if _, exists := ts.toolIdToMeta[pt.Name]; !exists {
+			ts.toolIdToMeta[pt.Name] = md
+			RegisterToolIdMetadata(pt.Name, md)
+			count++
+		}
+	}
+	return count
+}
+
 func (ts *ToolSet) AddServerTools(serverName string, tools []*protocol.Tool, conn *client.Client) error {
 	if ts == nil {
 		return errors.New("ToolSet is nil")
@@ -124,14 +170,18 @@ func (ts *ToolSet) AddServerTools(serverName string, tools []*protocol.Tool, con
 		ts.Connections[serverName] = conn
 	}
 	for _, t := range tools {
+		if t == nil {
+			continue
+		}
 		toolId, err := GetIdFromServerNameAndToolName(serverName, t.Name)
 		if err != nil {
 			return fmt.Errorf("cannot build tool id for server=%s tool=%s: %w", serverName, t.Name, err)
 		}
+		md := ToolIdMetadata{ServerName: serverName, ToolName: t.Name}
 		toolCopy := *t
 		toolCopy.Name = toolId
+		toolCopy.Description = EmbedMetadataInDescription(toolCopy.Description, md)
 		ts.Tools = append(ts.Tools, &toolCopy)
-		md := ToolIdMetadata{ServerName: serverName, ToolName: t.Name}
 		ts.toolIdToMeta[toolId] = md
 		RegisterToolIdMetadata(toolId, md)
 	}
@@ -153,15 +203,20 @@ func (ts *ToolSet) AddBuiltinTools(builtinReg *tool.ToolRegistry) {
 	}
 	protoTools := builtinReg.GetToolsAsProtocolTools()
 	for _, pt := range protoTools {
+		if pt == nil {
+			continue
+		}
 		toolId, err := GetIdFromServerNameAndToolName("", pt.Name)
 		if err != nil {
 			continue
 		}
+		md := ToolIdMetadata{ServerName: "", ToolName: pt.Name}
 		toolCopy := *pt
 		toolCopy.Name = toolId
+		toolCopy.Description = EmbedMetadataInDescription(toolCopy.Description, md)
 		alreadyExists := false
 		for _, existing := range ts.Tools {
-			if existing.Name == toolId {
+			if existing != nil && existing.Name == toolId {
 				alreadyExists = true
 				break
 			}
@@ -169,27 +224,9 @@ func (ts *ToolSet) AddBuiltinTools(builtinReg *tool.ToolRegistry) {
 		if !alreadyExists {
 			ts.Tools = append(ts.Tools, &toolCopy)
 		}
-		md := ToolIdMetadata{ServerName: "", ToolName: pt.Name}
 		ts.toolIdToMeta[toolId] = md
 		RegisterToolIdMetadata(toolId, md)
 	}
-}
-
-func (ts *ToolSet) HydrateFromMetadata(id string, md ToolIdMetadata) bool {
-	if id == "" || md.ToolName == "" {
-		return false
-	}
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	if ts.toolIdToMeta == nil {
-		ts.toolIdToMeta = make(map[string]ToolIdMetadata)
-	}
-	if existing, ok := ts.toolIdToMeta[id]; ok {
-		return existing.ServerName == md.ServerName && existing.ToolName == md.ToolName
-	}
-	ts.toolIdToMeta[id] = md
-	RegisterToolIdMetadata(id, md)
-	return true
 }
 
 func (ts *ToolSet) resolveToolId(toolId string) (string, string, error) {

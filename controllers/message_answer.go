@@ -469,6 +469,14 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	}()
 	message.ReasonText = writer.ReasonString()
 	message.ToolCalls = model.GetToolCallsFromWriter(writer.ToolString())
+	if len(message.ToolCalls) > 0 {
+		issues, hasFatal := object.ValidateAndEnrichToolCalls(message.ToolCalls, mcpToolSet)
+		if hasFatal {
+			for _, issue := range issues {
+				fmt.Printf("WARNING: ToolCall validation issue at index %d (toolId=%s): %s\n", issue.Index, issue.ToolID, issue.Message)
+			}
+		}
+	}
 	searchString := writer.SearchString()
 	if searchString != "" {
 		var searchResults []model.SearchResult

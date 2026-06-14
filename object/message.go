@@ -187,6 +187,10 @@ func UpdateMessage(id string, message *Message, isHitOnly bool) (bool, error) {
 		return false, nil
 	}
 
+	if !isHitOnly && len(message.ToolCalls) > 0 {
+		ValidateAndEnrichToolCalls(message.ToolCalls, nil)
+	}
+
 	if originMessage.TextTokenCount == 0 || originMessage.Text != message.Text {
 		size, err := getMessageTextTokenCount(message.ModelProvider, message.Text)
 		if err != nil {
@@ -298,6 +302,9 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 }
 
 func AddMessage(message *Message) (bool, error) {
+	if message != nil && len(message.ToolCalls) > 0 {
+		ValidateAndEnrichToolCalls(message.ToolCalls, nil)
+	}
 	size, err := getMessageTextTokenCount(message.ModelProvider, message.Text)
 	if err != nil {
 		return false, err
