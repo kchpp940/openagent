@@ -37,6 +37,8 @@ const (
 	FileStatusError      FileStatus = "Error"
 )
 
+var ErrFileAlreadyProcessing = fmt.Errorf("file is already being processed")
+
 type File struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
 	Name        string `xorm:"varchar(512) notnull pk" json:"name"`
@@ -196,19 +198,43 @@ func getFileName(storeName string, objectKey string) string {
 }
 
 func ResolveFileObjectKey(storeName string, fileName string) string {
-	if storeName == "" {
-		return strings.TrimLeft(fileName, "/")
-	}
-	prefix := fmt.Sprintf("%s_", storeName)
 	resolved := fileName
-	if strings.HasPrefix(fileName, prefix) {
-		resolved = strings.TrimPrefix(fileName, prefix)
+	if storeName != "" {
+		prefix := fmt.Sprintf("%s_", storeName)
+		if strings.HasPrefix(fileName, prefix) {
+			resolved = strings.TrimPrefix(fileName, prefix)
+		}
 	}
 	return strings.TrimLeft(resolved, "/")
 }
 
 func (file *File) ResolveObjectKey() string {
 	return ResolveFileObjectKey(file.Store, file.Name)
+}
+
+func findFileRecordName(owner string, storeName string, objectKey string) (string, error) {
+	resolved := ResolveFileObjectKey(storeName, objectKey)
+
+	prefixed := getFileName(storeName, resolved)
+	candidate1 := &File{Owner: owner, Name: prefixed}
+	has, err := adapter.engine.Get(candidate1)
+	if err != nil {
+		return "", err
+	}
+	if has {
+		return prefixed, nil
+	}
+
+	candidate2 := &File{Owner: owner, Name: resolved}
+	has, err = adapter.engine.Get(candidate2)
+	if err != nil {
+		return "", err
+	}
+	if has {
+		return resolved, nil
+	}
+
+	return prefixed, nil
 }
 
 func GetFileCount(owner, store, field, value string) (int64, error) {
@@ -258,9 +284,12 @@ func GetPaginationFiles(owner, store string, offset, limit int, field, value, so
 }
 
 func updateFileStatus(owner string, storeName string, objectKey string, status FileStatus, errorText string, tokenCount int) error {
-	name := getFileName(storeName, objectKey)
+	recordName, err := findFileRecordName(owner, storeName, objectKey)
+	if err != nil {
+		return err
+	}
 
-	existing := &File{Owner: owner, Name: name}
+	existing := &File{Owner: owner, Name: recordName}
 	has, err := adapter.engine.Get(existing)
 	if err != nil {
 		return err
@@ -269,6 +298,9 @@ func updateFileStatus(owner string, storeName string, objectKey string, status F
 	if has {
 		if existing.Status == FileStatusProcessing && status == FileStatusPending {
 			return nil
+		}
+		if existing.Status == FileStatusProcessing && status == FileStatusProcessing {
+			return ErrFileAlreadyProcessing
 		}
 	}
 
@@ -293,7 +325,7 @@ func updateFileStatus(owner string, storeName string, objectKey string, status F
 		file.TokenCount = tokenCount
 	}
 
-	_, err = adapter.engine.ID(core.PK{owner, name}).Cols(cols...).Update(file)
+	_, err = adapter.engine.ID(core.PK{owner, recordName}).Cols(cols...).Update(file)
 	return err
 }
 
@@ -309,8 +341,11 @@ func UpdateFilesStatusByStore(owner string, storeName string, status FileStatus)
 }
 
 func deleteFileRecord(owner string, storeName string, objectKey string) error {
-	name := getFileName(storeName, objectKey)
-	_, err := adapter.engine.ID(core.PK{owner, name}).Delete(&File{})
+	recordName, err := findFileRecordName(owner, storeName, objectKey)
+	if err != nil {
+		return err
+	}
+	_, err = adapter.engine.ID(core.PK{owner, recordName}).Delete(&File{})
 	return err
 }
 
@@ -369,7 +404,7 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 
 	fileRecord := &File{
 		Owner:           owner,
-		Name:            getFileName(storeName, objectKey),
+		Name:            objectKey,
 		CreatedTime:     util.GetCurrentTime(),
 		Filename:        filename,
 		Size:            fileSize,

@@ -172,6 +172,8 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 }
 
 func RebuildFileVectors(store *Store, objectKey string, fileUrl string, lang string) (bool, error) {
+	resolvedKey := ResolveFileObjectKey(store.Name, objectKey)
+
 	embeddingProvider, err := store.GetEmbeddingProvider()
 	if err != nil {
 		return false, err
@@ -193,21 +195,27 @@ func RebuildFileVectors(store *Store, objectKey string, fileUrl string, lang str
 		return false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
 	}
 
-	ok, err := withFileStatus(store.Owner, store.Name, objectKey, func() (bool, int, error) {
-		_, delErr := DeleteVectorsByFile(store.Owner, store.Name, objectKey)
+	ok, err := withFileStatus(store.Owner, store.Name, resolvedKey, func() (bool, int, error) {
+		_, delErr := DeleteVectorsByFile(store.Owner, store.Name, resolvedKey)
 		if delErr != nil {
 			return false, 0, delErr
 		}
-		return addVectorsForFile(embeddingProviderObj, store.Name, objectKey, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
+		return addVectorsForFile(embeddingProviderObj, store.Name, resolvedKey, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
 	})
 
 	return ok, err
 }
 
 func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
-	err := updateFileStatus(owner, storeName, fileKey, FileStatusProcessing, "", 0)
+	resolvedKey := ResolveFileObjectKey(storeName, fileKey)
+
+	err := updateFileStatus(owner, storeName, resolvedKey, FileStatusProcessing, "", 0)
 	if err != nil {
-		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		if errors.Is(err, ErrFileAlreadyProcessing) {
+			logs.Warn("Skipping vector rebuild for store: [%s], file: [%s] — already processing", storeName, resolvedKey)
+			return false, err
+		}
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
 		return false, err
 	}
 
@@ -220,10 +228,15 @@ func withFileStatus(owner string, storeName string, fileKey string, op func() (b
 		errorText = opErr.Error()
 	}
 
-	err = updateFileStatus(owner, storeName, fileKey, fileStatus, errorText, tokenCount)
-	if err != nil {
-		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
-		return affected, errors.Join(opErr, err)
+	statusErr := updateFileStatus(owner, storeName, resolvedKey, fileStatus, errorText, tokenCount)
+	if statusErr != nil {
+		if !errors.Is(statusErr, ErrFileAlreadyProcessing) {
+			logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, statusErr)
+		}
+		if opErr != nil {
+			return affected, errors.Join(opErr, statusErr)
+		}
+		return affected, statusErr
 	}
 
 	return affected, opErr
