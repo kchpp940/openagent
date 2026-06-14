@@ -342,8 +342,12 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	scaleRunes := utf8.RuneCountInString(effectiveScale)
 	logs.Info("[analyze-task] rubric loaded task=%s scaleRef=%s rubricLen=%d runes", taskID, task.Scale, scaleRunes)
 
-	if task.DocumentUrl == "" {
-		task.AnalyzeError = "任务文档不能为空，请先上传文档"
+	if task.DocumentParseStatus == DocumentParseStatusNone || task.DocumentParseStatus == "" {
+		if task.DocumentUrl == "" && task.DocumentResourceId == "" {
+			task.AnalyzeError = "任务文档不能为空，请先上传文档"
+			return nil, fmt.Errorf(task.AnalyzeError)
+		}
+		task.AnalyzeError = "任务文档已上传但未进行解析，请重新上传文档以触发解析"
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
@@ -357,21 +361,13 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	case DocumentParseStatusUnsupported:
 		task.AnalyzeError = fmt.Sprintf("文档类型不支持: %s", task.DocumentError)
 		return nil, fmt.Errorf(task.AnalyzeError)
+	case DocumentParseStatusPending:
+		task.AnalyzeError = "文档解析中，请稍候再试"
+		return nil, fmt.Errorf(task.AnalyzeError)
 	case DocumentParseStatusSuccess:
-		if strings.TrimSpace(task.DocumentText) == "" {
-			task.AnalyzeError = "文档解析成功但文本内容为空，无法进行分析"
-			return nil, fmt.Errorf(task.AnalyzeError)
-		}
-	case DocumentParseStatusPending, DocumentParseStatusNone:
-		if strings.TrimSpace(task.DocumentText) == "" {
-			task.AnalyzeError = "任务文档已上传但未成功解析，请检查文档格式是否正确或尝试重新上传"
-			return nil, fmt.Errorf(task.AnalyzeError)
-		}
 	default:
-		if strings.TrimSpace(task.DocumentText) == "" {
-			task.AnalyzeError = "任务文档已上传但未成功解析，请检查文档格式是否正确或尝试重新上传"
-			return nil, fmt.Errorf(task.AnalyzeError)
-		}
+		task.AnalyzeError = fmt.Sprintf("未知的文档解析状态: %s，请重新上传文档", task.DocumentParseStatus)
+		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
 	docRunes := utf8.RuneCountInString(task.DocumentText)

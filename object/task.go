@@ -86,6 +86,10 @@ type Task struct {
 	DocumentUrl           string `xorm:"varchar(500)" json:"documentUrl"`
 	DocumentText          string `xorm:"mediumtext" json:"documentText"`
 	DocumentFileType      string `xorm:"varchar(100)" json:"documentFileType"`
+	DocumentMimeType      string `xorm:"varchar(200)" json:"documentMimeType"`
+	DocumentFileSize      int64  `xorm:"bigint" json:"documentFileSize"`
+	DocumentResourceId    string `xorm:"varchar(200)" json:"documentResourceId"`
+	DocumentFileName      string `xorm:"varchar(500)" json:"documentFileName"`
 	DocumentParseStatus   string `xorm:"varchar(50)" json:"documentParseStatus"`
 	DocumentError         string `xorm:"varchar(500)" json:"documentError"`
 	DocumentTypeSource    string `xorm:"varchar(50)" json:"documentTypeSource"`
@@ -94,11 +98,135 @@ type Task struct {
 	AnalyzeError          string `xorm:"varchar(500)" json:"analyzeError"`
 }
 
+func (task *Task) ResetDocumentFields() {
+	task.DocumentUrl = ""
+	task.DocumentText = ""
+	task.DocumentFileType = ""
+	task.DocumentMimeType = ""
+	task.DocumentFileSize = 0
+	task.DocumentResourceId = ""
+	task.DocumentFileName = ""
+	task.DocumentParseStatus = DocumentParseStatusNone
+	task.DocumentError = ""
+	task.DocumentTypeSource = ""
+	task.DocumentTypeConflict = false
+	task.DocumentConflictMsg = ""
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentUploadError(errMsg string) {
+	task.DocumentParseStatus = DocumentParseStatusFailed
+	task.DocumentError = errMsg
+	task.DocumentUrl = ""
+	task.DocumentText = ""
+	task.DocumentResourceId = ""
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentUploadSuccess(fileName, mimeType, fileType, fileUrl, resourceId string, fileSize int64) {
+	task.DocumentFileName = fileName
+	task.DocumentMimeType = mimeType
+	task.DocumentFileType = fileType
+	task.DocumentUrl = fileUrl
+	task.DocumentFileSize = fileSize
+	task.DocumentResourceId = resourceId
+	task.DocumentParseStatus = DocumentParseStatusPending
+	task.DocumentError = ""
+	task.DocumentText = ""
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentParseSuccess(text string) {
+	task.DocumentParseStatus = DocumentParseStatusSuccess
+	task.DocumentError = ""
+	task.DocumentText = text
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentParseFailed(errMsg string) {
+	task.DocumentParseStatus = DocumentParseStatusFailed
+	task.DocumentError = errMsg
+	task.DocumentText = ""
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentParseEmpty(errMsg string) {
+	task.DocumentParseStatus = DocumentParseStatusEmpty
+	task.DocumentError = errMsg
+	task.DocumentText = ""
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetDocumentUnsupported(errMsg string) {
+	task.DocumentParseStatus = DocumentParseStatusUnsupported
+	task.DocumentError = errMsg
+	task.DocumentText = ""
+	task.AnalyzeError = ""
+}
+
 func (task *Task) IsDocumentReadyForAnalysis() bool {
 	if task == nil {
 		return false
 	}
-	return task.DocumentParseStatus == DocumentParseStatusSuccess && task.DocumentText != ""
+	return task.DocumentParseStatus == DocumentParseStatusSuccess
+}
+
+type DocumentStatusResponse struct {
+	Url             string `json:"url"`
+	Text            string `json:"text"`
+	ParseStatus     string `json:"parseStatus"`
+	Error           string `json:"error"`
+	FileType        string `json:"fileType"`
+	MimeType        string `json:"mimeType"`
+	FileSize        int64  `json:"fileSize"`
+	FileName        string `json:"fileName"`
+	ResourceId      string `json:"resourceId"`
+	TypeSource      string `json:"typeSource"`
+	TypeConflict    bool   `json:"typeConflict"`
+	ConflictMessage string `json:"conflictMessage"`
+	FileNameExt     string `json:"fileNameExt"`
+	MimeTypeExt     string `json:"mimeTypeExt"`
+	ParseSuccess    bool   `json:"parseSuccess"`
+	UploadSuccess   bool   `json:"uploadSuccess"`
+}
+
+func (task *Task) BuildDocumentStatusResponse(extra *DocumentTypeDetectionExtra) *DocumentStatusResponse {
+	if task == nil {
+		return &DocumentStatusResponse{
+			ParseStatus:  DocumentParseStatusNone,
+			UploadSuccess: false,
+			ParseSuccess:  false,
+		}
+	}
+
+	resp := &DocumentStatusResponse{
+		Url:             task.DocumentUrl,
+		Text:            task.DocumentText,
+		ParseStatus:     task.DocumentParseStatus,
+		Error:           task.DocumentError,
+		FileType:        task.DocumentFileType,
+		MimeType:        task.DocumentMimeType,
+		FileSize:        task.DocumentFileSize,
+		FileName:        task.DocumentFileName,
+		ResourceId:      task.DocumentResourceId,
+		TypeSource:      task.DocumentTypeSource,
+		TypeConflict:    task.DocumentTypeConflict,
+		ConflictMessage: task.DocumentConflictMsg,
+		UploadSuccess:   task.DocumentUrl != "" || task.DocumentResourceId != "",
+		ParseSuccess:    task.DocumentParseStatus == DocumentParseStatusSuccess,
+	}
+
+	if extra != nil {
+		resp.FileNameExt = extra.FileNameExt
+		resp.MimeTypeExt = extra.MimeTypeExt
+	}
+
+	return resp
+}
+
+type DocumentTypeDetectionExtra struct {
+	FileNameExt string
+	MimeTypeExt string
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {

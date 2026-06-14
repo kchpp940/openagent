@@ -79,6 +79,10 @@ class TaskEditPage extends React.Component {
     t = t.scale === undefined || t.scale === null ? {...t, scale: ""} : t;
     t = t.documentError === undefined || t.documentError === null ? {...t, documentError: ""} : t;
     t = t.documentFileType === undefined || t.documentFileType === null ? {...t, documentFileType: ""} : t;
+    t = t.documentMimeType === undefined || t.documentMimeType === null ? {...t, documentMimeType: ""} : t;
+    t = t.documentFileSize === undefined || t.documentFileSize === null ? {...t, documentFileSize: 0} : t;
+    t = t.documentResourceId === undefined || t.documentResourceId === null ? {...t, documentResourceId: ""} : t;
+    t = t.documentFileName === undefined || t.documentFileName === null ? {...t, documentFileName: ""} : t;
     t = t.documentParseStatus === undefined || t.documentParseStatus === null ? {...t, documentParseStatus: ""} : t;
     t = t.documentTypeSource === undefined || t.documentTypeSource === null ? {...t, documentTypeSource: ""} : t;
     t = t.documentTypeConflict === undefined || t.documentTypeConflict === null ? {...t, documentTypeConflict: false} : t;
@@ -246,6 +250,10 @@ class TaskEditPage extends React.Component {
           task.documentText = result.text || "";
           task.documentError = result.error || "";
           task.documentFileType = result.fileType || "";
+          task.documentMimeType = result.mimeType || "";
+          task.documentFileSize = result.fileSize || 0;
+          task.documentResourceId = result.resourceId || "";
+          task.documentFileName = result.fileName || "";
           task.documentParseStatus = result.parseStatus || "";
           task.documentTypeSource = result.typeSource || "";
           task.documentTypeConflict = result.typeConflict || false;
@@ -290,6 +298,10 @@ class TaskEditPage extends React.Component {
     task.documentText = "";
     task.documentError = "";
     task.documentFileType = "";
+    task.documentMimeType = "";
+    task.documentFileSize = 0;
+    task.documentResourceId = "";
+    task.documentFileName = "";
     task.documentParseStatus = "";
     task.documentTypeSource = "";
     task.documentTypeConflict = false;
@@ -299,7 +311,11 @@ class TaskEditPage extends React.Component {
   };
 
   getDocumentFileName() {
-    const url = this.state.task?.documentUrl || "";
+    const task = this.state.task;
+    if (task?.documentFileName) {
+      return task.documentFileName;
+    }
+    const url = task?.documentUrl || "";
     try {
       const path = new URL(url).pathname || url;
       const encoded = path.split("/").filter(Boolean).pop() || url;
@@ -556,7 +572,7 @@ class TaskEditPage extends React.Component {
               <div>
                 <Button
                   loading={this.state.analyzing}
-                  disabled={docHasError || !task.documentText || !!task.result || !String(task.scale || "").trim()}
+                  disabled={task.documentParseStatus !== "success" || !!task.result || !String(task.scale || "").trim()}
                   style={{marginBottom: "20px", width: "200px"}}
                   type="primary"
                   icon={<BarChartOutlined />}
@@ -596,12 +612,12 @@ class TaskEditPage extends React.Component {
                     </div>
                   </div>
                 )}
-                {!docHasError && !task.documentText && task.documentUrl && !this.state.analyzing && !task.result && (
-                  <div style={{color: "#faad14", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fffbe6", borderRadius: "4px", border: "1px solid #ffe58f"}}>
-                    <WarningOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:No text extracted from document")}</strong>
+                {task.documentParseStatus === "pending" && !this.state.analyzing && !task.result && (
+                  <div style={{color: "#1890ff", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#e6f7ff", borderRadius: "4px", border: "1px solid #91d5ff"}}>
+                    <Spin size="small" style={{marginRight: "4px"}} />
+                    <strong>{i18next.t("task:Document parsing in progress")}</strong>
                     <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:Please try re-uploading or use a different document")}
+                      {i18next.t("task:Please wait or try re-uploading if this takes too long")}
                     </div>
                   </div>
                 )}
