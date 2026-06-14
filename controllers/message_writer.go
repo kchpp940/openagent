@@ -17,6 +17,7 @@ package controllers
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -86,6 +87,10 @@ func (b *sseBuffer) Remaining() []byte {
 	return b.raw
 }
 
+func (b *sseBuffer) Reset() {
+	b.raw = b.raw[:0]
+}
+
 func parseSSEFrame(frameBytes []byte) sseFrame {
 	frame := sseFrame{}
 	lines := bytes.Split(frameBytes, []byte("\n"))
@@ -125,6 +130,18 @@ func parseSSEFrame(frameBytes []byte) sseFrame {
 	return frame
 }
 
+var knownAccumulateEvents = map[string]bool{
+	"message": true,
+	"reason":  true,
+	"tool":    true,
+	"search":  true,
+}
+
+var knownForwardEvents = map[string]bool{
+	"tool-delta": true,
+	"tool-start": true,
+}
+
 type RefinedWriter struct {
 	context.Response
 	writerCleaner Cleaner
@@ -155,14 +172,6 @@ func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	if p[0] == ':' {
-		_, err = w.ResponseWriter.Write(p)
-		if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		return originalLen, err
-	}
-
 	w.sseBuf.Write(p)
 	frames := w.sseBuf.ReadFrames()
 	for _, frame := range frames {
@@ -184,7 +193,15 @@ func (w *RefinedWriter) WriteSSEEvent(eventType string, data string) error {
 		eventType = "message"
 	}
 
-	if eventType == "tool-delta" || eventType == "tool-start" {
+	if knownForwardEvents[eventType] {
+		return w.writeSSEFrameToResponse(eventType, data)
+	}
+
+	if !knownAccumulateEvents[eventType] {
+		return w.writeSSEFrameToResponse(eventType, data)
+	}
+
+	if data == "" {
 		return w.writeSSEFrameToResponse(eventType, data)
 	}
 
@@ -250,17 +267,9 @@ func (w *RefinedWriter) FlushRemaining() error {
 	if len(remaining) == 0 {
 		return nil
 	}
-	frameStr := string(remaining)
-	var frame sseFrame
-	if strings.HasPrefix(frameStr, "event:") {
-		frame = parseSSEFrame(remaining)
-	} else {
-		frame.event = "message"
-		frame.data = frameStr
-	}
-	if frame.data != "" || frame.event != "" {
-		return w.WriteSSEEvent(frame.event, frame.data)
-	}
+
+	log.Printf("[RefinedWriter] FlushRemaining: discarding %d bytes of incomplete SSE frame: %q", len(remaining), string(remaining)[:min(len(remaining), 200)])
+	w.sseBuf.Reset()
 	return nil
 }
 
