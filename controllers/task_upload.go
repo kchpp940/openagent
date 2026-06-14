@@ -17,8 +17,6 @@ package controllers
 import (
 	"encoding/base64"
 	"fmt"
-	"mime"
-	"path/filepath"
 	"strings"
 
 	"github.com/beego/beego/logs"
@@ -26,59 +24,46 @@ import (
 	"github.com/the-open-agent/openagent/txt"
 )
 
-func detectFileExtension(fileName, fileType string, supportedTypes []string) string {
-	ext := strings.ToLower(filepath.Ext(fileName))
-
-	extFromMime := ""
-	if fileType != "" {
-		exts, _ := mime.ExtensionsByType(fileType)
-		if len(exts) > 0 {
-			extFromMime = strings.ToLower(exts[0])
-		}
-	}
-
-	if ext == "" && extFromMime != "" {
-		ext = extFromMime
-	}
-
-	for _, supported := range supportedTypes {
-		if ext == supported {
-			return ext
-		}
-	}
-
-	if extFromMime != "" {
-		for _, supported := range supportedTypes {
-			if extFromMime == supported {
-				return extFromMime
-			}
-		}
-	}
-
-	return ""
-}
-
 func decodeFileBase64(fileBase64 string) ([]byte, error) {
-	data := fileBase64
+	data := strings.TrimSpace(fileBase64)
+
+	if data == "" {
+		return nil, fmt.Errorf("file data is empty")
+	}
 
 	if idx := strings.Index(data, ","); idx != -1 {
 		data = data[idx+1:]
+		data = strings.TrimSpace(data)
 	}
 
-	data = strings.TrimSpace(data)
+	data = strings.ReplaceAll(data, "\n", "")
+	data = strings.ReplaceAll(data, "\r", "")
+	data = strings.ReplaceAll(data, "\t", "")
+	data = strings.ReplaceAll(data, " ", "")
 
-	dec, err := base64.StdEncoding.DecodeString(data)
+	if l := len(data) % 4; l != 0 {
+		data += strings.Repeat("=", 4-l)
+	}
+
+	var dec []byte
+	var err error
+
+	dec, err = base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		dec, err = base64.URLEncoding.DecodeString(data)
-		if err != nil {
-			dec, err = base64.RawStdEncoding.DecodeString(data)
-			if err != nil {
-				dec, err = base64.RawURLEncoding.DecodeString(data)
-				if err != nil {
-					return nil, fmt.Errorf("invalid base64 data: %v", err)
-				}
-			}
-		}
+	}
+	if err != nil {
+		dec, err = base64.RawStdEncoding.DecodeString(strings.TrimRight(data, "="))
+	}
+	if err != nil {
+		dec, err = base64.RawURLEncoding.DecodeString(strings.TrimRight(data, "="))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("invalid base64 data: %v", err)
+	}
+
+	if len(dec) == 0 {
+		return nil, fmt.Errorf("decoded file data is empty")
 	}
 
 	return dec, nil
@@ -127,25 +112,37 @@ func (c *ApiController) UploadTaskDocument() {
 		}
 	}
 
-	supportedTypes := txt.GetSupportedFileTypes()
 	allowedExtensions := []string{".docx", ".pdf"}
-	ext := detectFileExtension(fileName, fileType, supportedTypes)
-
-	isValid := false
-	for _, allowed := range allowedExtensions {
-		if ext == allowed {
-			isValid = true
-			break
-		}
-	}
-	if !isValid {
-		c.ResponseError(c.T("resource:Only docx and pdf files are allowed"))
-		return
-	}
+	typeDetection := txt.DetectTaskDocumentType(fileName, fileType, allowedExtensions)
 
 	fileBytes, err := decodeFileBase64(fileBase64)
 	if err != nil {
-		c.ResponseError(err.Error())
+		task.DocumentParseStatus = object.DocumentParseStatusFailed
+		task.DocumentError = fmt.Sprintf("无效的文件数据格式: %v", err)
+		task.AnalyzeError = ""
+		task.DocumentText = ""
+		_, updateErr := object.UpdateTask(taskId, task)
+		if updateErr != nil {
+			logs.Warning("Failed to update task with parse error: %v", updateErr)
+		}
+		c.ResponseError(c.T("resource:Invalid file data format"))
+		return
+	}
+
+	if typeDetection.Unsupported {
+		task.DocumentParseStatus = object.DocumentParseStatusUnsupported
+		task.DocumentError = typeDetection.UnsupportedReason
+		task.AnalyzeError = ""
+		task.DocumentText = ""
+		task.DocumentFileType = typeDetection.DetectedType
+		task.DocumentTypeSource = typeDetection.Source
+		task.DocumentTypeConflict = typeDetection.Conflict
+		task.DocumentConflictMsg = typeDetection.ConflictMessage
+		_, updateErr := object.UpdateTask(taskId, task)
+		if updateErr != nil {
+			logs.Warning("Failed to update task with unsupported type error: %v", updateErr)
+		}
+		c.ResponseError(typeDetection.UnsupportedReason)
 		return
 	}
 
@@ -155,25 +152,43 @@ func (c *ApiController) UploadTaskDocument() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(filePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
+		task.DocumentParseStatus = object.DocumentParseStatusFailed
+		task.DocumentError = fmt.Sprintf("文件上传失败: %v", err)
+		task.AnalyzeError = ""
+		task.DocumentText = ""
+		_, updateErr := object.UpdateTask(taskId, task)
+		if updateErr != nil {
+			logs.Warning("Failed to update task with upload error: %v", updateErr)
+		}
 		c.ResponseError(err.Error())
 		return
 	}
 
-	resource := object.NewResourceFromUpload("admin", userName, "document", fileName, "application", ext, fileUrl, filePath, len(fileBytes), "task", taskId)
+	resource := object.NewResourceFromUpload("admin", userName, "document", fileName, "application", typeDetection.DetectedType, fileUrl, filePath, len(fileBytes), "task", taskId)
 	if _, addErr := object.AddResource(resource); addErr != nil {
 		logs.Warning("Failed to save resource record for task document: %v", addErr)
 	}
 
 	task.DocumentUrl = fileUrl
-	task.DocumentFileType = ext
+	task.DocumentFileType = typeDetection.DetectedType
+	task.DocumentTypeSource = typeDetection.Source
+	task.DocumentTypeConflict = typeDetection.Conflict
+	task.DocumentConflictMsg = typeDetection.ConflictMessage
 	task.DocumentError = ""
 	task.DocumentText = ""
+	task.DocumentParseStatus = object.DocumentParseStatusPending
+	task.AnalyzeError = ""
 
-	documentText, err := txt.GetParsedTextFromUrl(fileUrl, ext, c.GetAcceptLanguage())
-	if err != nil {
-		logs.Error("Failed to parse text from %s: %v", fileUrl, err)
-		task.DocumentError = fmt.Sprintf("文档解析失败: %v", err)
+	documentText, parseErr := txt.GetParsedTextFromUrl(fileUrl, typeDetection.DetectedType, c.GetAcceptLanguage())
+	if parseErr != nil {
+		logs.Error("Failed to parse text from %s: %v", fileUrl, parseErr)
+		task.DocumentParseStatus = object.DocumentParseStatusFailed
+		task.DocumentError = fmt.Sprintf("文档解析失败: %v", parseErr)
+	} else if strings.TrimSpace(documentText) == "" {
+		task.DocumentParseStatus = object.DocumentParseStatusEmpty
+		task.DocumentError = "文档已上传但未提取到文本内容，可能是扫描件或空文档"
 	} else {
+		task.DocumentParseStatus = object.DocumentParseStatusSuccess
 		task.DocumentText = documentText
 	}
 
@@ -189,11 +204,19 @@ func (c *ApiController) UploadTaskDocument() {
 	}
 
 	result := map[string]interface{}{
-		"url":          fileUrl,
-		"text":         task.DocumentText,
-		"error":        task.DocumentError,
-		"fileType":     task.DocumentFileType,
-		"parseSuccess": task.DocumentError == "" && task.DocumentText != "",
+		"url":                fileUrl,
+		"text":               task.DocumentText,
+		"parseStatus":        task.DocumentParseStatus,
+		"error":              task.DocumentError,
+		"fileType":           task.DocumentFileType,
+		"typeSource":         task.DocumentTypeSource,
+		"typeConflict":       task.DocumentTypeConflict,
+		"conflictMessage":    task.DocumentConflictMsg,
+		"fileNameExt":        typeDetection.FileNameExt,
+		"mimeTypeExt":        typeDetection.MimeTypeExt,
+		"parseSuccess":       task.DocumentParseStatus == object.DocumentParseStatusSuccess,
+		"uploadSuccess":      true,
+		"fileSize":           len(fileBytes),
 	}
 	c.ResponseOk(result)
 }

@@ -21,6 +21,15 @@ import (
 	"xorm.io/core"
 )
 
+const (
+	DocumentParseStatusNone        = ""
+	DocumentParseStatusPending     = "pending"
+	DocumentParseStatusSuccess     = "success"
+	DocumentParseStatusEmpty       = "empty"
+	DocumentParseStatusFailed      = "failed"
+	DocumentParseStatusUnsupported = "unsupported"
+)
+
 type TaskResultItem struct {
 	Name         string  `json:"name"`
 	Score        float64 `json:"score"`
@@ -74,10 +83,22 @@ type Task struct {
 
 	Result string `xorm:"mediumtext" json:"result"`
 
-	DocumentUrl      string `xorm:"varchar(500)" json:"documentUrl"`
-	DocumentText     string `xorm:"mediumtext" json:"documentText"`
-	DocumentError    string `xorm:"varchar(500)" json:"documentError"`
-	DocumentFileType string `xorm:"varchar(100)" json:"documentFileType"`
+	DocumentUrl           string `xorm:"varchar(500)" json:"documentUrl"`
+	DocumentText          string `xorm:"mediumtext" json:"documentText"`
+	DocumentFileType      string `xorm:"varchar(100)" json:"documentFileType"`
+	DocumentParseStatus   string `xorm:"varchar(50)" json:"documentParseStatus"`
+	DocumentError         string `xorm:"varchar(500)" json:"documentError"`
+	DocumentTypeSource    string `xorm:"varchar(50)" json:"documentTypeSource"`
+	DocumentTypeConflict  bool   `xorm:"bool" json:"documentTypeConflict"`
+	DocumentConflictMsg   string `xorm:"varchar(500)" json:"documentConflictMsg"`
+	AnalyzeError          string `xorm:"varchar(500)" json:"analyzeError"`
+}
+
+func (task *Task) IsDocumentReadyForAnalysis() bool {
+	if task == nil {
+		return false
+	}
+	return task.DocumentParseStatus == DocumentParseStatusSuccess && task.DocumentText != ""
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {

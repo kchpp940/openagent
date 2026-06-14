@@ -280,6 +280,10 @@ func (c *ApiController) AnalyzeTask() {
 	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
 	if err != nil {
 		logs.Error("[analyze-task] AnalyzeTask failed id=%s: %v", id, err)
+		task.Result = ""
+		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
+			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
+		}
 		c.ResponseError(err.Error())
 		return
 	}
