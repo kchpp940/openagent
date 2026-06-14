@@ -137,7 +137,7 @@ class TaskEditPage extends React.Component {
       return;
     }
     this.analyzeStartTime = Date.now();
-    this.setState({analyzing: true, analyzeProgress: 0, analyzeError: ""});
+    this.setState({analyzing: true, analyzeProgress: 0});
     const task = this.state.task;
     task.analysisStatus = "pending";
     task.analysisError = "";
@@ -155,12 +155,23 @@ class TaskEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           const t = this.state.task;
-          t.result = res.data;
-          t.score = res.data.score;
-          t.analysisStatus = "success";
-          t.analysisError = "";
+          const data = res.data;
+          t.analysisStatus = data.analysisStatus;
+          t.analysisError = data.analysisError;
+          t.analysisRawText = data.analysisRawText;
+          if (data.result) {
+            t.result = data.result;
+            t.score = data.result.score;
+          } else {
+            t.result = null;
+            t.score = 0;
+          }
           this.setState({task: t});
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          if (data.analysisStatus === "success") {
+            Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${data.analysisError}`);
+          }
         } else {
           const t = this.state.task;
           t.analysisStatus = "failed";
@@ -168,7 +179,7 @@ class TaskEditPage extends React.Component {
           t.analysisRawText = "";
           t.result = null;
           t.score = 0;
-          this.setState({task: t, analyzeError: res.msg || i18next.t("general:Failed to get")});
+          this.setState({task: t});
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       })
@@ -179,7 +190,7 @@ class TaskEditPage extends React.Component {
         t.analysisRawText = "";
         t.result = null;
         t.score = 0;
-        this.setState({task: t, analyzeError: err.message || i18next.t("general:Failed to get")});
+        this.setState({task: t});
         Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
       })
       .finally(() => {

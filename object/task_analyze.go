@@ -493,7 +493,7 @@ func validateTaskResult(result *TaskResult) error {
 	return nil
 }
 
-func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
+func AnalyzeTask(task *Task, lang string) *AnalyzeTaskResponse {
 	taskID := task.GetId()
 	logs.Info("[analyze-task] start task=%s provider=%s lang=%s", taskID, task.Provider, lang)
 
@@ -504,12 +504,12 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 		logs.Error("[analyze-task] GetTaskEffectiveScale failed task=%s: %v", taskID, err)
 		errMsg := fmt.Sprintf("获取评价量表失败: %v", err)
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 	if effectiveScale == "" {
 		errMsg := "任务量表不能为空"
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 	scaleRunes := utf8.RuneCountInString(effectiveScale)
 	logs.Info("[analyze-task] rubric loaded task=%s scaleRef=%s rubricLen=%d runes", taskID, task.Scale, scaleRunes)
@@ -517,35 +517,35 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	if !task.DocumentUploadSuccess {
 		errMsg := "任务文档不能为空，请先上传文档"
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 
 	switch task.DocumentParseStatus {
 	case DocumentParseStatusNone:
 		errMsg := "任务文档已上传但未进行解析，请重新上传文档以触发解析"
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusFailed:
 		errMsg := fmt.Sprintf("文档解析失败，无法进行分析: %s", task.DocumentError)
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusEmpty:
 		errMsg := "文档已上传但未提取到文本内容，可能是扫描件或空文档"
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusUnsupported:
 		errMsg := fmt.Sprintf("文档类型不支持: %s", task.DocumentError)
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusPending:
 		errMsg := "文档解析中，请稍候再试"
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	case DocumentParseStatusSuccess:
 	default:
 		errMsg := fmt.Sprintf("未知的文档解析状态: %s，请重新上传文档", task.DocumentParseStatus)
 		task.SetAnalysisFailed(errMsg, "")
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 
 	docRunes := utf8.RuneCountInString(task.DocumentText)
@@ -571,7 +571,7 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 		logs.Error("[analyze-task] AI call failed task=%s after %v: %v", taskID, aiElapsed, err)
 		errMsg := fmt.Sprintf("从AI模型获取分析失败: %v", err)
 		task.SetAnalysisFailed(errMsg, answer)
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 	logs.Info("[analyze-task] AI returned task=%s elapsed=%v answerLen=%d bytes", taskID, aiElapsed, len(answer))
 
@@ -587,7 +587,7 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 		}
 		errMsg := fmt.Sprintf("AI返回的JSON解析失败: %v。请稍后重试。", err)
 		task.SetAnalysisFailed(errMsg, answer)
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 
 	result := normalizeTaskResultFromMap(rawData)
@@ -596,7 +596,7 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 		logs.Error("[analyze-task] result validation failed task=%s: %v", taskID, validateErr)
 		errMsg := fmt.Sprintf("AI返回的分析结果格式异常: %v", validateErr)
 		task.SetAnalysisFailed(errMsg, answer)
-		return nil, fmt.Errorf(errMsg)
+		return task.BuildAnalysisResponse(nil)
 	}
 
 	resultJSON, _ := json.Marshal(result)
@@ -604,5 +604,5 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	task.Result = string(resultJSON)
 
 	logs.Info("[analyze-task] done task=%s score=%.2f categories=%d", taskID, result.Score, len(result.Categories))
-	return result, nil
+	return task.BuildAnalysisResponse(result)
 }

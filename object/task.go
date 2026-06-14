@@ -59,6 +59,13 @@ type TaskResult struct {
 	Categories    []*TaskResultCategory `json:"categories"`
 }
 
+type AnalyzeTaskResponse struct {
+	AnalysisStatus  string      `json:"analysisStatus"`
+	AnalysisError   string      `json:"analysisError"`
+	AnalysisRawText string      `json:"analysisRawText"`
+	Result          *TaskResult `json:"result"`
+}
+
 type Task struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
@@ -314,6 +321,15 @@ func (task *Task) IsAnalysisReady() bool {
 		return false
 	}
 	return task.AnalysisStatus == AnalysisStatusSuccess && task.Result != ""
+}
+
+func (task *Task) BuildAnalysisResponse(result *TaskResult) *AnalyzeTaskResponse {
+	return &AnalyzeTaskResponse{
+		AnalysisStatus:  task.AnalysisStatus,
+		AnalysisError:   task.AnalysisError,
+		AnalysisRawText: task.AnalysisRawText,
+		Result:          result,
+	}
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {
