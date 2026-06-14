@@ -118,6 +118,7 @@
     "Casdoor application: [%s] doesn't exist": "Casdoor application: [%s] doesn't exist",
     "Casdoor organization: [%s] doesn't exist": "Casdoor organization: [%s] doesn't exist",
     "MCP test JSON must include non-empty \"tool\"": "MCP test JSON must include a non-empty \"tool\" field",
+    "No store found for user: %s, please create a store first": "No store found for user: %s, please create a store first",
     "Please add a model provider first": "Please add a model provider first",
     "Please add an embedding provider first": "To use this feature, please configure an embedding model in the settings first",
     "Question message: [%s] doesn't exist": "Question message: [%s] doesn't exist",
@@ -165,17 +166,16 @@
     "the record: %s has already been committed, blockId = %s": "the record: %s has already been committed, blockId = %s",
     "the record: %s's block ID should not be empty": "the record: %s's block ID should not be empty",
     "the storage provider type: %s is not supported": "the storage provider type: %s is not supported",
+    "the video provider type: %s is not supported": "the video provider type: %s is not supported",
     "there is no active blockchain provider": "there is no active blockchain provider",
     "tool test JSON must include non-empty \"tool\"": "tool test JSON must include non-empty \"tool\""
   },
   "openai": {
-    "Invalid API key format. Expected 'Bearer API_KEY'": "Invalid API key format. Expected 'Bearer API_KEY'",
-    "No user message found in the request": "No user message found in the request"
+    "Invalid API key format. Expected 'Bearer API_KEY'": "Invalid API key format. Expected 'Bearer API_KEY'"
   },
   "resource": {
     "Invalid file data format": "Invalid file data format",
-    "Only docx and pdf files are allowed": "Only docx and pdf files are allowed",
-    "Unsupported legacy file format %s, please convert to a modern format (e.g. .docx, .pptx, .xlsx) before uploading": "Unsupported legacy file format %s, please convert to a modern format (e.g. .docx, .pptx, .xlsx) before uploading"
+    "Only docx and pdf files are allowed": "Only docx and pdf files are allowed"
   },
   "storage": {
     "storage provider name: [%s] doesn't exist": "storage provider name: [%s] doesn't exist"
@@ -207,5 +207,9 @@
     "GetTextFromMarkitdown() error, markitdown does not exist": "GetTextFromMarkitdown() error, markitdown does not exist",
     "GetTextFromMarkitdown() error, markitdown failed to run: %v: %s": "GetTextFromMarkitdown() error, markitdown failed to run: %v: %s",
     "unsupported file type: %s": "unsupported file type: %s"
+  },
+  "video": {
+    "The prompt should not be empty": "The prompt should not be empty",
+    "calculatePrice() error: unknown model type: %s": "calculatePrice() error: unknown model type: %s"
   }
 }

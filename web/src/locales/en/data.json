@@ -101,6 +101,8 @@
     "iFrame": "iFrame"
   },
   "general": {
+    "API key": "API key",
+    "API key - Tooltip": "API key - Tooltip",
     "Access secret": "Access secret",
     "Access secret - Tooltip": "Secret key for API access authentication",
     "Action": "Action",

@@ -349,7 +349,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		}
 	}
 
-	writer := &RefinedWriter{context.Response{ResponseWriter: responseWriter}, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
+	writer := newRefinedWriter(context.Response{ResponseWriter: responseWriter})
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -429,7 +429,13 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	if len(vectorScores) > 0 {
 		bytes, err := json.Marshal(vectorScores)
 		if err == nil {
-			_, _ = responseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
+			_, _ = responseWriter.Write(encodeSSEFrame("vector", string(bytes)))
+		}
+	}
+
+	if flushErr := writer.FlushRemaining(); flushErr != nil {
+		if !errors.Is(flushErr, errMessageAnswerCanceled) {
+			fmt.Printf("flush remaining SSE frames failed: %s\n", flushErr.Error())
 		}
 	}
 
@@ -442,7 +448,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			return
 		}
 
-		_, err = writer.ResponseWriter.Write([]byte(fmt.Sprintf("event: message\ndata: %s\n\n", jsonData)))
+		_, err = writer.ResponseWriter.Write(encodeSSEFrame("message", string(jsonData)))
 		if err != nil {
 			if errors.Is(err, errMessageAnswerCanceled) {
 				return
@@ -459,8 +465,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 
 	answer := writer.MessageString()
 	defer func() {
-		event := fmt.Sprintf("event: end\ndata: %s\n\n", "end")
-		if _, writeErr := responseWriter.Write([]byte(event)); writeErr != nil {
+		if _, writeErr := responseWriter.Write(encodeSSEFrame("end", "end")); writeErr != nil {
 			fmt.Printf("write end SSE event failed: %s\n", writeErr.Error())
 		}
 		if flusher, ok := responseWriter.(http.Flusher); ok {

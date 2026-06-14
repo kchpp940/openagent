@@ -25,6 +25,7 @@ import {renderReason, renderText} from "./ChatMessageRender";
 import * as Setting from "./Setting";
 import * as ChatBackend from "./backend/ChatBackend";
 import * as MessageBackend from "./backend/MessageBackend";
+import {safeJsonParse} from "./backend/MessageBackend";
 import i18next from "i18next";
 import BaseListPage from "./BaseListPage";
 import {MessageCarrier} from "./chat/MessageCarrier";
@@ -515,106 +516,118 @@ class ChatPage extends BaseListPage {
             }
             const mssageCarrier = new MessageCarrier(chat.needTitle);
             const userTextForTitle = getFirstUserMessageText(res.data);
-            MessageBackend.getMessageAnswer(lastMessage.owner, lastMessage.name, (data) => {
-              const jsonData = JSON.parse(data);
-
-              if (jsonData.text === "") {
-                jsonData.text = "\n";
-              }
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              text += jsonData.text;
-              const parsedResult = mssageCarrier.parseAnswerWithCarriers(text, userTextForTitle);
-              this.updateChatDisplayName(parsedResult.title, chat);
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+            const isCurrentChat = () => chat && this.state.chat?.name === chat.name;
+            const getLastMessage = () => res.data[res.data.length - 1];
+            const cloneLastMessage = () => {
+              const current = getLastMessage();
+              return Setting.deepCopy(current);
+            };
+            const commitMessageUpdate = (updater) => {
+              if (!isCurrentChat()) {
                 return;
               }
-              lastMessage2.text = parsedResult.finalAnswer;
-
-              lastMessage2.isReasoningPhase = false;
-
-              res.data[res.data.length - 1] = lastMessage2;
-              res.data.map((message, index) => {
+              const lastMsg = cloneLastMessage();
+              updater(lastMsg);
+              res.data[res.data.length - 1] = lastMsg;
+              res.data.forEach((message, index) => {
                 if (index === res.data.length - 1 && message.author === "AI") {
                   message.html = renderText(message.text);
+                  if (message.reasonText) {
+                    message.reasonHtml = renderReason(message.reasonText);
+                  }
                 } else {
                   message.html = renderText(message.text);
                 }
               });
-              this.setState({
-                messages: [...res.data],
-                messageError: false,
-              });
-            }, (data) => {
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              this.setState({messages: [...res.data]});
+            };
+            MessageBackend.getMessageAnswer(lastMessage.owner, lastMessage.name, (data) => {
+              if (!isCurrentChat()) {
                 return;
               }
-              const jsonData = JSON.parse(data);
-
-              if (jsonData.text === "") {
+              const jsonData = safeJsonParse(data, null);
+              if (!jsonData) {
+                return;
+              }
+              if (!jsonData.text || jsonData.text === "") {
                 jsonData.text = "\n";
               }
-
-              reasonText += jsonData.text;
-
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.reasonText = reasonText;
-              if (!lastMessage2.toolCalls || lastMessage2.toolCalls.length === 0) {
-                lastMessage2.isReasoningPhase = true;
-              }
-
-              if (text) {
-                lastMessage2.text = text;
-              }
-              res.data[res.data.length - 1] = lastMessage2;
-
-              this.setState({
-                messages: [...res.data],
+              text += jsonData.text;
+              const parsedResult = mssageCarrier.parseAnswerWithCarriers(text, userTextForTitle);
+              this.updateChatDisplayName(parsedResult.title, chat);
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.text = parsedResult.finalAnswer;
+                lastMessage2.isReasoningPhase = false;
+                if (toolCalls.length > 0) {
+                  lastMessage2.toolCalls = [...toolCalls];
+                }
               });
+              this.setState({messageError: false});
             }, (data) => {
-              // onTool callback (handles both tool-start and tool-complete events)
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
-              const jsonData = JSON.parse(data);
-
+              const jsonData = safeJsonParse(data, null);
+              if (!jsonData) {
+                return;
+              }
+              if (!jsonData.text || jsonData.text === "") {
+                jsonData.text = "\n";
+              }
+              reasonText += jsonData.text;
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.reasonText = reasonText;
+                if ((!lastMessage2.toolCalls || lastMessage2.toolCalls.length === 0) && toolCalls.length === 0) {
+                  lastMessage2.isReasoningPhase = true;
+                }
+                if (text) {
+                  lastMessage2.text = text;
+                }
+                if (toolCalls.length > 0) {
+                  lastMessage2.toolCalls = [...toolCalls];
+                }
+              });
+            }, (data) => {
+              if (!isCurrentChat()) {
+                return;
+              }
+              const jsonData = safeJsonParse(data, null);
+              if (!jsonData) {
+                return;
+              }
               applyToolEvent(toolCalls, jsonData);
               flushToolDeltaNow();
-            }, (data) => {
-              // onSearch callback
-              if (!chat || (this.state.chat?.name !== chat.name)) {
-                return;
-              }
-              const searchResults = JSON.parse(data);
-
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.searchResults = searchResults;
-              if (toolCalls.length > 0) {
+              commitMessageUpdate((lastMessage2) => {
                 lastMessage2.toolCalls = [...toolCalls];
-              }
-              res.data[res.data.length - 1] = lastMessage2;
-
-              this.setState({
-                messages: [...res.data],
+                lastMessage2.isReasoningPhase = false;
               });
             }, (data) => {
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
-              const vectorScores = JSON.parse(data);
-
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.vectorScores = vectorScores;
-              if (toolCalls.length > 0) {
-                lastMessage2.toolCalls = [...toolCalls];
+              const searchResults = safeJsonParse(data, null);
+              if (!searchResults) {
+                return;
               }
-              res.data[res.data.length - 1] = lastMessage2;
-
-              this.setState({
-                messages: [...res.data],
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.searchResults = searchResults;
+                if (toolCalls.length > 0) {
+                  lastMessage2.toolCalls = [...toolCalls];
+                }
+              });
+            }, (data) => {
+              if (!isCurrentChat()) {
+                return;
+              }
+              const vectorScores = safeJsonParse(data, null);
+              if (!vectorScores) {
+                return;
+              }
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.vectorScores = vectorScores;
+                if (toolCalls.length > 0) {
+                  lastMessage2.toolCalls = [...toolCalls];
+                }
               });
             }, (error) => {
               this.updateChatStatus(chat.name, {isGenerating: false});
@@ -622,56 +635,26 @@ class ChatPage extends BaseListPage {
               if (errorChat) {
                 this.markChatRead({...errorChat, isGenerating: false});
               }
-
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
-
-              const lastMessage2 = Setting.deepCopy(lastMessage);
-              lastMessage2.errorText = error;
-              res.data[res.data.length - 1] = lastMessage2;
-
-              res.data.map((message) => {
-                message.html = renderText(message.text);
+              flushToolDeltaNow();
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.errorText = error;
+                lastMessage2.toolCalls = [...toolCalls];
+                lastMessage2.text = text || lastMessage2.text;
+                lastMessage2.reasonText = reasonText || lastMessage2.reasonText;
               });
-
               this.setState({
-                messages: [...res.data],
                 messageLoading: false,
                 messageError: true,
               });
             }, (data) => {
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
               flushToolDeltaNow();
-              const lastMessage2 = Setting.deepCopy(lastMessage);
-              lastMessage2.text = text;
-
-              // Preserve reasoning when finalizing the message
-              if (res.data[res.data.length - 1].reasonText) {
-                lastMessage2.reasonText = res.data[res.data.length - 1].reasonText;
-                lastMessage2.reasonHtml = res.data[res.data.length - 1].reasonHtml;
-              }
-
-              // Preserve tool calls when finalizing the message
-              if (res.data[res.data.length - 1].toolCalls) {
-                lastMessage2.toolCalls = res.data[res.data.length - 1].toolCalls;
-              }
-
-              // Preserve search results when finalizing the message
-              if (res.data[res.data.length - 1].searchResults) {
-                lastMessage2.searchResults = res.data[res.data.length - 1].searchResults;
-              }
-
-              // Preserve vector scores when finalizing the message
-              if (res.data[res.data.length - 1].vectorScores) {
-                lastMessage2.vectorScores = res.data[res.data.length - 1].vectorScores;
-              }
-
-              // We're no longer in reasoning phase
-              lastMessage2.isReasoningPhase = false;
-              // If there are suggestions or title , split them from the text
+              const finalToolCalls = [...toolCalls];
               const parsedResult = mssageCarrier.parseAnswerWithCarriers(text, userTextForTitle);
               text = parsedResult.finalAnswer;
               if (parsedResult.title !== "") {
@@ -679,61 +662,75 @@ class ChatPage extends BaseListPage {
                 chat.needTitle = false;
                 this.updateChatDisplayName(parsedResult.title, chat);
               }
-              lastMessage2.text = parsedResult.finalAnswer;
-              lastMessage2.suggestions = parsedResult.suggestionArray;
-
-              const isCurrentChat = this.state.chat?.name === chat.name;
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.text = parsedResult.finalAnswer;
+                lastMessage2.suggestions = parsedResult.suggestionArray;
+                lastMessage2.isReasoningPhase = false;
+                if (res.data[res.data.length - 1].reasonText) {
+                  lastMessage2.reasonText = res.data[res.data.length - 1].reasonText;
+                  lastMessage2.reasonHtml = res.data[res.data.length - 1].reasonHtml;
+                } else if (reasonText) {
+                  lastMessage2.reasonText = reasonText;
+                }
+                if (res.data[res.data.length - 1].toolCalls && res.data[res.data.length - 1].toolCalls.length > 0) {
+                  lastMessage2.toolCalls = res.data[res.data.length - 1].toolCalls;
+                } else if (finalToolCalls.length > 0) {
+                  lastMessage2.toolCalls = finalToolCalls;
+                }
+                if (res.data[res.data.length - 1].searchResults) {
+                  lastMessage2.searchResults = res.data[res.data.length - 1].searchResults;
+                }
+                if (res.data[res.data.length - 1].vectorScores) {
+                  lastMessage2.vectorScores = res.data[res.data.length - 1].vectorScores;
+                }
+              });
+              const isViewing = this.state.chat?.name === chat.name;
               const updates = {isGenerating: false};
-              if (isCurrentChat) {
+              if (isViewing) {
                 this.markChatRead({...chat, isGenerating: false});
               }
               this.updateChatStatus(chat.name, updates);
-
-              if (!isCurrentChat) {
+              if (!isViewing) {
                 return;
               }
-
-              res.data[res.data.length - 1] = lastMessage2;
-              res.data.map((message, index) => {
-                // Ensure the main HTML is rendered properly
-                message.html = renderText(message.text);
-
-                // Make sure the reason HTML is still there if we have reason text
-                if (message.reasonText) {
-                  message.reasonHtml = renderReason(message.reasonText);
-                }
-              });
-
               this.setState({
-                messages: [...res.data],
                 messageLoading: false,
                 messageError: false,
               });
-
               if (this.state.autoRead) {
                 if (this.chatBox?.current?.toggleMessageReadState) {
-                  this.chatBox.current.toggleMessageReadState(lastMessage2);
+                  const finalLastMsg = getLastMessage();
+                  this.chatBox.current.toggleMessageReadState(finalLastMsg);
                 }
               }
             }, (infoText) => {
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.hintText = infoText;
-              res.data[res.data.length - 1] = lastMessage2;
-              this.setState({messages: [...res.data]});
+              if (!infoText) {
+                return;
+              }
+              commitMessageUpdate((lastMessage2) => {
+                lastMessage2.hintText = infoText;
+              });
             }, (update) => {
-              if (!chat || update?.name !== chat.name || !update.displayName) {
+              if (!update || update?.name !== chat.name || !update.displayName) {
                 return;
               }
               this.updateChatDisplayName(update.displayName, {...chat, needTitle: update.needTitle ?? false});
             }, (data) => {
-              if (!chat || (this.state.chat?.name !== chat.name)) {
+              if (!isCurrentChat()) {
                 return;
               }
-              const jsonData = JSON.parse(data);
+              const jsonData = safeJsonParse(data, null);
+              if (!jsonData) {
+                return;
+              }
+              if ((jsonData.argumentsDelta === undefined || jsonData.argumentsDelta === "")
+                  && (jsonData.name === undefined || jsonData.name === "")
+                  && (jsonData.id === undefined || jsonData.id === "")) {
+                return;
+              }
               applyToolDelta(toolCalls, jsonData);
               scheduleToolDeltaFlush();
             });

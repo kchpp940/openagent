@@ -171,71 +171,11 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 	return affected, totalTokenCount, nil
 }
 
-func RebuildFileVectors(store *Store, objectKey string, fileUrl string, lang string) (bool, error) {
-	resolvedKey := ResolveFileObjectKey(store.Name, objectKey)
-
-	embeddingProvider, err := store.GetEmbeddingProvider()
+func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
+	err := updateFileStatus(owner, storeName, fileKey, FileStatusProcessing, "", 0)
 	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
 		return false, err
-	}
-	if embeddingProvider == nil {
-		return false, fmt.Errorf(i18n.Translate(lang, "object:The embedding provider for store: %s is not found"), store.GetId())
-	}
-
-	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider(lang)
-	if err != nil {
-		return false, err
-	}
-
-	modelProvider, err := store.GetModelProvider()
-	if err != nil {
-		return false, err
-	}
-	if modelProvider == nil {
-		return false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
-	}
-
-	ok, err := withFileStatus(store.Owner, store.Name, resolvedKey, func() (bool, int, error) {
-		_, delErr := DeleteVectorsByFile(store.Owner, store.Name, resolvedKey)
-		if delErr != nil {
-			return false, 0, delErr
-		}
-		return addVectorsForFile(embeddingProviderObj, store.Name, resolvedKey, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
-	})
-
-	if errors.Is(err, ErrFileNotFound) {
-		cleanErr := CleanOrphanVectors(store.Owner, store.Name, resolvedKey)
-		if cleanErr != nil {
-			return ok, errors.Join(err, cleanErr)
-		}
-	}
-
-	return ok, err
-}
-
-func CleanOrphanVectors(owner string, storeName string, resolvedKey string) error {
-	_, err := DeleteVectorsByFile(owner, storeName, resolvedKey)
-	if err != nil {
-		logs.Warn("Failed to clean orphan vectors for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
-		return err
-	}
-	logs.Info("Cleaned orphan vectors for store: [%s], file: [%s]", storeName, resolvedKey)
-	return nil
-}
-
-func withFileStatus(owner string, storeName string, resolvedKey string, op func() (bool, int, error)) (bool, error) {
-	recordName, acquired, err := tryAcquireProcessingStatus(owner, storeName, resolvedKey)
-	if err != nil {
-		if errors.Is(err, ErrFileAlreadyProcessing) {
-			logs.Warn("Skipping vector rebuild for store: [%s], file: [%s] — already processing", storeName, resolvedKey)
-		} else {
-			logs.Error("Failed to acquire processing status for store: [%s], file: [%s]: %v", storeName, resolvedKey, err)
-		}
-		return false, err
-	}
-	if !acquired {
-		logs.Warn("Skipping vector rebuild for store: [%s], file: [%s] — status not acquired", storeName, resolvedKey)
-		return false, ErrFileAlreadyProcessing
 	}
 
 	affected, tokenCount, opErr := op()
@@ -247,19 +187,16 @@ func withFileStatus(owner string, storeName string, resolvedKey string, op func(
 		errorText = opErr.Error()
 	}
 
-	statusErr := finalizeFileStatus(owner, recordName, fileStatus, errorText, tokenCount)
-	if statusErr != nil {
-		logs.Error("Failed to finalize file status for store: [%s], file: [%s]: %v", storeName, resolvedKey, statusErr)
-		if opErr != nil {
-			return affected, errors.Join(opErr, statusErr)
-		}
-		return affected, statusErr
+	err = updateFileStatus(owner, storeName, fileKey, fileStatus, errorText, tokenCount)
+	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		return affected, errors.Join(opErr, err)
 	}
 
 	return affected, opErr
 }
 
-func addVectorsForStore(store *Store, storageProviderObj storage.StorageProvider, embeddingProviderObj embedding.EmbeddingProvider, prefix string, lang string) (bool, error) {
+func addVectorsForStore(storageProviderObj storage.StorageProvider, embeddingProviderObj embedding.EmbeddingProvider, prefix string, owner string, storeName string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, error) {
 	var (
 		affected bool
 		fileErr  error
@@ -273,15 +210,16 @@ func addVectorsForStore(store *Store, storageProviderObj storage.StorageProvider
 	files = filterTextFiles(files)
 
 	for _, file := range files {
-		objectKey := ResolveFileObjectKey(store.Name, file.Key)
-		ok, buildErr := RebuildFileVectors(store, objectKey, file.Url, lang)
-		if buildErr != nil {
-			logs.Error("Failed to add vectors for store: [%s], file: [%s]: %v", store.Name, objectKey, buildErr)
-			fileErr = errors.Join(fileErr, buildErr)
+		fileAffected, err := withFileStatus(owner, storeName, file.Key, func() (bool, int, error) {
+			return addVectorsForFile(embeddingProviderObj, storeName, file.Key, file.Url, splitProviderName, embeddingProviderName, modelSubType, lang)
+		})
+		if err != nil {
+			logs.Error("Failed to add vectors for store: [%s], file: [%s]: %v", storeName, file.Key, err)
+			fileErr = errors.Join(fileErr, err)
 			continue
 		}
 
-		affected = affected || ok
+		affected = affected || fileAffected
 	}
 
 	return affected, fileErr
