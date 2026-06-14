@@ -88,6 +88,9 @@ class TaskEditPage extends React.Component {
     t = t.documentTypeSource === undefined || t.documentTypeSource === null ? {...t, documentTypeSource: ""} : t;
     t = t.documentTypeConflict === undefined || t.documentTypeConflict === null ? {...t, documentTypeConflict: false} : t;
     t = t.documentConflictMsg === undefined || t.documentConflictMsg === null ? {...t, documentConflictMsg: ""} : t;
+    t = t.analysisStatus === undefined || t.analysisStatus === null ? {...t, analysisStatus: ""} : t;
+    t = t.analysisError === undefined || t.analysisError === null ? {...t, analysisError: ""} : t;
+    t = t.analysisRawText === undefined || t.analysisRawText === null ? {...t, analysisRawText: ""} : t;
     t = t.analyzeError === undefined || t.analyzeError === null ? {...t, analyzeError: ""} : t;
     if (!t.result) {
       return t;
@@ -135,6 +138,13 @@ class TaskEditPage extends React.Component {
     }
     this.analyzeStartTime = Date.now();
     this.setState({analyzing: true, analyzeProgress: 0, analyzeError: ""});
+    const task = this.state.task;
+    task.analysisStatus = "pending";
+    task.analysisError = "";
+    task.analysisRawText = "";
+    task.result = null;
+    task.score = 0;
+    this.setState({task: task});
     const durationMs = ANALYZE_PROGRESS_DURATION_SEC * 1000;
     this.analyzeProgressIntervalId = setInterval(() => {
       const elapsed = Date.now() - this.analyzeStartTime;
@@ -144,18 +154,32 @@ class TaskEditPage extends React.Component {
     TaskBackend.analyzeTask(this.state.task.owner, this.state.task.name)
       .then((res) => {
         if (res.status === "ok") {
-          const task = this.state.task;
-          task.result = res.data;
-          task.score = res.data.score;
-          this.setState({task: task});
+          const t = this.state.task;
+          t.result = res.data;
+          t.score = res.data.score;
+          t.analysisStatus = "success";
+          t.analysisError = "";
+          this.setState({task: t});
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
         } else {
-          this.setState({analyzeError: res.msg || i18next.t("general:Failed to get")});
+          const t = this.state.task;
+          t.analysisStatus = "failed";
+          t.analysisError = res.msg || i18next.t("general:Failed to get");
+          t.analysisRawText = "";
+          t.result = null;
+          t.score = 0;
+          this.setState({task: t, analyzeError: res.msg || i18next.t("general:Failed to get")});
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       })
       .catch(err => {
-        this.setState({analyzeError: err.message || i18next.t("general:Failed to get")});
+        const t = this.state.task;
+        t.analysisStatus = "failed";
+        t.analysisError = err.message || i18next.t("general:Failed to get");
+        t.analysisRawText = "";
+        t.result = null;
+        t.score = 0;
+        this.setState({task: t, analyzeError: err.message || i18next.t("general:Failed to get")});
         Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
       })
       .finally(() => {
@@ -175,6 +199,9 @@ class TaskEditPage extends React.Component {
     const task = this.state.task;
     task.result = null;
     task.score = 0;
+    task.analysisStatus = "";
+    task.analysisError = "";
+    task.analysisRawText = "";
     this.setState({task: task, analyzeError: ""});
   };
 
@@ -571,7 +598,7 @@ class TaskEditPage extends React.Component {
               <div>
                 <Button
                   loading={this.state.analyzing}
-                  disabled={task.documentParseStatus !== "success" || !!task.result || !String(task.scale || "").trim()}
+                  disabled={task.documentParseStatus !== "success" || task.analysisStatus === "pending" || task.analysisStatus === "success" || !String(task.scale || "").trim()}
                   style={{marginBottom: "20px", width: "200px"}}
                   type="primary"
                   icon={<BarChartOutlined />}
@@ -579,7 +606,7 @@ class TaskEditPage extends React.Component {
                 >
                   {i18next.t("task:Analyze")}
                 </Button>
-                {task.result ? (
+                {task.result || task.analysisStatus ? (
                   <Button style={{marginBottom: "20px", marginLeft: "8px", width: "200px"}} icon={<ClearOutlined />} onClick={this.clearReport}>
                     {i18next.t("general:Clear")}
                   </Button>
@@ -627,10 +654,10 @@ class TaskEditPage extends React.Component {
                     </div>
                   </div>
                 )}
-                {this.state.analyzeError && !this.state.analyzing && !task.result && (
+                {task.analysisStatus === "failed" && !this.state.analyzing && (
                   <div style={{color: "#ff4d4f", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff1f0", borderRadius: "4px", border: "1px solid #ffccc7"}}>
                     <CloseCircleOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:AI analysis failed")}：</strong>{this.state.analyzeError}
+                    <strong>{i18next.t("task:AI analysis failed")}：</strong>{task.analysisError}
                     <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
                       {i18next.t("task:This is an AI model error, please try again later")}
                     </div>
@@ -644,11 +671,12 @@ class TaskEditPage extends React.Component {
                     <Spin style={{marginLeft: "16px"}} tip={i18next.t("task:Analyzing")} />
                   </>
                 )}
-                {task.result && (
+                {(task.result || task.analysisStatus) && task.documentUploadSuccess && (
                   <TaskAnalysisReport
                     result={task.result}
                     downloadFileName={`${task.owner}_${task.name}_report.docx`}
-                    analyzeError={this.state.analyzeError}
+                    analysisStatus={task.analysisStatus}
+                    analysisError={task.analysisError}
                     documentParseStatus={task.documentParseStatus}
                     documentError={task.documentError}
                   />

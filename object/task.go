@@ -96,8 +96,18 @@ type Task struct {
 	DocumentTypeSource     string `xorm:"varchar(50)" json:"documentTypeSource"`
 	DocumentTypeConflict   bool   `xorm:"bool" json:"documentTypeConflict"`
 	DocumentConflictMsg    string `xorm:"varchar(500)" json:"documentConflictMsg"`
+	AnalysisStatus         string `xorm:"varchar(50)" json:"analysisStatus"`
+	AnalysisError          string `xorm:"varchar(500)" json:"analysisError"`
+	AnalysisRawText        string `xorm:"mediumtext" json:"analysisRawText"`
 	AnalyzeError           string `xorm:"varchar(500)" json:"analyzeError"`
 }
+
+const (
+	AnalysisStatusNone    = ""
+	AnalysisStatusPending = "pending"
+	AnalysisStatusSuccess = "success"
+	AnalysisStatusFailed  = "failed"
+)
 
 func (task *Task) ResetDocumentFields() {
 	task.DocumentUrl = ""
@@ -113,6 +123,9 @@ func (task *Task) ResetDocumentFields() {
 	task.DocumentTypeSource = ""
 	task.DocumentTypeConflict = false
 	task.DocumentConflictMsg = ""
+	task.AnalysisStatus = AnalysisStatusNone
+	task.AnalysisError = ""
+	task.AnalysisRawText = ""
 	task.AnalyzeError = ""
 }
 
@@ -265,6 +278,42 @@ func (task *Task) BuildDocumentStatusResponse(extra *DocumentTypeDetectionExtra)
 type DocumentTypeDetectionExtra struct {
 	FileNameExt string
 	MimeTypeExt string
+}
+
+func (task *Task) SetAnalysisStatus(status, errMsg, rawText string) {
+	task.AnalysisStatus = status
+	task.AnalysisError = errMsg
+	task.AnalysisRawText = rawText
+	task.AnalyzeError = errMsg
+}
+
+func (task *Task) SetAnalysisSuccess(rawText string) {
+	task.AnalysisStatus = AnalysisStatusSuccess
+	task.AnalysisError = ""
+	task.AnalysisRawText = rawText
+	task.AnalyzeError = ""
+}
+
+func (task *Task) SetAnalysisFailed(errMsg, rawText string) {
+	task.AnalysisStatus = AnalysisStatusFailed
+	task.AnalysisError = errMsg
+	task.AnalysisRawText = rawText
+	task.AnalyzeError = errMsg
+}
+
+func (task *Task) ResetAnalysis() {
+	task.AnalysisStatus = AnalysisStatusNone
+	task.AnalysisError = ""
+	task.AnalysisRawText = ""
+	task.AnalyzeError = ""
+	task.Result = ""
+}
+
+func (task *Task) IsAnalysisReady() bool {
+	if task == nil {
+		return false
+	}
+	return task.AnalysisStatus == AnalysisStatusSuccess && task.Result != ""
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {
