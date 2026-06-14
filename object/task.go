@@ -120,6 +120,10 @@ func (task *Task) SetDocumentUploadError(errMsg string) {
 	task.DocumentUrl = ""
 	task.DocumentText = ""
 	task.DocumentResourceId = ""
+	task.DocumentFileSize = 0
+	task.DocumentFileName = ""
+	task.DocumentMimeType = ""
+	task.DocumentFileType = ""
 	task.AnalyzeError = ""
 }
 
@@ -199,6 +203,9 @@ func (task *Task) BuildDocumentStatusResponse(extra *DocumentTypeDetectionExtra)
 		}
 	}
 
+	uploadSuccess := task.DocumentUrl != "" || task.DocumentResourceId != "" ||
+		task.DocumentFileSize > 0 || task.DocumentFileName != ""
+
 	resp := &DocumentStatusResponse{
 		Url:             task.DocumentUrl,
 		Text:            task.DocumentText,
@@ -212,7 +219,7 @@ func (task *Task) BuildDocumentStatusResponse(extra *DocumentTypeDetectionExtra)
 		TypeSource:      task.DocumentTypeSource,
 		TypeConflict:    task.DocumentTypeConflict,
 		ConflictMessage: task.DocumentConflictMsg,
-		UploadSuccess:   task.DocumentUrl != "" || task.DocumentResourceId != "",
+		UploadSuccess:   uploadSuccess,
 		ParseSuccess:    task.DocumentParseStatus == DocumentParseStatusSuccess,
 	}
 

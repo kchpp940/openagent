@@ -263,12 +263,16 @@ class TaskEditPage extends React.Component {
 
           if (result.parseSuccess) {
             Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+          } else if (result.uploadSuccess && result.parseStatus === "unsupported" && result.error) {
+            Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but file type not supported")}: ${result.error}`);
           } else if (result.uploadSuccess && result.error) {
             Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
           } else if (result.uploadSuccess) {
             Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
           } else if (result.error) {
             Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${result.error}`);
+          } else {
+            Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
           }
         } else {
           const task = this.state.task;
@@ -369,10 +373,10 @@ class TaskEditPage extends React.Component {
         level: "warning"
       },
       "unsupported": {
-        color: "#ff4d4f",
-        icon: <CloseCircleOutlined />,
-        text: i18next.t("task:Unsupported document type"),
-        level: "error"
+        color: "#fa8c16",
+        icon: <WarningOutlined />,
+        text: i18next.t("task:Uploaded but unsupported document type"),
+        level: "warning"
       },
       "pending": {
         color: "#1890ff",
@@ -403,6 +407,9 @@ class TaskEditPage extends React.Component {
 
     const docStatusInfo = this.getDocumentStatusInfo(task.documentParseStatus);
     const docHasError = task.documentParseStatus === "failed" || task.documentParseStatus === "unsupported" || task.documentParseStatus === "empty";
+    const docBackgroundColor = docStatusInfo?.level === "error" ? "#fff1f0" :
+                               docStatusInfo?.level === "warning" ? "#fff7e6" :
+                               undefined;
 
     return (
       <div>
@@ -482,7 +489,7 @@ class TaskEditPage extends React.Component {
             ) : null}
             {this.renderTaskField(
               Setting.getLabel(i18next.t("store:File"), i18next.t("store:File - Tooltip")),
-              task.documentUrl ? (
+              (task.documentUrl || task.documentFileName || task.documentResourceId) ? (
                 <Card
                   size="small"
                   style={{
@@ -491,7 +498,7 @@ class TaskEditPage extends React.Component {
                     maxWidth: "100%",
                     verticalAlign: "top",
                     borderColor: docHasError ? (docStatusInfo?.color || "#faad14") : undefined,
-                    background: docHasError ? "#fffbe6" : undefined
+                    background: docBackgroundColor
                   }}
                 >
                   <div style={{display: "flex", alignItems: "center", gap: 12, flexWrap: "nowrap", minWidth: 0}}>
@@ -536,7 +543,7 @@ class TaskEditPage extends React.Component {
                         </div>
                       )}
                     </div>
-                    <Button type="link" size="small" icon={<DownloadOutlined />} href={task.documentUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}}>
+                    <Button type="link" size="small" icon={<DownloadOutlined />} href={task.documentUrl || undefined} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}} disabled={!task.documentUrl}>
                       {i18next.t("general:Download")}
                     </Button>
                     <Button type="text" size="small" danger icon={<CloseOutlined />} onClick={this.clearDocument} aria-label={i18next.t("general:Delete")} style={{flexShrink: 0}} />
@@ -567,7 +574,7 @@ class TaskEditPage extends React.Component {
                 )}
               </>
             )}
-            {task.type !== "Labeling" && task.documentUrl ? this.renderTaskField(
+            {task.type !== "Labeling" && (task.documentUrl || task.documentFileName || task.documentResourceId) ? this.renderTaskField(
               Setting.getLabel(i18next.t("task:Report"), i18next.t("task:Report - Tooltip")),
               <div>
                 <Button
@@ -595,11 +602,18 @@ class TaskEditPage extends React.Component {
                   </div>
                 )}
                 {task.documentParseStatus === "unsupported" && !this.state.analyzing && !task.result && (
-                  <div style={{color: "#ff4d4f", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff1f0", borderRadius: "4px", border: "1px solid #ffccc7"}}>
-                    <CloseCircleOutlined style={{marginRight: "4px"}} />
-                    <strong>{i18next.t("task:Unsupported document type")}：</strong>{task.documentError}
+                  <div style={{color: "#fa8c16", fontSize: "13px", marginBottom: "8px", padding: "8px 12px", background: "#fff7e6", borderRadius: "4px", border: "1px solid #ffd591"}}>
+                    <WarningOutlined style={{marginRight: "4px"}} />
+                    <strong>{i18next.t("task:Uploaded but unsupported document type")}：</strong>{task.documentError}
                     <div style={{fontSize: "12px", marginTop: "4px", opacity: 0.85}}>
-                      {i18next.t("task:Supported formats")}: .docx, .pdf
+                      {i18next.t("task:File was uploaded successfully but cannot be analyzed")}
+                      {task.documentUrl ? (
+                        <span style={{marginLeft: "8px"}}>
+                          <a href={task.documentUrl} target="_blank" rel="noopener noreferrer" style={{color: "#fa8c16", textDecoration: "underline"}}>
+                            {i18next.t("general:Download uploaded file")}
+                          </a>
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 )}
