@@ -34,7 +34,7 @@ type Resource struct {
 	FileType    string `xorm:"varchar(100)" json:"fileType"`    // "image", "video", "application", etc.
 	FileFormat  string `xorm:"varchar(100)" json:"fileFormat"`  // ".png", ".jpg", ".pdf", ".docx", etc.
 	FileName    string `xorm:"varchar(500)" json:"fileName"`    // original filename
-	FileSize    int    `json:"fileSize"`                        // size in bytes
+	FileSize    int64  `json:"fileSize"`                        // size in bytes
 	MimeType    string `xorm:"varchar(200)" json:"mimeType"`    // MIME type from upload
 	Url         string `xorm:"varchar(500)" json:"url"`         // public accessible URL
 	StorageName string `xorm:"varchar(500)" json:"storageName"` // Casdoor object key (used for deletion)
@@ -173,7 +173,7 @@ func GetPaginationResources(owner, user string, offset, limit int, field, value,
 }
 
 // NewResourceFromUpload builds a Resource record for a just-uploaded file.
-func NewResourceFromUpload(owner, user, category, fileName, fileType, fileFormat, url, storageName string, fileSize int, objectType, objectId string) *Resource {
+func NewResourceFromUpload(owner, user, category, fileName, fileType, fileFormat, url, storageName string, fileSize int64, objectType, objectId string) *Resource {
 	name := fmt.Sprintf("resource_%s_%s", util.GetCurrentTime(), util.GetRandomName())
 	return &Resource{
 		Owner:       owner,
@@ -194,26 +194,12 @@ func NewResourceFromUpload(owner, user, category, fileName, fileType, fileFormat
 }
 
 // NewResourceFromUploadWithMetadata builds a Resource record with full metadata including MIME type and parse status.
-func NewResourceFromUploadWithMetadata(owner, user, category, fileName, mimeType, fileType, fileFormat, url, storageName string, fileSize int, objectType, objectId, parseStatus, parseError string) *Resource {
+func NewResourceFromUploadWithMetadata(owner, user, category, fileName, mimeType, fileType, fileFormat, url, storageName string, fileSize int64, objectType, objectId, parseStatus, parseError string) *Resource {
 	resource := NewResourceFromUpload(owner, user, category, fileName, fileType, fileFormat, url, storageName, fileSize, objectType, objectId)
 	resource.MimeType = mimeType
 	resource.ParseStatus = parseStatus
 	resource.ParseError = parseError
 	return resource
-}
-
-// UpdateResourceParseStatus updates the parse status and error for an existing resource record.
-func UpdateResourceParseStatus(resourceId string, parseStatus, parseError string) (bool, error) {
-	if resourceId == "" {
-		return false, nil
-	}
-	resource, err := GetResource(resourceId)
-	if err != nil || resource == nil {
-		return false, err
-	}
-	resource.ParseStatus = parseStatus
-	resource.ParseError = parseError
-	return UpdateResource(resourceId, resource)
 }
 
 // UploadFileToStorageSafe uploads fileBytes to the default storage provider and returns a public URL.

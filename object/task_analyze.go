@@ -342,16 +342,15 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	scaleRunes := utf8.RuneCountInString(effectiveScale)
 	logs.Info("[analyze-task] rubric loaded task=%s scaleRef=%s rubricLen=%d runes", taskID, task.Scale, scaleRunes)
 
-	if task.DocumentParseStatus == DocumentParseStatusNone || task.DocumentParseStatus == "" {
-		if task.DocumentUrl == "" && task.DocumentResourceId == "" {
-			task.AnalyzeError = "任务文档不能为空，请先上传文档"
-			return nil, fmt.Errorf(task.AnalyzeError)
-		}
-		task.AnalyzeError = "任务文档已上传但未进行解析，请重新上传文档以触发解析"
+	if !task.DocumentUploadSuccess {
+		task.AnalyzeError = "任务文档不能为空，请先上传文档"
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
 	switch task.DocumentParseStatus {
+	case DocumentParseStatusNone:
+		task.AnalyzeError = "任务文档已上传但未进行解析，请重新上传文档以触发解析"
+		return nil, fmt.Errorf(task.AnalyzeError)
 	case DocumentParseStatusFailed:
 		task.AnalyzeError = fmt.Sprintf("文档解析失败，无法进行分析: %s", task.DocumentError)
 		return nil, fmt.Errorf(task.AnalyzeError)

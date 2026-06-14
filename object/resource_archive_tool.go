@@ -147,7 +147,7 @@ func archiveGeneratedResourceFileToStorage(owner, user, path, origin string) (*R
 		return nil, err
 	}
 
-	resource := NewResourceFromUpload(owner, user, "generated", fileName, fileType, ext, fileUrl, storageName, len(fileBytes), "", "")
+	resource := NewResourceFromUpload(owner, user, "generated", fileName, fileType, ext, fileUrl, storageName, int64(len(fileBytes)), "", "")
 	if _, err = AddResource(resource); err != nil {
 		return nil, err
 	}

@@ -83,6 +83,7 @@ class TaskEditPage extends React.Component {
     t = t.documentFileSize === undefined || t.documentFileSize === null ? {...t, documentFileSize: 0} : t;
     t = t.documentResourceId === undefined || t.documentResourceId === null ? {...t, documentResourceId: ""} : t;
     t = t.documentFileName === undefined || t.documentFileName === null ? {...t, documentFileName: ""} : t;
+    t = t.documentUploadSuccess === undefined || t.documentUploadSuccess === null ? {...t, documentUploadSuccess: false} : t;
     t = t.documentParseStatus === undefined || t.documentParseStatus === null ? {...t, documentParseStatus: ""} : t;
     t = t.documentTypeSource === undefined || t.documentTypeSource === null ? {...t, documentTypeSource: ""} : t;
     t = t.documentTypeConflict === undefined || t.documentTypeConflict === null ? {...t, documentTypeConflict: false} : t;
@@ -254,6 +255,7 @@ class TaskEditPage extends React.Component {
           task.documentFileSize = result.fileSize || 0;
           task.documentResourceId = result.resourceId || "";
           task.documentFileName = result.fileName || "";
+          task.documentUploadSuccess = result.uploadSuccess || false;
           task.documentParseStatus = result.parseStatus || "";
           task.documentTypeSource = result.typeSource || "";
           task.documentTypeConflict = result.typeConflict || false;
@@ -261,7 +263,7 @@ class TaskEditPage extends React.Component {
           task.analyzeError = "";
           this.setState({task: task});
 
-          if (result.parseSuccess) {
+          if (result.uploadSuccess && result.parseSuccess) {
             Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
           } else if (result.uploadSuccess && result.parseStatus === "unsupported" && result.error) {
             Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but file type not supported")}: ${result.error}`);
@@ -269,15 +271,14 @@ class TaskEditPage extends React.Component {
             Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
           } else if (result.uploadSuccess) {
             Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
-          } else if (result.error) {
-            Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${result.error}`);
           } else {
-            Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+            Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${result.error || "Unknown error"}`);
           }
         } else {
           const task = this.state.task;
-          task.documentError = res.msg || "";
+          task.documentUploadSuccess = false;
           task.documentParseStatus = "failed";
+          task.documentError = res.msg || "";
           task.analyzeError = "";
           this.setState({task: task});
           Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
@@ -285,8 +286,9 @@ class TaskEditPage extends React.Component {
       })
       .catch(err => {
         const task = this.state.task;
-        task.documentError = err.message || "";
+        task.documentUploadSuccess = false;
         task.documentParseStatus = "failed";
+        task.documentError = err.message || "";
         task.analyzeError = "";
         this.setState({task: task});
         Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${err.message}`);
@@ -306,6 +308,7 @@ class TaskEditPage extends React.Component {
     task.documentFileSize = 0;
     task.documentResourceId = "";
     task.documentFileName = "";
+    task.documentUploadSuccess = false;
     task.documentParseStatus = "";
     task.documentTypeSource = "";
     task.documentTypeConflict = false;
@@ -489,7 +492,7 @@ class TaskEditPage extends React.Component {
             ) : null}
             {this.renderTaskField(
               Setting.getLabel(i18next.t("store:File"), i18next.t("store:File - Tooltip")),
-              (task.documentUrl || task.documentFileName || task.documentResourceId) ? (
+              task.documentUploadSuccess ? (
                 <Card
                   size="small"
                   style={{
@@ -505,9 +508,9 @@ class TaskEditPage extends React.Component {
                     <span style={{
                       fontSize: 28,
                       flexShrink: 0,
-                      color: docStatusInfo ? docStatusInfo.color : (task.documentError ? "#faad14" : (task.documentUrl.endsWith(".pdf") ? "#cf1322" : "#1890ff"))
+                      color: docStatusInfo ? docStatusInfo.color : "#1890ff"
                     }}>
-                      {docStatusInfo ? docStatusInfo.icon : (task.documentError ? <WarningOutlined /> : (task.documentUrl.endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />))}
+                      {docStatusInfo ? docStatusInfo.icon : (task.documentFileType === ".pdf" ? <FilePdfOutlined /> : <FileWordOutlined />)}
                     </span>
                     <div style={{minWidth: 0, maxWidth: "min(960px, calc(100vw - 220px))", flex: "0 1 auto"}}>
                       <Typography.Text ellipsis={{tooltip: true}} style={{width: "100%", fontWeight: task.documentError || docHasError ? 500 : "normal"}}>
@@ -517,24 +520,13 @@ class TaskEditPage extends React.Component {
                         <div style={{fontSize: "12px", color: docStatusInfo.color, marginTop: "2px"}}>
                           {docStatusInfo.icon}
                           <span style={{marginLeft: "4px"}}>{docStatusInfo.text}</span>
-                          {task.documentText && docStatusInfo.level === "success" && (
+                          {docStatusInfo.level === "success" && task.documentText && (
                             <span> ({task.documentText.length.toLocaleString()} {i18next.t("task:characters")})</span>
                           )}
                         </div>
-                      ) : task.documentError ? (
-                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
-                          <WarningOutlined style={{marginRight: "4px"}} />
-                          {task.documentError}
-                        </div>
-                      ) : task.documentText ? (
-                        <div style={{fontSize: "12px", color: "#52c41a", marginTop: "2px"}}>
-                          <CheckCircleOutlined style={{marginRight: "4px"}} />
-                          {i18next.t("task:Document parsed successfully")} ({task.documentText.length.toLocaleString()} {i18next.t("task:characters")})
-                        </div>
                       ) : (
-                        <div style={{fontSize: "12px", color: "#faad14", marginTop: "2px"}}>
-                          <WarningOutlined style={{marginRight: "4px"}} />
-                          {i18next.t("task:No text extracted from document")}
+                        <div style={{fontSize: "12px", color: "#8c8c8c", marginTop: "2px"}}>
+                          {i18next.t("task:Document status unknown")}
                         </div>
                       )}
                       {task.documentTypeConflict && task.documentConflictMsg && (
@@ -574,7 +566,7 @@ class TaskEditPage extends React.Component {
                 )}
               </>
             )}
-            {task.type !== "Labeling" && (task.documentUrl || task.documentFileName || task.documentResourceId) ? this.renderTaskField(
+            {task.type !== "Labeling" && task.documentUploadSuccess ? this.renderTaskField(
               Setting.getLabel(i18next.t("task:Report"), i18next.t("task:Report - Tooltip")),
               <div>
                 <Button

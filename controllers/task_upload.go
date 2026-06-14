@@ -120,10 +120,12 @@ func (c *ApiController) UploadTaskDocument() {
 	// Phase 1: Decode base64 - only THIS is a true upload failure (no storage, no resource)
 	fileBytes, err := decodeFileBase64(fileBase64)
 	if err != nil {
-		task.SetDocumentUploadError(fmt.Sprintf("无效的文件数据格式: %v", err))
-		_, updateErr := object.UpdateTask(taskId, task)
-		if updateErr != nil {
-			logs.Warning("Failed to update task with base64 decode error: %v", updateErr)
+		syncErr := object.SyncDocumentStatus(taskId, task, nil, &object.DocumentParseResult{
+			Status: object.DocumentParseStatusFailed,
+			Error:  fmt.Sprintf("无效的文件数据格式: %v", err),
+		})
+		if syncErr != nil {
+			logs.Warning("Failed to sync document status for base64 decode error: %v", syncErr)
 		}
 		c.ResponseError(c.T("resource:Invalid file data format"))
 		return
@@ -137,18 +139,18 @@ func (c *ApiController) UploadTaskDocument() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(filePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
-		task.SetDocumentUploadError(fmt.Sprintf("文件上传失败: %v", err))
-		_, updateErr := object.UpdateTask(taskId, task)
-		if updateErr != nil {
-			logs.Warning("Failed to update task with storage upload error: %v", updateErr)
+		syncErr := object.SyncDocumentStatus(taskId, task, nil, &object.DocumentParseResult{
+			Status: object.DocumentParseStatusFailed,
+			Error:  fmt.Sprintf("文件上传失败: %v", err),
+		})
+		if syncErr != nil {
+			logs.Warning("Failed to sync document status for storage upload error: %v", syncErr)
 		}
 		c.ResponseError(err.Error())
 		return
 	}
 
 	// Phase 3: Create Resource record (always succeeds from here: decode + storage worked)
-	// At this point, the file is in storage, so we always report uploadSuccess=true.
-	// We start with parseStatus=pending for all files.
 	detectedType := typeDetection.DetectedType
 	if detectedType == "" {
 		detectedType = typeDetection.FileNameExt
@@ -159,7 +161,7 @@ func (c *ApiController) UploadTaskDocument() {
 	resource := object.NewResourceFromUploadWithMetadata(
 		"admin", userName, "document", fileName, fileMimeType,
 		"application", detectedType,
-		fileUrl, filePath, int(fileSize), "task", taskId,
+		fileUrl, filePath, fileSize, "task", taskId,
 		object.DocumentParseStatusPending, "",
 	)
 	resourceId := ""
@@ -169,73 +171,54 @@ func (c *ApiController) UploadTaskDocument() {
 		resourceId = resource.GetId()
 	}
 
-	// Phase 4: Save upload success info to task (uploadSuccess=true from here onwards)
-	task.SetDocumentUploadSuccess(
-		fileName, fileMimeType, detectedType,
-		fileUrl, resourceId, fileSize,
-	)
-	task.DocumentTypeSource = typeDetection.Source
-	task.DocumentTypeConflict = typeDetection.Conflict
-	task.DocumentConflictMsg = typeDetection.ConflictMessage
-
-	// Phase 5: Determine parse status based on type support and parser result
-	// NOTE: Even if type is unsupported, the file was still UPLOADED successfully.
-	// We just mark parseStatus=unsupported instead of trying to parse.
-	finalParseStatus := object.DocumentParseStatusSuccess
-	finalParseError := ""
-	documentText := ""
+	// Phase 4: Determine parse result
+	var parseResult *object.DocumentParseResult
 
 	if typeDetection.Unsupported {
-		finalParseStatus = object.DocumentParseStatusUnsupported
-		finalParseError = typeDetection.UnsupportedReason
+		parseResult = &object.DocumentParseResult{
+			Status: object.DocumentParseStatusUnsupported,
+			Error:  typeDetection.UnsupportedReason,
+		}
 	} else {
 		parsedText, parseErr := txt.GetParsedTextFromUrl(fileUrl, detectedType, c.GetAcceptLanguage())
 		if parseErr != nil {
 			logs.Error("Failed to parse text from %s: %v", fileUrl, parseErr)
-			finalParseStatus = object.DocumentParseStatusFailed
-			finalParseError = fmt.Sprintf("文档解析失败: %v", parseErr)
+			parseResult = &object.DocumentParseResult{
+				Status: object.DocumentParseStatusFailed,
+				Error:  fmt.Sprintf("文档解析失败: %v", parseErr),
+			}
 		} else if strings.TrimSpace(parsedText) == "" {
-			finalParseStatus = object.DocumentParseStatusEmpty
-			finalParseError = "文档已上传但未提取到文本内容，可能是扫描件或空文档"
+			parseResult = &object.DocumentParseResult{
+				Status: object.DocumentParseStatusEmpty,
+				Error:  "文档已上传但未提取到文本内容，可能是扫描件或空文档",
+			}
 		} else {
-			finalParseStatus = object.DocumentParseStatusSuccess
-			documentText = parsedText
+			parseResult = &object.DocumentParseResult{
+				Status: object.DocumentParseStatusSuccess,
+				Text:   parsedText,
+			}
 		}
 	}
 
-	// Phase 6: Apply final parse status to both Task and Resource
-	switch finalParseStatus {
-	case object.DocumentParseStatusSuccess:
-		task.SetDocumentParseSuccess(documentText)
-	case object.DocumentParseStatusFailed:
-		task.SetDocumentParseFailed(finalParseError)
-	case object.DocumentParseStatusEmpty:
-		task.SetDocumentParseEmpty(finalParseError)
-	case object.DocumentParseStatusUnsupported:
-		task.SetDocumentUnsupported(finalParseError)
+	// Phase 5: Sync status to both Task and Resource atomically
+	uploadInfo := &object.DocumentUploadInfo{
+		FileName:     fileName,
+		MimeType:     fileMimeType,
+		FileType:     detectedType,
+		FileUrl:      fileUrl,
+		ResourceId:   resourceId,
+		FileSize:     fileSize,
+		TypeSource:   typeDetection.Source,
+		TypeConflict: typeDetection.Conflict,
+		ConflictMsg:  typeDetection.ConflictMessage,
 	}
-
-	// Sync parse status back to resource for traceability
-	if resourceId != "" {
-		_, updateResErr := object.UpdateResourceParseStatus(resourceId, finalParseStatus, finalParseError)
-		if updateResErr != nil {
-			logs.Warning("Failed to update resource parse status: %v", updateResErr)
-		}
-	}
-
-	// Re-apply type detection fields (SetDocument* may not preserve them for unsupported)
-	task.DocumentFileType = detectedType
-	task.DocumentTypeSource = typeDetection.Source
-	task.DocumentTypeConflict = typeDetection.Conflict
-	task.DocumentConflictMsg = typeDetection.ConflictMessage
-
-	// Phase 7: Persist and return unified response
-	_, err = object.UpdateTask(taskId, task)
-	if err != nil {
-		c.ResponseError(err.Error())
+	syncErr := object.SyncDocumentStatus(taskId, task, uploadInfo, parseResult)
+	if syncErr != nil {
+		c.ResponseError(syncErr.Error())
 		return
 	}
 
+	// Phase 6: Return unified response
 	resp := task.BuildDocumentStatusResponse(&object.DocumentTypeDetectionExtra{
 		FileNameExt: typeDetection.FileNameExt,
 		MimeTypeExt: typeDetection.MimeTypeExt,
