@@ -132,10 +132,6 @@ func (p *OpenRouterModelProvider) QueryText(question string, writer io.Writer, h
 	client := p.getProxyClientFromToken()
 
 	ctx := context.Background()
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
-		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
-	}
 
 	model := p.subType
 	if model == "" {
@@ -168,6 +164,11 @@ func (p *OpenRouterModelProvider) QueryText(question string, writer io.Writer, h
 
 	temperature := p.temperature
 	topP := p.topP
+
+	ssew, err := GetSSEEventWriter(writer, lang)
+	if err != nil {
+		return nil, err
+	}
 
 	respStream, err := client.CreateChatCompletionStream(
 		ctx,
@@ -215,14 +216,12 @@ func (p *OpenRouterModelProvider) QueryText(question string, writer io.Writer, h
 			}
 		}
 
-		if _, err = fmt.Fprintf(writer, "event: message\ndata: %s\n\n", data); err != nil {
+		if err = ssew.WriteSSEEvent("message", data); err != nil {
 			return nil, err
 		}
 
 		// save the response for token count
 		_, _ = responseStringBuilder.WriteString(data)
-
-		flusher.Flush()
 	}
 
 	modelResult, err := getDefaultModelResult(p.subType, question, responseStringBuilder.String())

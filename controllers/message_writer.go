@@ -22,96 +22,10 @@ import (
 	"strings"
 
 	"github.com/beego/beego/context"
+	"github.com/the-open-agent/openagent/model"
 )
 
-type sseFrame struct {
-	event string
-	data  string
-}
-
-type sseBuffer struct {
-	raw []byte
-}
-
-func newSSEBuffer() *sseBuffer {
-	return &sseBuffer{raw: make([]byte, 0, 4096)}
-}
-
-func (b *sseBuffer) Write(p []byte) {
-	b.raw = append(b.raw, p...)
-}
-
-func (b *sseBuffer) ReadFrames() []sseFrame {
-	var frames []sseFrame
-	for {
-		idx := bytes.Index(b.raw, []byte("\n\n"))
-		if idx == -1 {
-			break
-		}
-		frameBytes := b.raw[:idx]
-		b.raw = b.raw[idx+2:]
-
-		if len(frameBytes) == 0 {
-			continue
-		}
-
-		frame := parseSSEFrame(frameBytes)
-		if frame.event != "" || frame.data != "" {
-			frames = append(frames, frame)
-		}
-	}
-	return frames
-}
-
-func (b *sseBuffer) Remaining() []byte {
-	return b.raw
-}
-
-func parseSSEFrame(frameBytes []byte) sseFrame {
-	frame := sseFrame{}
-	lines := bytes.Split(frameBytes, []byte("\n"))
-	var dataLines []string
-
-	for _, line := range lines {
-		if len(line) == 0 {
-			continue
-		}
-		if line[0] == ':' {
-			continue
-		}
-
-		sepIdx := bytes.Index(line, []byte(": "))
-		if sepIdx == -1 {
-			sepIdx = bytes.IndexByte(line, ':')
-			if sepIdx == -1 {
-				continue
-			}
-		}
-
-		field := string(line[:sepIdx])
-		var value string
-		if sepIdx+1 < len(line) && line[sepIdx+1] == ' ' {
-			value = string(line[sepIdx+2:])
-		} else {
-			value = string(line[sepIdx+1:])
-		}
-
-		switch field {
-		case "event":
-			frame.event = value
-		case "data":
-			dataLines = append(dataLines, value)
-		}
-	}
-
-	frame.data = strings.Join(dataLines, "\n")
-
-	if frame.event == "" && len(dataLines) > 0 {
-		frame.event = "message"
-	}
-
-	return frame
-}
+var _ model.SSEEventWriter = (*RefinedWriter)(nil)
 
 func encodeSSEFrame(eventType, data string) []byte {
 	if eventType == "" {
@@ -134,7 +48,6 @@ func encodeSSEFrame(eventType, data string) []byte {
 type RefinedWriter struct {
 	context.Response
 	writerCleaner Cleaner
-	sseBuf        *sseBuffer
 	buf           []byte
 	messageBuf    []byte
 	reasonBuf     []byte
@@ -146,7 +59,6 @@ func newRefinedWriter(w context.Response) *RefinedWriter {
 	return &RefinedWriter{
 		Response:      w,
 		writerCleaner: *NewCleaner(6),
-		sseBuf:        newSSEBuffer(),
 		buf:           []byte{},
 		messageBuf:    []byte{},
 		reasonBuf:     []byte{},
@@ -157,37 +69,33 @@ func newRefinedWriter(w context.Response) *RefinedWriter {
 
 func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 	originalLen := len(p)
-
 	if len(p) > 0 && p[0] == ':' {
-		n, err = w.ResponseWriter.Write(p)
+		_, err = w.ResponseWriter.Write(p)
 		if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 			flusher.Flush()
 		}
 		return originalLen, err
 	}
-
-	w.sseBuf.Write(p)
-	frames := w.sseBuf.ReadFrames()
-
-	for _, frame := range frames {
-		if err := w.processFrame(frame); err != nil {
-			return originalLen, err
-		}
+	_, err = w.ResponseWriter.Write(p)
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
 	}
-
-	return originalLen, nil
+	return originalLen, err
 }
 
-func (w *RefinedWriter) processFrame(frame sseFrame) error {
-	eventType := frame.event
-	data := frame.data
+func (w *RefinedWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
 
+func (w *RefinedWriter) WriteSSEEvent(eventType string, data string) error {
 	if eventType == "" {
 		eventType = "message"
 	}
 
 	if eventType == "tool-delta" || eventType == "tool-start" {
-		return w.flushFrame(eventType, data, false)
+		return w.writeSSEFrameToResponse(eventType, data)
 	}
 
 	w.buf = append(w.buf, []byte(data)...)
@@ -206,48 +114,41 @@ func (w *RefinedWriter) processFrame(frame sseFrame) error {
 	}
 
 	if eventType == "tool" || eventType == "search" {
-		return w.flushFrame(eventType, data, true)
+		return w.writeSSEFrameToResponse(eventType, data)
 	}
 
 	if w.writerCleaner.cleaned == false && w.writerCleaner.dataTimes < w.writerCleaner.bufferSize {
 		w.writerCleaner.AddData(data)
 		if w.writerCleaner.dataTimes == w.writerCleaner.bufferSize {
 			cleanedData := w.writerCleaner.GetCleanedData()
-			return w.flushFrame(eventType, cleanedData, true)
+			return w.flushCleanedEvent(eventType, cleanedData)
 		}
 		return nil
 	}
 
-	return w.flushFrame(eventType, data, true)
+	return w.flushCleanedEvent(eventType, data)
 }
 
-func (w *RefinedWriter) flushFrame(eventType, data string, useCleaner bool) error {
-	if useCleaner {
-		switch eventType {
-		case "message", "reason":
-			fmt.Print(data)
-			jsonData, err := ConvertMessageDataToJSON(data)
-			if err != nil {
-				return err
-			}
-			_, err = w.ResponseWriter.Write(encodeSSEFrame(eventType, string(jsonData)))
-			if err != nil {
-				return err
-			}
-		default:
-			fmt.Print(data)
-			_, err := w.ResponseWriter.Write(encodeSSEFrame(eventType, data))
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		_, err := w.ResponseWriter.Write(encodeSSEFrame(eventType, data))
+func (w *RefinedWriter) flushCleanedEvent(eventType, data string) error {
+	switch eventType {
+	case "message", "reason":
+		fmt.Print(data)
+		jsonData, err := ConvertMessageDataToJSON(data)
 		if err != nil {
 			return err
 		}
+		return w.writeSSEFrameToResponse(eventType, string(jsonData))
+	default:
+		fmt.Print(data)
+		return w.writeSSEFrameToResponse(eventType, data)
 	}
+}
 
+func (w *RefinedWriter) writeSSEFrameToResponse(eventType, data string) error {
+	_, err := w.ResponseWriter.Write(encodeSSEFrame(eventType, data))
+	if err != nil {
+		return err
+	}
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
@@ -255,24 +156,6 @@ func (w *RefinedWriter) flushFrame(eventType, data string, useCleaner bool) erro
 }
 
 func (w *RefinedWriter) FlushRemaining() error {
-	remaining := w.sseBuf.Remaining()
-	if len(remaining) == 0 {
-		return nil
-	}
-
-	frameStr := string(remaining)
-	frame := sseFrame{}
-
-	if strings.HasPrefix(frameStr, "event:") {
-		frame = parseSSEFrame(remaining)
-	} else {
-		frame.event = "message"
-		frame.data = frameStr
-	}
-
-	if frame.data != "" || frame.event != "" {
-		return w.processFrame(frame)
-	}
 	return nil
 }
 
@@ -297,10 +180,10 @@ func (w *RefinedWriter) SearchString() string {
 }
 
 type Cleaner struct {
-	dataTimes  int      // Number of times data is added
-	buffer     []string // Buffer of tokens
-	bufferSize int      // Size of the buffer
-	cleaned    bool     // Whether the data has been cleaned
+	dataTimes  int
+	buffer     []string
+	bufferSize int
+	cleaned    bool
 }
 
 func NewCleaner(bufferSize int) *Cleaner {

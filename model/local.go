@@ -159,18 +159,15 @@ func (p *LocalModelProvider) CalculatePrice(modelResult *ModelResult, lang strin
 }
 
 func flushDataAzure(data string, writer io.Writer, lang string) error {
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
-		return fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
+	ssew, err := GetSSEEventWriter(writer, lang)
+	if err != nil {
+		return err
 	}
 	for _, runeValue := range data {
 		char := string(runeValue)
-		_, err := fmt.Fprintf(writer, "event: message\ndata: %s\n\n", char)
-		if err != nil {
+		if err := ssew.WriteSSEEvent("message", char); err != nil {
 			return err
 		}
-
-		flusher.Flush()
 
 		delta := 0
 		if !unicode.In(runeValue, unicode.Latin) {
@@ -200,27 +197,19 @@ func flushDataAzure(data string, writer io.Writer, lang string) error {
 }
 
 func flushDataOpenai(data string, writer io.Writer, lang string) error {
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
-		return fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
-	}
-	if _, err := fmt.Fprintf(writer, "event: message\ndata: %s\n\n", data); err != nil {
+	ssew, err := GetSSEEventWriter(writer, lang)
+	if err != nil {
 		return err
 	}
-	flusher.Flush()
-	return nil
+	return ssew.WriteSSEEvent("message", data)
 }
 
 func flushDataThink(data string, eventType string, writer io.Writer, lang string) error {
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
-		return fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
-	}
-	if _, err := fmt.Fprintf(writer, "event: %s\ndata: %s\n\n", eventType, data); err != nil {
+	ssew, err := GetSSEEventWriter(writer, lang)
+	if err != nil {
 		return err
 	}
-	flusher.Flush()
-	return nil
+	return ssew.WriteSSEEvent(eventType, data)
 }
 
 func (p *LocalModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {

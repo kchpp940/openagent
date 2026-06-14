@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -144,17 +143,13 @@ func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, histo
 	}
 	stream := client.Messages.NewStreaming(context.TODO(), messageParams)
 
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
-		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
+	ssew, err := GetSSEEventWriter(writer, lang)
+	if err != nil {
+		return nil, err
 	}
 
 	flushData := func(event string, data string) error {
-		if _, err := fmt.Fprintf(writer, "event: %s\ndata: %s\n\n", event, data); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
+		return ssew.WriteSSEEvent(event, data)
 	}
 
 	modelResult := &ModelResult{}
@@ -189,7 +184,7 @@ func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, histo
 	}
 	modelResult.TotalTokenCount = modelResult.PromptTokenCount + modelResult.ResponseTokenCount
 
-	err := p.calculatePrice(modelResult, lang)
+	err = p.calculatePrice(modelResult, lang)
 	if err != nil {
 		return nil, err
 	}

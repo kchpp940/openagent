@@ -261,7 +261,10 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 			select {
 			case <-ticker.C:
 				mu.Lock()
-				if flusher, ok := writer.(http.Flusher); ok {
+				if ssew, ok := writer.(SSEEventWriter); ok {
+					_, _ = ssew.Write([]byte(":keepalive\n\n"))
+					ssew.Flush()
+				} else if flusher, ok := writer.(http.Flusher); ok {
 					_, _ = fmt.Fprint(writer, ":keepalive\n\n")
 					flusher.Flush()
 				}

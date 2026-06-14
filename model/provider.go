@@ -22,8 +22,48 @@ import (
 	"strings"
 	"time"
 
+	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/proxy"
 )
+
+type SSEEventWriter interface {
+	io.Writer
+	http.Flusher
+	WriteSSEEvent(eventType string, data string) error
+}
+
+func GetSSEEventWriter(writer io.Writer, lang string) (SSEEventWriter, error) {
+	if ssew, ok := writer.(SSEEventWriter); ok {
+		return ssew, nil
+	}
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
+	}
+	return &fallbackSSEWriter{writer: writer, flusher: flusher}, nil
+}
+
+type fallbackSSEWriter struct {
+	writer  io.Writer
+	flusher http.Flusher
+}
+
+func (w *fallbackSSEWriter) Write(p []byte) (int, error) {
+	return w.writer.Write(p)
+}
+
+func (w *fallbackSSEWriter) Flush() {
+	w.flusher.Flush()
+}
+
+func (w *fallbackSSEWriter) WriteSSEEvent(eventType string, data string) error {
+	_, err := fmt.Fprintf(w.writer, "event: %s\ndata: %s\n\n", eventType, data)
+	if err != nil {
+		return err
+	}
+	w.flusher.Flush()
+	return nil
+}
 
 // DryRunPrefix is a special prefix that triggers model providers to estimate
 // token count and price without actually calling the AI model APIs.
