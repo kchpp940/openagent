@@ -126,34 +126,6 @@ func (ts *ToolSet) HydrateFromMetadata(id string, md ToolIdMetadata) bool {
 	return true
 }
 
-func (ts *ToolSet) HydrateFromToolDescriptions() int {
-	if ts == nil {
-		return 0
-	}
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	count := 0
-	for _, pt := range ts.Tools {
-		if pt == nil {
-			continue
-		}
-		cleanDesc, md, ok := ExtractMetadataFromDescription(pt.Description)
-		if !ok {
-			continue
-		}
-		pt.Description = cleanDesc
-		if ts.toolIdToMeta == nil {
-			ts.toolIdToMeta = make(map[string]ToolIdMetadata)
-		}
-		if _, exists := ts.toolIdToMeta[pt.Name]; !exists {
-			ts.toolIdToMeta[pt.Name] = md
-			RegisterToolIdMetadata(pt.Name, md)
-			count++
-		}
-	}
-	return count
-}
-
 func (ts *ToolSet) AddServerTools(serverName string, tools []*protocol.Tool, conn *client.Client) error {
 	if ts == nil {
 		return errors.New("ToolSet is nil")
@@ -180,7 +152,6 @@ func (ts *ToolSet) AddServerTools(serverName string, tools []*protocol.Tool, con
 		md := ToolIdMetadata{ServerName: serverName, ToolName: t.Name}
 		toolCopy := *t
 		toolCopy.Name = toolId
-		toolCopy.Description = EmbedMetadataInDescription(toolCopy.Description, md)
 		ts.Tools = append(ts.Tools, &toolCopy)
 		ts.toolIdToMeta[toolId] = md
 		RegisterToolIdMetadata(toolId, md)
@@ -213,7 +184,6 @@ func (ts *ToolSet) AddBuiltinTools(builtinReg *tool.ToolRegistry) {
 		md := ToolIdMetadata{ServerName: "", ToolName: pt.Name}
 		toolCopy := *pt
 		toolCopy.Name = toolId
-		toolCopy.Description = EmbedMetadataInDescription(toolCopy.Description, md)
 		alreadyExists := false
 		for _, existing := range ts.Tools {
 			if existing != nil && existing.Name == toolId {
