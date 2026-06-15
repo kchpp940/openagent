@@ -374,7 +374,8 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, error) {
 		}
 		filtered := make([]*Skill, 0, len(allSkills))
 		for _, s := range allSkills {
-			if IsCapabilityFailed(s.LatestCapabilityStatus) {
+			avail, err := GetSkillCapabilityAvailability(s)
+			if err != nil || avail.IsBlocked() {
 				continue
 			}
 			filtered = append(filtered, s)
@@ -392,7 +393,8 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, error) {
 		if s == nil {
 			continue
 		}
-		if IsCapabilityFailed(s.LatestCapabilityStatus) {
+		avail, err := GetSkillCapabilityAvailability(s)
+		if err != nil || avail.IsBlocked() {
 			continue
 		}
 

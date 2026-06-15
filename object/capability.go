@@ -16,12 +16,15 @@ package object
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +42,7 @@ const (
 	CapabilityStatusWarning CapabilityStatus = "warning"
 	CapabilityStatusFail    CapabilityStatus = "fail"
 	CapabilityStatusSkipped CapabilityStatus = "skipped"
+	CapabilityStatusPending CapabilityStatus = "pending"
 )
 
 type CapabilityCheckItem struct {
@@ -788,58 +792,85 @@ func SaveToolCapabilityStatus(owner, name string, status CapabilityStatus) error
 }
 
 // AsyncTriggerServerCapabilityCheck runs a capability check in a background
-// goroutine and persists the overall status. Safe to fire-and-forget.
+// goroutine and persists the full result. Safe to fire-and-forget.
 func AsyncTriggerServerCapabilityCheck(s *Server, lang string) {
 	if s == nil || s.Owner == "" || s.Name == "" {
 		return
 	}
+	configHash := ComputeServerConfigHash(s)
+	owner := s.Owner
+	name := s.Name
+	srv := *s // copy
+
 	go func() {
 		defer func() {
 			_ = recover()
 		}()
+		_ = SetCapabilityPending(owner, name, "server", configHash)
+		_ = SaveServerCapabilityStatus(owner, name, CapabilityStatusPending)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result := NewServerCapabilityChecker(s).Check(ctx, lang)
+		result := NewServerCapabilityChecker(&srv).Check(ctx, lang)
 		if result != nil {
-			_ = SaveServerCapabilityStatus(s.Owner, s.Name, result.OverallStatus)
+			_ = PersistCapabilityCheckResult(owner, name, "server", configHash, result)
+			_ = SaveServerCapabilityStatus(owner, name, result.OverallStatus)
 		}
 	}()
 }
 
 // AsyncTriggerSkillCapabilityCheck runs a capability check in a background
-// goroutine and persists the overall status. Safe to fire-and-forget.
+// goroutine and persists the full result. Safe to fire-and-forget.
 func AsyncTriggerSkillCapabilityCheck(s *Skill, lang string) {
 	if s == nil || s.Owner == "" || s.Name == "" {
 		return
 	}
+	configHash := ComputeSkillConfigHash(s)
+	owner := s.Owner
+	name := s.Name
+	sk := *s // copy
+
 	go func() {
 		defer func() {
 			_ = recover()
 		}()
+		_ = SetCapabilityPending(owner, name, "skill", configHash)
+		_ = SaveSkillCapabilityStatus(owner, name, CapabilityStatusPending)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		result := NewSkillCapabilityChecker(s).Check(ctx, lang)
+		result := NewSkillCapabilityChecker(&sk).Check(ctx, lang)
 		if result != nil {
-			_ = SaveSkillCapabilityStatus(s.Owner, s.Name, result.OverallStatus)
+			_ = PersistCapabilityCheckResult(owner, name, "skill", configHash, result)
+			_ = SaveSkillCapabilityStatus(owner, name, result.OverallStatus)
 		}
 	}()
 }
 
 // AsyncTriggerToolCapabilityCheck runs a capability check in a background
-// goroutine and persists the overall status. Safe to fire-and-forget.
+// goroutine and persists the full result. Safe to fire-and-forget.
 func AsyncTriggerToolCapabilityCheck(t *Tool, lang string) {
 	if t == nil || t.Owner == "" || t.Name == "" {
 		return
 	}
+	configHash := ComputeToolConfigHash(t)
+	owner := t.Owner
+	name := t.Name
+	tl := *t // copy
+
 	go func() {
 		defer func() {
 			_ = recover()
 		}()
+		_ = SetCapabilityPending(owner, name, "tool", configHash)
+		_ = SaveToolCapabilityStatus(owner, name, CapabilityStatusPending)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result := NewToolCapabilityChecker(t).Check(ctx, lang)
+		result := NewToolCapabilityChecker(&tl).Check(ctx, lang)
 		if result != nil {
-			_ = SaveToolCapabilityStatus(t.Owner, t.Name, result.OverallStatus)
+			_ = PersistCapabilityCheckResult(owner, name, "tool", configHash, result)
+			_ = SaveToolCapabilityStatus(owner, name, result.OverallStatus)
 		}
 	}()
 }
@@ -866,14 +897,17 @@ func IsCapabilityWarning(status string) bool {
 // ---------------------------------------------------------------------------
 
 type CapabilityViolation struct {
-	Kind   string `json:"kind"`   // "server" | "skill" | "tool"
-	Name   string `json:"name"`   // entity name
-	Status string `json:"status"` // e.g. "fail" | "warning"
+	Kind       string `json:"kind"`       // "server" | "skill" | "tool"
+	Name       string `json:"name"`       // entity name
+	Status     string `json:"status"`     // "pass" | "warning" | "fail" | "pending" | "never_checked" | "config_stale"
+	Reason     string `json:"reason"`     // human-readable reason
+	ConfigHash string `json:"configHash"` // last checked config hash
 }
 
 // ValidateStoreCapabilities loads every server/skill/tool referenced by the
-// store and partitions them into failed and warning lists.
-func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warnings []CapabilityViolation, err error) {
+// store and partitions them into blocked (failed/pending/never_checked/
+// config_stale) and warning lists.
+func ValidateStoreCapabilities(store *Store, lang string) (blocked []CapabilityViolation, warnings []CapabilityViolation, err error) {
 	if store == nil {
 		return nil, nil, nil
 	}
@@ -889,10 +923,32 @@ func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warn
 			return nil, nil, e
 		}
 		if srv != nil {
-			if IsCapabilityFailed(srv.LatestCapabilityStatus) {
-				failed = append(failed, CapabilityViolation{Kind: "server", Name: srv.Name, Status: srv.LatestCapabilityStatus})
-			} else if IsCapabilityWarning(srv.LatestCapabilityStatus) {
-				warnings = append(warnings, CapabilityViolation{Kind: "server", Name: srv.Name, Status: srv.LatestCapabilityStatus})
+			avail, e := GetServerCapabilityAvailability(srv)
+			if e != nil {
+				return nil, nil, e
+			}
+			if avail.IsBlocked() {
+				status := string(avail.Status)
+				if !avail.HasRecord {
+					status = "never_checked"
+				} else if avail.ConfigStale {
+					status = "config_stale"
+				}
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "server",
+					Name:       srv.Name,
+					Status:     status,
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else if avail.Status == CapabilityStatusWarning {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "server",
+					Name:       srv.Name,
+					Status:     string(avail.Status),
+					Reason:     i18n.Translate(lang, "capability:Some warnings detected"),
+					ConfigHash: avail.ConfigHash,
+				})
 			}
 		}
 	}
@@ -908,10 +964,32 @@ func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warn
 			if s == nil || s.State != "Active" {
 				continue
 			}
-			if IsCapabilityFailed(s.LatestCapabilityStatus) {
-				failed = append(failed, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
-			} else if IsCapabilityWarning(s.LatestCapabilityStatus) {
-				warnings = append(warnings, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			avail, e := GetSkillCapabilityAvailability(s)
+			if e != nil {
+				return nil, nil, e
+			}
+			if avail.IsBlocked() {
+				status := string(avail.Status)
+				if !avail.HasRecord {
+					status = "never_checked"
+				} else if avail.ConfigStale {
+					status = "config_stale"
+				}
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "skill",
+					Name:       s.Name,
+					Status:     status,
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else if avail.Status == CapabilityStatusWarning {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "skill",
+					Name:       s.Name,
+					Status:     string(avail.Status),
+					Reason:     i18n.Translate(lang, "capability:Some warnings detected"),
+					ConfigHash: avail.ConfigHash,
+				})
 			}
 		}
 	} else {
@@ -927,10 +1005,32 @@ func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warn
 			if s == nil {
 				continue
 			}
-			if IsCapabilityFailed(s.LatestCapabilityStatus) {
-				failed = append(failed, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
-			} else if IsCapabilityWarning(s.LatestCapabilityStatus) {
-				warnings = append(warnings, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			avail, e := GetSkillCapabilityAvailability(s)
+			if e != nil {
+				return nil, nil, e
+			}
+			if avail.IsBlocked() {
+				status := string(avail.Status)
+				if !avail.HasRecord {
+					status = "never_checked"
+				} else if avail.ConfigStale {
+					status = "config_stale"
+				}
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "skill",
+					Name:       s.Name,
+					Status:     status,
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else if avail.Status == CapabilityStatusWarning {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "skill",
+					Name:       s.Name,
+					Status:     string(avail.Status),
+					Reason:     i18n.Translate(lang, "capability:Some warnings detected"),
+					ConfigHash: avail.ConfigHash,
+				})
 			}
 		}
 	}
@@ -946,10 +1046,32 @@ func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warn
 			if t == nil || t.State != "Active" {
 				continue
 			}
-			if IsCapabilityFailed(t.LatestCapabilityStatus) {
-				failed = append(failed, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
-			} else if IsCapabilityWarning(t.LatestCapabilityStatus) {
-				warnings = append(warnings, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			avail, e := GetToolCapabilityAvailability(t)
+			if e != nil {
+				return nil, nil, e
+			}
+			if avail.IsBlocked() {
+				status := string(avail.Status)
+				if !avail.HasRecord {
+					status = "never_checked"
+				} else if avail.ConfigStale {
+					status = "config_stale"
+				}
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     status,
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else if avail.Status == CapabilityStatusWarning {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     string(avail.Status),
+					Reason:     i18n.Translate(lang, "capability:Some warnings detected"),
+					ConfigHash: avail.ConfigHash,
+				})
 			}
 		}
 	} else {
@@ -965,13 +1087,360 @@ func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warn
 			if t == nil {
 				continue
 			}
-			if IsCapabilityFailed(t.LatestCapabilityStatus) {
-				failed = append(failed, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
-			} else if IsCapabilityWarning(t.LatestCapabilityStatus) {
-				warnings = append(warnings, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			avail, e := GetToolCapabilityAvailability(t)
+			if e != nil {
+				return nil, nil, e
+			}
+			if avail.IsBlocked() {
+				status := string(avail.Status)
+				if !avail.HasRecord {
+					status = "never_checked"
+				} else if avail.ConfigStale {
+					status = "config_stale"
+				}
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     status,
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else if avail.Status == CapabilityStatusWarning {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     string(avail.Status),
+					Reason:     i18n.Translate(lang, "capability:Some warnings detected"),
+					ConfigHash: avail.ConfigHash,
+				})
 			}
 		}
 	}
 
-	return failed, warnings, nil
+	return blocked, warnings, nil
+}
+
+// ---------------------------------------------------------------------------
+// CapabilityCheckRecord – persisted full check result
+// ---------------------------------------------------------------------------
+
+type CapabilityCheckRecord struct {
+	Owner       string                `xorm:"varchar(100) notnull pk" json:"owner"`
+	Name        string                `xorm:"varchar(100) notnull pk" json:"name"`
+	Kind        string                `xorm:"varchar(50) notnull pk" json:"kind"` // "server" | "skill" | "tool"
+	ConfigHash  string                `xorm:"varchar(64)" json:"configHash"`
+	Status      string                `xorm:"varchar(50)" json:"status"` // "pending" | "pass" | "warning" | "fail"
+	Items       []*CapabilityCheckItem `xorm:"mediumtext" json:"items"`
+	DryRunOutput string               `xorm:"mediumtext" json:"dryRunOutput,omitempty"`
+	ToolNames   []string              `xorm:"mediumtext" json:"toolNames,omitempty"`
+	ErrorMessage string               `xorm:"varchar(1000)" json:"errorMessage,omitempty"`
+	CheckedAt   string                `xorm:"varchar(100)" json:"checkedAt"`
+	CreatedAt   string                `xorm:"varchar(100)" json:"createdAt"`
+}
+
+func (r *CapabilityCheckRecord) TableName() string {
+	return "capability_check_record"
+}
+
+// ---------------------------------------------------------------------------
+// Config hash helpers – produce a stable hash of the entity's effective config
+// ---------------------------------------------------------------------------
+
+// ComputeServerConfigHash returns a short hash of the server fields that
+// materially affect capability checks.
+func ComputeServerConfigHash(s *Server) string {
+	if s == nil {
+		return ""
+	}
+	fields := map[string]interface{}{
+		"url":         s.Url,
+		"token":       s.Token,
+		"testContent": s.TestContent,
+		"isDefault":   s.IsDefault,
+	}
+	return hashFields(fields)
+}
+
+// ComputeSkillConfigHash returns a short hash of the skill fields that
+// materially affect capability checks.
+func ComputeSkillConfigHash(s *Skill) string {
+	if s == nil {
+		return ""
+	}
+	refStr := ""
+	if s.References != nil {
+		if b, err := json.Marshal(s.References); err == nil {
+			refStr = string(b)
+		}
+	}
+	fields := map[string]interface{}{
+		"content":    s.Content,
+		"references": refStr,
+		"state":      s.State,
+	}
+	return hashFields(fields)
+}
+
+// ComputeToolConfigHash returns a short hash of the tool fields that
+// materially affect capability checks.
+func ComputeToolConfigHash(t *Tool) string {
+	if t == nil {
+		return ""
+	}
+	fields := map[string]interface{}{
+		"type":         t.Type,
+		"subType":      t.SubType,
+		"state":        t.State,
+		"clientId":     t.ClientId,
+		"clientSecret": t.ClientSecret,
+		"providerUrl":  t.ProviderUrl,
+		"mode":         t.Mode,
+		"testContent":  t.TestContent,
+		"enableProxy":  t.EnableProxy,
+	}
+	return hashFields(fields)
+}
+
+func hashFields(fields map[string]interface{}) string {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	for _, k := range keys {
+		sb.WriteString(k)
+		sb.WriteString("=")
+		switch v := fields[k].(type) {
+		case string:
+			sb.WriteString(v)
+		case bool:
+			sb.WriteString(fmt.Sprintf("%t", v))
+		default:
+			sb.WriteString(fmt.Sprintf("%v", v))
+		}
+		sb.WriteString(";")
+	}
+	sum := md5.Sum([]byte(sb.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+// ---------------------------------------------------------------------------
+// CapabilityCheckRecord CRUD
+// ---------------------------------------------------------------------------
+
+func GetCapabilityCheckRecord(owner, name, kind string) (*CapabilityCheckRecord, error) {
+	record := CapabilityCheckRecord{Owner: owner, Name: name, Kind: kind}
+	existed, err := adapter.engine.Get(&record)
+	if err != nil {
+		return nil, err
+	}
+	if !existed {
+		return nil, nil
+	}
+	return &record, nil
+}
+
+func AddCapabilityCheckRecord(record *CapabilityCheckRecord) error {
+	record.CreatedAt = util.GetCurrentTime()
+	if record.CheckedAt == "" {
+		record.CheckedAt = record.CreatedAt
+	}
+	_, err := adapter.engine.Insert(record)
+	return err
+}
+
+func UpdateCapabilityCheckRecord(record *CapabilityCheckRecord) error {
+	record.CheckedAt = util.GetCurrentTime()
+	_, err := adapter.engine.Where("owner = ? AND name = ? AND kind = ?",
+		record.Owner, record.Name, record.Kind).AllCols().Update(record)
+	return err
+}
+
+func UpsertCapabilityCheckRecord(record *CapabilityCheckRecord) error {
+	existing, err := GetCapabilityCheckRecord(record.Owner, record.Name, record.Kind)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return AddCapabilityCheckRecord(record)
+	}
+	record.CreatedAt = existing.CreatedAt
+	return UpdateCapabilityCheckRecord(record)
+}
+
+// ---------------------------------------------------------------------------
+// Pending-state helpers
+// ---------------------------------------------------------------------------
+
+// SetCapabilityPending writes (or upserts) a pending record for the entity.
+// This is called *before* the asynchronous check starts so callers know a
+// check is in flight.
+func SetCapabilityPending(owner, name, kind, configHash string) error {
+	now := util.GetCurrentTime()
+	record := &CapabilityCheckRecord{
+		Owner:      owner,
+		Name:       name,
+		Kind:       kind,
+		ConfigHash: configHash,
+		Status:     string(CapabilityStatusPending),
+		Items:      []*CapabilityCheckItem{},
+		CheckedAt:  now,
+	}
+	return UpsertCapabilityCheckRecord(record)
+}
+
+// PersistCapabilityCheckResult writes the full check result back to the
+// database, replacing the pending record.
+func PersistCapabilityCheckResult(owner, name, kind, configHash string, result *CapabilityCheckResult) error {
+	if result == nil {
+		return nil
+	}
+	now := util.GetCurrentTime()
+	dryRunOutput := ""
+	for _, item := range result.Items {
+		if strings.Contains(item.Id, "dry_run") && item.Message != "" {
+			dryRunOutput = item.Message
+			break
+		}
+	}
+	record := &CapabilityCheckRecord{
+		Owner:        owner,
+		Name:         name,
+		Kind:         kind,
+		ConfigHash:   configHash,
+		Status:       string(result.OverallStatus),
+		Items:        result.Items,
+		DryRunOutput: dryRunOutput,
+		ToolNames:    result.ToolNames,
+		CheckedAt:    now,
+	}
+	return UpsertCapabilityCheckRecord(record)
+}
+
+// ---------------------------------------------------------------------------
+// Entity capability status query helpers
+// ---------------------------------------------------------------------------
+
+// CapabilityAvailability summarises the availability of a single entity,
+// suitable for blocking / allowing decisions.
+type CapabilityAvailability struct {
+	Status       CapabilityStatus `json:"status"`       // pending | pass | warning | fail | "" (never checked)
+	ConfigHash   string           `json:"configHash"`   // last checked config hash
+	CheckedAt    string           `json:"checkedAt"`    // last check time
+	HasRecord    bool             `json:"hasRecord"`    // whether a record exists at all
+	ConfigStale  bool             `json:"configStale"`  // record's hash != current config
+	Record       *CapabilityCheckRecord `json:"record,omitempty"` // full record (optional)
+}
+
+// IsBlocked returns true when the entity must not be used:
+//   - never checked
+//   - check in progress (pending)
+//   - failed
+//   - config has changed since last check
+func (a *CapabilityAvailability) IsBlocked() bool {
+	if !a.HasRecord {
+		return true
+	}
+	if a.Status == CapabilityStatusFail || a.Status == CapabilityStatusPending || a.Status == "" {
+		return true
+	}
+	if a.ConfigStale {
+		return true
+	}
+	return false
+}
+
+// BlockReason returns a human-readable reason why the entity is blocked, or
+// empty string if it is not blocked.
+func (a *CapabilityAvailability) BlockReason(lang string) string {
+	if !a.HasRecord {
+		return i18n.Translate(lang, "capability:Never checked – run capability check first")
+	}
+	switch a.Status {
+	case CapabilityStatusPending:
+		return i18n.Translate(lang, "capability:Capability check in progress – please wait")
+	case CapabilityStatusFail:
+		return i18n.Translate(lang, "capability:Capability check failed – fix issues first")
+	}
+	if a.ConfigStale {
+		return i18n.Translate(lang, "capability:Config has changed – re-check availability")
+	}
+	return ""
+}
+
+// GetServerCapabilityAvailability loads the persisted check record (if any)
+// and compares its config hash to the current server.
+func GetServerCapabilityAvailability(s *Server) (*CapabilityAvailability, error) {
+	if s == nil {
+		return &CapabilityAvailability{}, nil
+	}
+	record, err := GetCapabilityCheckRecord(s.Owner, s.Name, "server")
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return &CapabilityAvailability{HasRecord: false}, nil
+	}
+	currentHash := ComputeServerConfigHash(s)
+	avail := &CapabilityAvailability{
+		Status:      CapabilityStatus(record.Status),
+		ConfigHash:  record.ConfigHash,
+		CheckedAt:   record.CheckedAt,
+		HasRecord:   true,
+		ConfigStale: record.ConfigHash != currentHash,
+		Record:      record,
+	}
+	return avail, nil
+}
+
+// GetSkillCapabilityAvailability loads the persisted check record (if any)
+// and compares its config hash to the current skill.
+func GetSkillCapabilityAvailability(s *Skill) (*CapabilityAvailability, error) {
+	if s == nil {
+		return &CapabilityAvailability{}, nil
+	}
+	record, err := GetCapabilityCheckRecord(s.Owner, s.Name, "skill")
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return &CapabilityAvailability{HasRecord: false}, nil
+	}
+	currentHash := ComputeSkillConfigHash(s)
+	avail := &CapabilityAvailability{
+		Status:      CapabilityStatus(record.Status),
+		ConfigHash:  record.ConfigHash,
+		CheckedAt:   record.CheckedAt,
+		HasRecord:   true,
+		ConfigStale: record.ConfigHash != currentHash,
+		Record:      record,
+	}
+	return avail, nil
+}
+
+// GetToolCapabilityAvailability loads the persisted check record (if any)
+// and compares its config hash to the current tool.
+func GetToolCapabilityAvailability(t *Tool) (*CapabilityAvailability, error) {
+	if t == nil {
+		return &CapabilityAvailability{}, nil
+	}
+	record, err := GetCapabilityCheckRecord(t.Owner, t.Name, "tool")
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return &CapabilityAvailability{HasRecord: false}, nil
+	}
+	currentHash := ComputeToolConfigHash(t)
+	avail := &CapabilityAvailability{
+		Status:      CapabilityStatus(record.Status),
+		ConfigHash:  record.ConfigHash,
+		CheckedAt:   record.CheckedAt,
+		HasRecord:   true,
+		ConfigStale: record.ConfigHash != currentHash,
+		Record:      record,
+	}
+	return avail, nil
 }

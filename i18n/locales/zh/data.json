@@ -341,6 +341,13 @@
     "Some warnings detected": "检测到部分警告",
     "All checks passed": "所有检查通过",
     "Store blocked by failed capabilities": "无法保存 Store：以下工具可用性检查失败，必须先修复：%s",
-    "Store capability warnings": "Store 已保存，但以下工具存在警告：%s"
+    "Store capability warnings": "Store 已保存，但以下工具存在警告：%s",
+    "Never checked – run capability check first": "从未检查 — 请先运行可用性检查",
+    "Capability check in progress – please wait": "可用性检查进行中 — 请稍候",
+    "Capability check failed – fix issues first": "可用性检查失败 — 请先修复问题",
+    "Config has changed – re-check availability": "配置已变更 — 请重新检查可用性",
+    "Store blocked by capability checks": "无法保存 Store：以下工具不可用（状态：%s）：%s",
+    "pending": "检查中",
+    "config_stale": "配置已变更"
   }
 }

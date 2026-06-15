@@ -341,6 +341,13 @@
     "Some warnings detected": "Some warnings detected",
     "All checks passed": "All checks passed",
     "Store blocked by failed capabilities": "Store cannot be saved: the following tools have failed availability checks and must be fixed first: %s",
-    "Store capability warnings": "Store saved, but the following tools have warnings: %s"
+    "Store capability warnings": "Store saved, but the following tools have warnings: %s",
+    "Never checked – run capability check first": "Never checked – run capability check first",
+    "Capability check in progress – please wait": "Capability check in progress – please wait",
+    "Capability check failed – fix issues first": "Capability check failed – fix issues first",
+    "Config has changed – re-check availability": "Config has changed – re-check availability",
+    "Store blocked by capability checks": "Store cannot be saved: the following tools are not available (status: %s): %s",
+    "pending": "checking",
+    "config_stale": "config changed"
   }
 }

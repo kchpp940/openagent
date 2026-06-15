@@ -39,7 +39,8 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err == nil {
 			toolNames = make([]string, 0, len(allTools))
 			for _, t := range allTools {
-				if IsCapabilityFailed(t.LatestCapabilityStatus) {
+				avail, err := GetToolCapabilityAvailability(t)
+				if err != nil || avail.IsBlocked() {
 					continue
 				}
 				toolNames = append(toolNames, t.Name)
@@ -53,7 +54,8 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err != nil || t == nil {
 			continue
 		}
-		if IsCapabilityFailed(t.LatestCapabilityStatus) {
+		avail, err := GetToolCapabilityAvailability(t)
+		if err != nil || avail.IsBlocked() {
 			continue
 		}
 		tp, err := tool.New(getToolConfig(t), lang)

@@ -224,12 +224,16 @@ func DeleteServer(server *Server) (bool, error) {
 // BuildMcpToolSet opens a connection to the server's URL and returns an
 // McpToolSet with the allowed tools and the open connection.
 // The caller must close all connections in McpToolSet.Connections when done.
-func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
+func (s *Server) BuildMcpToolSet(lang string) (*mcp.ToolSet, error) {
 	if s.Url == "" {
 		return nil, nil
 	}
-	if IsCapabilityFailed(s.LatestCapabilityStatus) {
-		return nil, fmt.Errorf("MCP server %q failed the latest availability check; please fix its configuration and re-check before using it", s.Name)
+	avail, err := GetServerCapabilityAvailability(s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check availability for MCP server %q: %w", s.Name, err)
+	}
+	if avail.IsBlocked() {
+		return nil, fmt.Errorf("MCP server %q is not available: %s", s.Name, avail.BlockReason(lang))
 	}
 
 	cli, err := mcp.NewClient(s.Url, s.Token)
@@ -288,7 +292,7 @@ func GetServerMcpToolSet(owner, serverName, lang string) (*mcp.ToolSet, error) {
 	if server == nil {
 		return nil, fmt.Errorf(i18n.Translate(lang, "object:The MCP server: %s is not found"), serverName)
 	}
-	return server.BuildMcpToolSet()
+	return server.BuildMcpToolSet(lang)
 }
 
 // TestMcpServer connects to the server URL and calls the tool specified in

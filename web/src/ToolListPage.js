@@ -279,8 +279,10 @@ class ToolListPage extends BaseListPage {
       expandedRowRender: (record) => (
         <div style={{padding: "0 24px 8px"}}>
           <CapabilityCheckPanel
-            config={record}
+            recordFn={ToolBackend.getToolCapabilityRecord}
+            recordParams={[record.owner, record.name]}
             checkFn={ToolBackend.checkToolCapability}
+            config={record}
             title={i18next.t("capability:Check availability")}
             description={i18next.t("capability:Check availability desc")}
             triggerKey={this.state.capabilityCheckKeys[record.name]}

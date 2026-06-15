@@ -103,3 +103,13 @@ export function checkToolCapability(tool) {
     body: JSON.stringify(newTool),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getToolCapabilityRecord(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/get-tool-capability-record?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

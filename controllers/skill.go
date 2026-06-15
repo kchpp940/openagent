@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -223,4 +224,33 @@ func (c *ApiController) CheckSkillCapability() {
 	checker := object.NewSkillCapabilityChecker(&skill)
 	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
 	c.ResponseOk(result)
+}
+
+// GetSkillCapabilityRecord
+// @Title GetSkillCapabilityRecord
+// @Tag Skill API
+// @Description get the latest persisted capability check record for a skill
+// @Param id query string true "The skill id (owner/name)"
+// @Success 200 {object} object.CapabilityAvailability The capability availability info
+// @router /get-skill-capability-record [get]
+func (c *ApiController) GetSkillCapabilityRecord() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	skill, err := object.GetSkillByOwnerAndName(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if skill == nil {
+		c.ResponseError(fmt.Sprintf("skill: %s not found", name))
+		return
+	}
+
+	avail, err := object.GetSkillCapabilityAvailability(skill)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(avail)
 }

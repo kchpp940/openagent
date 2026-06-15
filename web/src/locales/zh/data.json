@@ -996,6 +996,14 @@
     "Not checked": "未检查",
     "Unavailable": "不可用",
     "Needs attention": "需关注",
+    "Refresh": "刷新",
+    "Checking": "检查中",
+    "Check in progress": "可用性检查进行中",
+    "Check in progress desc": "可用性检查正在后台运行，请稍候...",
+    "Config changed": "配置已变更",
+    "Config changed desc": "自上次检查后配置已变更，结果可能已失效，请刷新获取最新状态",
+    "Not checked yet": "尚未检查",
+    "Not checked yet desc": "尚未运行可用性检查，请运行检查以验证配置",
     "Store blocked by failed capabilities": "无法保存 Store：以下工具可用性检查失败，必须先修复：%s",
     "Store capability warnings": "Store 已保存，但以下工具存在警告：%s"
   }

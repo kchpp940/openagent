@@ -31,6 +31,8 @@ function StatusIcon({status}) {
     return <ExclamationCircleOutlined style={{color: "#faad14"}} />;
   case "skipped":
     return <ExclamationCircleOutlined style={{color: "#8c8c8c"}} />;
+  case "pending":
+    return <SafetyCertificateOutlined style={{color: "#1890ff", animation: "pulse 2s infinite"}} />;
   default:
     return null;
   }
@@ -55,6 +57,10 @@ function StatusTag({status}) {
     case "skipped":
       color = "default";
       text = i18next.t("capability:Skipped");
+      break;
+    case "pending":
+      color = "processing";
+      text = i18next.t("capability:Checking");
       break;
   }
   return <Tag color={color} style={{margin: 0}}>{text}</Tag>;
@@ -212,23 +218,56 @@ class CapabilityCheckPanel extends React.Component {
     this.state = {
       checking: false,
       result: null,
+      availability: null,
       expandedKeys: ["checks"],
     };
   }
 
   componentDidMount() {
-    if (this.props.autoRun !== false && this.props.config) {
+    if (this.props.recordFn) {
+      this.loadRecord();
+    } else if (this.props.autoRun !== false && this.props.config && this.props.checkFn) {
       this.runChecks();
     }
   }
 
   componentDidUpdate(prevProps) {
     if (this.props.triggerKey !== undefined &&
-        this.props.triggerKey !== prevProps.triggerKey &&
-        this.props.config) {
-      this.runChecks();
+        this.props.triggerKey !== prevProps.triggerKey) {
+      if (this.props.recordFn) {
+        this.loadRecord();
+      } else if (this.props.config && this.props.checkFn) {
+        this.runChecks();
+      }
     }
   }
+
+  loadRecord = () => {
+    const {recordFn, recordParams} = this.props;
+    if (!recordFn) return;
+
+    this.setState({checking: true});
+
+    const args = recordParams || [];
+    recordFn(...args)
+      .then((res) => {
+        if (res.status === "ok") {
+          const avail = res.data;
+          this.setState({
+            availability: avail,
+            result: avail && avail.record ? avail.record.result : null,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState({checking: false});
+      });
+  };
 
   runChecks = () => {
     const {config, checkFn} = this.props;
@@ -253,8 +292,13 @@ class CapabilityCheckPanel extends React.Component {
   };
 
   render() {
-    const {title, description, toolNames} = this.props;
-    const {checking, result, expandedKeys} = this.state;
+    const {title, description, toolNames, recordFn, checkFn} = this.props;
+    const {checking, result, expandedKeys, availability} = this.state;
+
+    const hasRecord = !!(availability && availability.hasRecord);
+    const configStale = !!(availability && availability.configStale);
+    const isPending = availability && availability.status === "pending";
+    const neverChecked = availability && !availability.hasRecord;
 
     const cardHeadStyle = {background: "transparent", borderBottom: "none", fontWeight: 600, fontSize: "15px", fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"};
     const sectionCardStyle = {
@@ -286,14 +330,26 @@ class CapabilityCheckPanel extends React.Component {
         style={sectionCardStyle}
         headStyle={cardHeadStyle}
         extra={
-          <Button
-            type="primary"
-            icon={checking ? null : <ReloadOutlined />}
-            loading={checking}
-            onClick={this.runChecks}
-          >
-            {result ? i18next.t("capability:Re-check") : i18next.t("capability:Run checks")}
-          </Button>
+          recordFn ? (
+            <Button
+              type="primary"
+              icon={checking ? null : <ReloadOutlined />}
+              loading={checking}
+              onClick={this.loadRecord}
+            >
+              {hasRecord ? i18next.t("capability:Refresh") : i18next.t("capability:Run checks")}
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={checking ? null : <ReloadOutlined />}
+              loading={checking}
+              onClick={this.runChecks}
+              disabled={!checkFn}
+            >
+              {result ? i18next.t("capability:Re-check") : i18next.t("capability:Run checks")}
+            </Button>
+          )
         }
       >
         {checking && (
@@ -301,6 +357,36 @@ class CapabilityCheckPanel extends React.Component {
             type="info"
             showIcon
             message={i18next.t("capability:Checking...")}
+            style={{marginBottom: "16px"}}
+          />
+        )}
+
+        {!checking && isPending && (
+          <Alert
+            type="info"
+            showIcon
+            message={i18next.t("capability:Check in progress")}
+            description={i18next.t("capability:Check in progress desc")}
+            style={{marginBottom: "16px"}}
+          />
+        )}
+
+        {!checking && configStale && (
+          <Alert
+            type="warning"
+            showIcon
+            message={i18next.t("capability:Config changed")}
+            description={i18next.t("capability:Config changed desc")}
+            style={{marginBottom: "16px"}}
+          />
+        )}
+
+        {!checking && neverChecked && (
+          <Alert
+            type="warning"
+            showIcon
+            message={i18next.t("capability:Not checked yet")}
+            description={i18next.t("capability:Not checked yet desc")}
             style={{marginBottom: "16px"}}
           />
         )}

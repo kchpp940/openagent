@@ -229,18 +229,27 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
-	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	lang := c.GetAcceptLanguage()
+	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
-	if len(failed) > 0 {
-		names := make([]string, 0, len(failed))
-		for _, v := range failed {
-			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+	if len(blocked) > 0 {
+		names := make([]string, 0, len(blocked))
+		for _, v := range blocked {
+			names = append(names, fmt.Sprintf("[%s] %s (%s)", v.Kind, v.Name, v.Reason))
 		}
-		lang := c.GetAcceptLanguage()
-		c.ResponseError(fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by failed capabilities"), strings.Join(names, ", ")))
+		statusSummary := formatBlockedStatusSummary(blocked)
+		c.Data["json"] = Response{
+			Status: "error",
+			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by capability checks"), statusSummary, strings.Join(names, "; ")),
+			Data: map[string]interface{}{
+				"blocked":  blocked,
+				"warnings": warnings,
+			},
+		}
+		c.ServeJSON()
 		return
 	}
 
@@ -255,7 +264,6 @@ func (c *ApiController) UpdateStore() {
 		for _, v := range warnings {
 			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
 		}
-		lang := c.GetAcceptLanguage()
 		c.Data["json"] = Response{
 			Status: "ok",
 			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
@@ -264,6 +272,7 @@ func (c *ApiController) UpdateStore() {
 		c.ServeJSON()
 		return
 	}
+	_ = lang
 
 	if !oldStore.IsDefault && store.IsDefault {
 		stores, err := object.GetStores(store.Owner)
@@ -334,18 +343,27 @@ func (c *ApiController) AddStore() {
 		}
 	}
 
-	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	lang := c.GetAcceptLanguage()
+	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
-	if len(failed) > 0 {
-		names := make([]string, 0, len(failed))
-		for _, v := range failed {
-			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+	if len(blocked) > 0 {
+		names := make([]string, 0, len(blocked))
+		for _, v := range blocked {
+			names = append(names, fmt.Sprintf("[%s] %s (%s)", v.Kind, v.Name, v.Reason))
 		}
-		lang := c.GetAcceptLanguage()
-		c.ResponseError(fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by failed capabilities"), strings.Join(names, ", ")))
+		statusSummary := formatBlockedStatusSummary(blocked)
+		c.Data["json"] = Response{
+			Status: "error",
+			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by capability checks"), statusSummary, strings.Join(names, "; ")),
+			Data: map[string]interface{}{
+				"blocked":  blocked,
+				"warnings": warnings,
+			},
+		}
+		c.ServeJSON()
 		return
 	}
 
@@ -360,7 +378,6 @@ func (c *ApiController) AddStore() {
 		for _, v := range warnings {
 			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
 		}
-		lang := c.GetAcceptLanguage()
 		c.Data["json"] = Response{
 			Status: "ok",
 			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
@@ -369,6 +386,7 @@ func (c *ApiController) AddStore() {
 		c.ServeJSON()
 		return
 	}
+	_ = lang
 
 	c.ResponseOk(success)
 }
@@ -575,13 +593,26 @@ func (c *ApiController) CheckStoreCapability() {
 		c.ResponseError(err.Error())
 		return
 	}
-	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	lang := c.GetAcceptLanguage()
+	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 	c.ResponseOk(map[string]interface{}{
-		"failed":   failed,
+		"blocked":  blocked,
 		"warnings": warnings,
 	})
+}
+
+func formatBlockedStatusSummary(blocked []object.CapabilityViolation) string {
+	seen := map[string]bool{}
+	var statuses []string
+	for _, v := range blocked {
+		if !seen[v.Status] {
+			seen[v.Status] = true
+			statuses = append(statuses, v.Status)
+		}
+	}
+	return strings.Join(statuses, ", ")
 }

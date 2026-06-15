@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -228,4 +229,33 @@ func (c *ApiController) CheckToolCapability() {
 	checker := object.NewToolCapabilityChecker(&t)
 	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
 	c.ResponseOk(result)
+}
+
+// GetToolCapabilityRecord
+// @Title GetToolCapabilityRecord
+// @Tag Tool API
+// @Description get the latest persisted capability check record for a tool
+// @Param id query string true "The tool id (owner/name)"
+// @Success 200 {object} object.CapabilityAvailability The capability availability info
+// @router /get-tool-capability-record [get]
+func (c *ApiController) GetToolCapabilityRecord() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	t, err := object.GetToolByOwnerAndName(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if t == nil {
+		c.ResponseError(fmt.Sprintf("tool: %s not found", name))
+		return
+	}
+
+	avail, err := object.GetToolCapabilityAvailability(t)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(avail)
 }
