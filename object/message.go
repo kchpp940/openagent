@@ -71,7 +71,6 @@ type Message struct {
 	Suggestions       []Suggestion         `json:"suggestions"`
 	ToolCalls         []model.ToolCall     `xorm:"mediumtext" json:"toolCalls"`
 	SearchResults     []model.SearchResult `xorm:"mediumtext" json:"searchResults"`
-	ExecutionSteps    string               `xorm:"mediumtext" json:"executionSteps"`
 
 	TransactionId string `xorm:"varchar(100)" json:"transactionId"`
 }

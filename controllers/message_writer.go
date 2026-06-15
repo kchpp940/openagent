@@ -16,33 +16,26 @@ package controllers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/beego/beego/context"
-	"github.com/the-open-agent/openagent/model"
-	"github.com/the-open-agent/openagent/object"
 )
-
-var _ model.ExecutionRecorder = (*RefinedWriter)(nil)
 
 type RefinedWriter struct {
 	context.Response
-	writerCleaner   Cleaner
-	buf             []byte
-	messageBuf      []byte
-	reasonBuf       []byte
-	toolBuf         []byte
-	searchBuf       []byte
-	ExecutionTracer *object.ExecutionTracer
-	reasonStepId    string
+	writerCleaner Cleaner
+	buf           []byte
+	messageBuf    []byte
+	reasonBuf     []byte
+	toolBuf       []byte
+	searchBuf     []byte
 }
 
-func newRefinedWriter(w context.Response, tracer *object.ExecutionTracer) *RefinedWriter {
-	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}, tracer, ""}
+func newRefinedWriter(w context.Response) *RefinedWriter {
+	return &RefinedWriter{w, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
 }
 
 func (w *RefinedWriter) Write(p []byte) (n int, err error) {
@@ -104,16 +97,13 @@ func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 		w.messageBuf = append(w.messageBuf, []byte(data)...)
 	} else if eventType == "reason" {
 		w.reasonBuf = append(w.reasonBuf, []byte(data)...)
-		w.recordReasoningStep(data)
 	} else if eventType == "tool" {
 		if len(w.toolBuf) > 0 {
 			w.toolBuf = append(w.toolBuf, '\n')
 		}
 		w.toolBuf = append(w.toolBuf, []byte(data)...)
-		w.recordToolResult(data)
 	} else if eventType == "search" {
 		w.searchBuf = append(w.searchBuf, []byte(data)...)
-		w.recordSearchResult(data)
 	}
 
 	if eventType == "tool" || eventType == "search" {
@@ -123,15 +113,6 @@ func (w *RefinedWriter) Write(p []byte) (n int, err error) {
 			flusher.Flush()
 		}
 		return n, err
-	}
-
-	if eventType == "reason" {
-		fmt.Print(data)
-		jsonData, err := ConvertMessageDataToJSON(data)
-		if err != nil {
-			return 0, err
-		}
-		return w.ResponseWriter.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", eventType, jsonData)))
 	}
 
 	if w.writerCleaner.cleaned == false && w.writerCleaner.dataTimes < w.writerCleaner.bufferSize {
@@ -237,244 +218,4 @@ func checkFirstPart(firstPart, secondPart string, keywords []string) string {
 		}
 	}
 	return firstPart
-}
-
-func (w *RefinedWriter) persistTracer() {
-	if w == nil || w.ExecutionTracer == nil {
-		return
-	}
-	w.ExecutionTracer.Persist()
-}
-
-func (w *RefinedWriter) StartModelCall(modelName string, round int) string {
-	if w.ExecutionTracer == nil {
-		return ""
-	}
-	title := "Model Call"
-	if modelName != "" {
-		title = fmt.Sprintf("Model: %s", modelName)
-	}
-	metadata := map[string]interface{}{
-		"round": round,
-	}
-	if modelName != "" {
-		metadata["model"] = modelName
-	}
-	stepId := w.ExecutionTracer.StartStep(object.StepTypeModelStart, title, metadata)
-	w.persistTracer()
-	return stepId
-}
-
-func (w *RefinedWriter) EndModelCall(stepId string, tokenCount int, err error) {
-	if w.ExecutionTracer == nil || stepId == "" {
-		return
-	}
-	status := object.StepStatusCompleted
-	output := fmt.Sprintf("%d tokens", tokenCount)
-	errorMsg := ""
-	if err != nil {
-		status = object.StepStatusFailed
-		errorMsg = err.Error()
-	}
-	w.ExecutionTracer.EndStep(stepId, status, output, errorMsg)
-	w.persistTracer()
-}
-
-func (w *RefinedWriter) StartToolCall(toolName string, arguments string, round int) string {
-	if w.ExecutionTracer == nil {
-		return ""
-	}
-	title := fmt.Sprintf("Tool: %s", toolName)
-	metadata := map[string]interface{}{
-		"round":    round,
-		"toolName": toolName,
-	}
-	stepId := w.ExecutionTracer.StartStep(object.StepTypeToolCallStart, title, metadata)
-	w.ExecutionTracer.UpdateStep(stepId, map[string]interface{}{
-		"input": truncateString(arguments, 500),
-	})
-	w.persistTracer()
-	return stepId
-}
-
-func (w *RefinedWriter) EndToolCall(stepId string, result string, err error) {
-	if w.ExecutionTracer == nil || stepId == "" {
-		return
-	}
-	status := object.StepStatusCompleted
-	output := truncateString(result, 1000)
-	errorMsg := ""
-	if err != nil {
-		status = object.StepStatusFailed
-		errorMsg = err.Error()
-	}
-	w.ExecutionTracer.UpdateStep(stepId, map[string]interface{}{
-		"status": status,
-		"type":   object.StepTypeToolCallEnd,
-	})
-	w.ExecutionTracer.EndStep(stepId, status, output, errorMsg)
-	w.persistTracer()
-}
-
-func (w *RefinedWriter) AddInfoStep(title string, description string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, title, description, nil)
-	w.persistTracer()
-}
-
-func (w *RefinedWriter) AddErrorStep(title string, errMsg string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	w.ExecutionTracer.AddSimpleStep(object.StepTypeError, title, errMsg, nil)
-	w.persistTracer()
-}
-
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-func (w *RefinedWriter) recordReasoningStep(data string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	if w.reasonStepId == "" {
-		w.reasonStepId = w.ExecutionTracer.StartStep(object.StepTypeReasoning, "Reasoning", map[string]interface{}{
-			"mode": "streaming",
-		})
-	}
-	w.ExecutionTracer.UpdateStep(w.reasonStepId, map[string]interface{}{
-		"output": truncateString(string(w.reasonBuf), 2000),
-	})
-}
-
-func (w *RefinedWriter) recordSearchResult(data string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	var searchResults []model.SearchResult
-	if err := json.Unmarshal([]byte(data), &searchResults); err == nil && len(searchResults) > 0 {
-		summary := fmt.Sprintf("%d search results", len(searchResults))
-		metadata := make([]map[string]interface{}, 0, len(searchResults))
-		for _, r := range searchResults {
-			metadata = append(metadata, map[string]interface{}{
-				"title":    r.Title,
-				"url":      r.URL,
-				"siteName": r.SiteName,
-				"index":    r.Index,
-			})
-		}
-		w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, "Web Search", summary, map[string]interface{}{
-			"results": metadata,
-		})
-		w.persistTracer()
-	}
-}
-
-func (w *RefinedWriter) recordToolResult(data string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	var toolCall model.ToolCall
-	if err := json.Unmarshal([]byte(data), &toolCall); err == nil {
-		if toolCall.IsError {
-			errorMsg := toolCall.Content
-			if errorMsg == "" {
-				errorMsg = "Tool call failed"
-			}
-			w.ExecutionTracer.AddSimpleStep(object.StepTypeToolError, fmt.Sprintf("Tool Error: %s", toolCall.Name), errorMsg, map[string]interface{}{
-				"toolName":  toolCall.Name,
-				"arguments": toolCall.Arguments,
-			})
-			w.persistTracer()
-		}
-	}
-}
-
-func (w *RefinedWriter) WriteVectorEvent(vectorScores []object.VectorScore, knowledge []*model.RawMessage) error {
-	if w.ExecutionTracer != nil && (len(vectorScores) > 0 || len(knowledge) > 0) {
-		total := len(knowledge)
-		if len(vectorScores) > total {
-			total = len(vectorScores)
-		}
-		chunks := make([]map[string]interface{}, 0, total)
-		for i := 0; i < total; i++ {
-			item := map[string]interface{}{
-				"index": i,
-			}
-			if i < len(knowledge) {
-				item["text"] = truncateString(knowledge[i].Text, 500)
-				item["tokenCount"] = knowledge[i].TextTokenCount
-			}
-			if i < len(vectorScores) {
-				item["vector"] = vectorScores[i].Vector
-				item["score"] = vectorScores[i].Score
-			}
-			chunks = append(chunks, item)
-		}
-		summary := fmt.Sprintf("%d chunks", total)
-		w.ExecutionTracer.AddSimpleStep(object.StepTypeKnowledgeRetrieval, "Knowledge Retrieval", summary, map[string]interface{}{
-			"chunks": chunks,
-		})
-		w.persistTracer()
-	}
-	bytes, err := json.Marshal(vectorScores)
-	if err != nil {
-		return err
-	}
-	_, err = w.ResponseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return err
-}
-
-func (w *RefinedWriter) RecordStreamingError(errorText string) {
-	if w.ExecutionTracer == nil {
-		return
-	}
-	w.ExecutionTracer.AddSimpleStep(object.StepTypeError, "Streaming Error", errorText, nil)
-	w.persistTracer()
-}
-
-func (w *RefinedWriter) FinalizeReasoningStep() {
-	if w.ExecutionTracer == nil || w.reasonStepId == "" {
-		return
-	}
-	w.ExecutionTracer.EndStep(w.reasonStepId, object.StepStatusCompleted, fmt.Sprintf("%d chars", len(w.reasonBuf)), "")
-	w.reasonStepId = ""
-	w.persistTracer()
-}
-
-func (w *RefinedWriter) WriteMyErrorEvent(errorText string) error {
-	if w.ExecutionTracer != nil {
-		w.ExecutionTracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
-		w.persistTracer()
-	}
-	sseData, err := ConvertMessageDataToJSON(errorText)
-	if err != nil {
-		return err
-	}
-	_, err = w.ResponseWriter.Write([]byte(fmt.Sprintf("event: myerror\ndata: %s\n\n", sseData)))
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return err
-}
-
-func (w *RefinedWriter) WriteEndEvent(data string) error {
-	if w.ExecutionTracer != nil {
-		w.ExecutionTracer.AddSimpleStep(object.StepTypeInfo, "Stream Ended", data, nil)
-		w.persistTracer()
-	}
-	_, err := w.ResponseWriter.Write([]byte(fmt.Sprintf("event: end\ndata: %s\n\n", data)))
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return err
 }

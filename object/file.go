@@ -16,6 +16,7 @@ package object
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -31,11 +32,73 @@ import (
 type FileStatus string
 
 const (
-	FileStatusPending    FileStatus = "Pending"
-	FileStatusProcessing FileStatus = "Processing"
-	FileStatusFinished   FileStatus = "Finished"
-	FileStatusError      FileStatus = "Error"
+	FileStatusPending       FileStatus = "Pending"
+	FileStatusParsing       FileStatus = "Parsing"
+	FileStatusVectorizing   FileStatus = "Vectorizing"
+	FileStatusProcessing    FileStatus = "Processing"
+	FileStatusFinished      FileStatus = "Finished"
+	FileStatusPartialFailed FileStatus = "PartialFailed"
+	FileStatusError         FileStatus = "Error"
 )
+
+type ChunkDiffType string
+
+const (
+	ChunkDiffAdded     ChunkDiffType = "Added"
+	ChunkDiffDeleted   ChunkDiffType = "Deleted"
+	ChunkDiffModified  ChunkDiffType = "Modified"
+	ChunkDiffUnchanged ChunkDiffType = "Unchanged"
+)
+
+type ChunkDiff struct {
+	Index   int           `json:"index"`
+	Type    ChunkDiffType `json:"type"`
+	OldText string        `json:"oldText,omitempty"`
+	NewText string        `json:"newText,omitempty"`
+	OldHash string        `json:"oldHash,omitempty"`
+	NewHash string        `json:"newHash,omitempty"`
+}
+
+type FileVersionDiff struct {
+	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
+	Name        string `xorm:"varchar(512) notnull pk" json:"name"`
+	Version     int    `xorm:"notnull pk" json:"version"`
+	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
+
+	FromParseVersion int    `json:"fromParseVersion"`
+	ToParseVersion   int    `json:"toParseVersion"`
+	FromContentHash  string `xorm:"varchar(64)" json:"fromContentHash"`
+	ToContentHash    string `xorm:"varchar(64)" json:"toContentHash"`
+	FromChunkHash    string `xorm:"varchar(64)" json:"fromChunkHash"`
+	ToChunkHash      string `xorm:"varchar(64)" json:"toChunkHash"`
+
+	AddedCount     int `json:"addedCount"`
+	DeletedCount   int `json:"deletedCount"`
+	ModifiedCount  int `json:"modifiedCount"`
+	UnchangedCount int `json:"unchangedCount"`
+
+	AddedChunks    []ChunkDiff `xorm:"mediumtext" json:"addedChunks"`
+	DeletedChunks  []ChunkDiff `xorm:"mediumtext" json:"deletedChunks"`
+	ModifiedChunks []ChunkDiff `xorm:"mediumtext" json:"modifiedChunks"`
+
+	Status    FileStatus `xorm:"varchar(100)" json:"status"`
+	ErrorText string     `xorm:"mediumtext" json:"errorText"`
+}
+
+type FileParseVersion struct {
+	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
+	Name        string `xorm:"varchar(512) notnull pk" json:"name"`
+	Version     int    `xorm:"notnull pk" json:"version"`
+	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
+
+	ContentHash   string            `xorm:"varchar(64)" json:"contentHash"`
+	ChunkHash     string            `xorm:"varchar(64)" json:"chunkHash"`
+	VectorVersion int               `json:"vectorVersion"`
+	ChunkCount    int               `json:"chunkCount"`
+	ChunkHashes   map[string]string `xorm:"mediumtext" json:"chunkHashes"`
+	Status        FileStatus        `xorm:"varchar(100)" json:"status"`
+	ErrorText     string            `xorm:"mediumtext" json:"errorText"`
+}
 
 type File struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
@@ -51,6 +114,12 @@ type File struct {
 	VectorCount     int        `xorm:"-" json:"vectorCount"`
 	Status          FileStatus `xorm:"varchar(100)" json:"status"`
 	ErrorText       string     `xorm:"mediumtext" json:"errorText"`
+
+	ParseVersion  int              `json:"parseVersion"`
+	ContentHash   string           `xorm:"varchar(64)" json:"contentHash"`
+	ChunkHash     string           `xorm:"varchar(64)" json:"chunkHash"`
+	VectorVersion int              `json:"vectorVersion"`
+	LatestDiff    *FileVersionDiff `xorm:"-" json:"latestDiff,omitempty"`
 }
 
 func populateFileVectorCounts(files []*File) error {
@@ -347,6 +416,8 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 		Url:             fileUrl,
 		TokenCount:      0,
 		Status:          FileStatusPending,
+		ParseVersion:    0,
+		VectorVersion:   0,
 	}
 
 	_, err = AddFile(fileRecord)
@@ -355,4 +426,235 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 	}
 
 	return fileRecord, nil
+}
+
+func calculateHash(text string) string {
+	h := sha256.New()
+	h.Write([]byte(text))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func calculateChunksHash(chunks []string) string {
+	h := sha256.New()
+	for _, chunk := range chunks {
+		h.Write([]byte(chunk))
+		h.Write([]byte("\x00"))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func calculateChunkHashes(chunks []string) map[string]string {
+	hashes := make(map[string]string, len(chunks))
+	for i, chunk := range chunks {
+		key := fmt.Sprintf("%d", i)
+		hashes[key] = calculateHash(chunk)
+	}
+	return hashes
+}
+
+func getFileParseVersion(owner string, name string, version int) (*FileParseVersion, error) {
+	pv := FileParseVersion{Owner: owner, Name: name, Version: version}
+	existed, err := adapter.engine.Get(&pv)
+	if err != nil {
+		return nil, err
+	}
+	if existed {
+		return &pv, nil
+	}
+	return nil, nil
+}
+
+func GetLatestFileParseVersion(owner string, name string) (*FileParseVersion, error) {
+	var versions []*FileParseVersion
+	err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Desc("version").Limit(1).Find(&versions)
+	if err != nil {
+		return nil, err
+	}
+	if len(versions) > 0 {
+		return versions[0], nil
+	}
+	return nil, nil
+}
+
+func AddFileParseVersion(pv *FileParseVersion) (bool, error) {
+	affected, err := adapter.engine.Insert(pv)
+	if err != nil {
+		return false, err
+	}
+	return affected != 0, nil
+}
+
+func getFileVersionDiff(owner string, name string, version int) (*FileVersionDiff, error) {
+	diff := FileVersionDiff{Owner: owner, Name: name, Version: version}
+	existed, err := adapter.engine.Get(&diff)
+	if err != nil {
+		return nil, err
+	}
+	if existed {
+		return &diff, nil
+	}
+	return nil, nil
+}
+
+func GetLatestFileVersionDiff(owner string, name string) (*FileVersionDiff, error) {
+	var diffs []*FileVersionDiff
+	err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Desc("version").Limit(1).Find(&diffs)
+	if err != nil {
+		return nil, err
+	}
+	if len(diffs) > 0 {
+		return diffs[0], nil
+	}
+	return nil, nil
+}
+
+func GetFileVersionDiffs(owner string, name string) ([]*FileVersionDiff, error) {
+	var diffs []*FileVersionDiff
+	err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Desc("version").Find(&diffs)
+	if err != nil {
+		return nil, err
+	}
+	return diffs, nil
+}
+
+func GetFileParseVersions(owner string, name string) ([]*FileParseVersion, error) {
+	var versions []*FileParseVersion
+	err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Desc("version").Find(&versions)
+	if err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
+func AddFileVersionDiff(diff *FileVersionDiff) (bool, error) {
+	affected, err := adapter.engine.Insert(diff)
+	if err != nil {
+		return false, err
+	}
+	return affected != 0, nil
+}
+
+func UpdateFileVersionDiff(diff *FileVersionDiff) (bool, error) {
+	_, err := adapter.engine.ID(core.PK{diff.Owner, diff.Name, diff.Version}).AllCols().Update(diff)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func computeChunkDiff(oldChunks []string, newChunks []string) []ChunkDiff {
+	oldHashes := make([]string, len(oldChunks))
+	newHashes := make([]string, len(newChunks))
+	for i, c := range oldChunks {
+		oldHashes[i] = calculateHash(c)
+	}
+	for i, c := range newChunks {
+		newHashes[i] = calculateHash(c)
+	}
+
+	oldHashToIndex := make(map[string][]int)
+	for i, h := range oldHashes {
+		oldHashToIndex[h] = append(oldHashToIndex[h], i)
+	}
+
+	newHashToIndex := make(map[string][]int)
+	for i, h := range newHashes {
+		newHashToIndex[h] = append(newHashToIndex[h], i)
+	}
+
+	diffs := []ChunkDiff{}
+	usedOld := make(map[int]bool)
+	usedNew := make(map[int]bool)
+
+	for i, newHash := range newHashes {
+		if oldIndices, ok := oldHashToIndex[newHash]; ok && len(oldIndices) > 0 {
+			oldIdx := oldIndices[0]
+			oldHashToIndex[newHash] = oldIndices[1:]
+			usedOld[oldIdx] = true
+			usedNew[i] = true
+			diffs = append(diffs, ChunkDiff{
+				Index:   i,
+				Type:    ChunkDiffUnchanged,
+				OldText: oldChunks[oldIdx],
+				NewText: newChunks[i],
+				OldHash: oldHash,
+				NewHash: newHash,
+			})
+		}
+	}
+
+	for i, oldHash := range oldHashes {
+		if !usedOld[i] {
+			diffs = append(diffs, ChunkDiff{
+				Index:   i,
+				Type:    ChunkDiffDeleted,
+				OldText: oldChunks[i],
+				OldHash: oldHash,
+			})
+		}
+	}
+
+	for i, newHash := range newHashes {
+		if !usedNew[i] {
+			if oldIndices, ok := oldHashToIndex[newHash]; ok {
+				for _, oldIdx := range oldIndices {
+					if !usedOld[oldIdx] {
+						usedOld[oldIdx] = true
+						usedNew[i] = true
+						diffs = append(diffs, ChunkDiff{
+							Index:   i,
+							Type:    ChunkDiffModified,
+							OldText: oldChunks[oldIdx],
+							NewText: newChunks[i],
+							OldHash: oldHashes[oldIdx],
+							NewHash: newHash,
+						})
+						break
+					}
+				}
+			}
+			if !usedNew[i] {
+				diffs = append(diffs, ChunkDiff{
+					Index:   i,
+					Type:    ChunkDiffAdded,
+					NewText: newChunks[i],
+					NewHash: newHash,
+				})
+			}
+		}
+	}
+
+	sort.SliceStable(diffs, func(i, j int) bool {
+		return diffs[i].Index < diffs[j].Index
+	})
+
+	return diffs
+}
+
+func summarizeDiff(diffs []ChunkDiff, maxSamples int) (added, deleted, modified, unchanged []ChunkDiff) {
+	for _, d := range diffs {
+		switch d.Type {
+		case ChunkDiffAdded:
+			if len(added) < maxSamples {
+				added = append(added, d)
+			}
+		case ChunkDiffDeleted:
+			if len(deleted) < maxSamples {
+				deleted = append(deleted, d)
+			}
+		case ChunkDiffModified:
+			if len(modified) < maxSamples {
+				modified = append(modified, d)
+			}
+		case ChunkDiffUnchanged:
+			if len(unchanged) < maxSamples {
+				unchanged = append(unchanged, d)
+			}
+		}
+	}
+	return added, deleted, modified, unchanged
 }

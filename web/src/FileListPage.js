@@ -14,7 +14,7 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Image, Popconfirm, Table, Tooltip, Upload} from "antd";
+import {Button, Dropdown, Image, Menu, Popconfirm, Table, Tag, Tooltip, Upload} from "antd";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as Conf from "./Conf";
@@ -22,7 +22,7 @@ import * as FileBackend from "./backend/FileBackend";
 import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
 import i18next from "i18next";
-import {DeleteOutlined, NodeIndexOutlined, ReloadOutlined, UploadOutlined} from "@ant-design/icons";
+import {DeleteOutlined, DiffOutlined, NodeIndexOutlined, ReloadOutlined, UploadOutlined} from "@ant-design/icons";
 
 class FileListPage extends BaseListPage {
   constructor(props) {
@@ -141,6 +141,80 @@ class FileListPage extends BaseListPage {
           },
         }));
       });
+  }
+
+  refreshFileVectorsIncremental(index) {
+    this.setState(prevState => ({
+      refreshing: {
+        ...prevState.refreshing,
+        [index]: true,
+      },
+    }));
+    FileBackend.refreshFileVectorsIncremental(this.state.data[index])
+      .then((res) => {
+        if (res.status === "ok") {
+          const {success, diff} = res.data;
+          if (diff && (diff.addedCount > 0 || diff.deletedCount > 0 || diff.modifiedCount > 0)) {
+            Setting.showMessage("success", i18next.t("file:Incremental refresh completed") +
+              ` (${i18next.t("file:Added")}: ${diff.addedCount}, ` +
+              `${i18next.t("file:Deleted")}: ${diff.deletedCount}, ` +
+              `${i18next.t("file:Modified")}: ${diff.modifiedCount})`);
+          } else if (diff && diff.status === "Finished") {
+            Setting.showMessage("success", i18next.t("file:No changes detected, file is up to date"));
+          } else {
+            Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          }
+          this.fetch({pagination: this.state.pagination});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
+        }
+        this.setState(prevState => ({
+          refreshing: {
+            ...prevState.refreshing,
+            [index]: false,
+          },
+        }));
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
+        this.setState(prevState => ({
+          refreshing: {
+            ...prevState.refreshing,
+            [index]: false,
+          },
+        }));
+      });
+  }
+
+  getStatusTag(status) {
+    const statusMap = {
+      "Pending": {color: "default", text: i18next.t("file:Pending")},
+      "Parsing": {color: "processing", text: i18next.t("file:Parsing")},
+      "Vectorizing": {color: "processing", text: i18next.t("file:Vectorizing")},
+      "Processing": {color: "processing", text: i18next.t("file:Processing")},
+      "Finished": {color: "success", text: i18next.t("file:Finished")},
+      "PartialFailed": {color: "warning", text: i18next.t("file:Partial Failed")},
+      "Error": {color: "error", text: i18next.t("file:Error")},
+    };
+    const config = statusMap[status] || {color: "default", text: status};
+    return <Tag color={config.color}>{config.text}</Tag>;
+  }
+
+  viewVersionDiff(record) {
+    this.props.history.push(`/files/${record.owner}/${encodeURIComponent(record.name)}/diff`);
+  }
+
+  getRefreshMenu(index, record) {
+    return (
+      <Menu>
+        <Menu.Item key="full" onClick={() => this.refreshFileVectors(index)}>
+          <ReloadOutlined /> {i18next.t("file:Full Refresh")}
+        </Menu.Item>
+        <Menu.Item key="incremental" onClick={() => this.refreshFileVectorsIncremental(index)}>
+          <DiffOutlined /> {i18next.t("file:Incremental Refresh")}
+        </Menu.Item>
+      </Menu>
+    );
   }
 
   renderTable(files) {
@@ -269,6 +343,30 @@ class FileListPage extends BaseListPage {
         sorter: (a, b) => a.tokenCount - b.tokenCount,
       },
       {
+        title: i18next.t("general:Status"),
+        dataIndex: "status",
+        key: "status",
+        width: "130px",
+        sorter: (a, b) => (a.status || "").localeCompare(b.status || ""),
+        render: (text) => this.getStatusTag(text),
+      },
+      {
+        title: i18next.t("file:Parse Version"),
+        dataIndex: "parseVersion",
+        key: "parseVersion",
+        width: "120px",
+        sorter: (a, b) => (a.parseVersion || 0) - (b.parseVersion || 0),
+        render: (text) => text ? `v${text}` : "-",
+      },
+      {
+        title: i18next.t("file:Vector Version"),
+        dataIndex: "vectorVersion",
+        key: "vectorVersion",
+        width: "120px",
+        sorter: (a, b) => (a.vectorVersion || 0) - (b.vectorVersion || 0),
+        render: (text) => text ? `v${text}` : "-",
+      },
+      {
         title: i18next.t("general:Preview"),
         dataIndex: "url",
         key: "preview",
@@ -297,7 +395,7 @@ class FileListPage extends BaseListPage {
         title: i18next.t("general:Action"),
         dataIndex: "action",
         key: "action",
-        width: "160px",
+        width: "250px",
         fixed: "right",
         render: (text, record, index) => {
           return (
@@ -314,6 +412,15 @@ class FileListPage extends BaseListPage {
                       : record.name;
                     this.props.history.push(`/vectors?file=${encodeURIComponent(objectKey)}`);
                   }}
+                />
+              </Tooltip>
+              <Tooltip title={i18next.t("file:Version Compare")}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DiffOutlined />}
+                  style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
+                  onClick={() => this.viewVersionDiff(record)}
                 />
               </Tooltip>
               <Popconfirm
@@ -333,16 +440,21 @@ class FileListPage extends BaseListPage {
                 </Tooltip>
               </Popconfirm>
               {!Setting.isLocalAdminUser(this.props.account) ? null : (
-                <Tooltip title={i18next.t("general:Refresh Vectors")}>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<ReloadOutlined />}
-                    style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
-                    loading={this.state.refreshing[index]}
-                    onClick={() => this.refreshFileVectors(index)}
-                  />
-                </Tooltip>
+                <Dropdown
+                  overlay={() => this.getRefreshMenu(index, record)}
+                  trigger={["click"]}
+                  placement="bottomRight"
+                >
+                  <Tooltip title={i18next.t("general:Refresh Vectors")}>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
+                      loading={this.state.refreshing[index]}
+                    />
+                  </Tooltip>
+                </Dropdown>
               )}
             </div>
           );

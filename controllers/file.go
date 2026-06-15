@@ -242,6 +242,93 @@ func (c *ApiController) RefreshFileVectors() {
 	c.ResponseOk(ok)
 }
 
+// RefreshFileVectorsIncremental
+// @Title RefreshFileVectorsIncremental
+// @Tag File API
+// @Description incrementally refresh file vectors, only processing changed chunks
+// @Param body body object.File true "The details of the file object"
+// @Success 200 {object} controllers.Response The Response object
+// @router /refresh-file-vectors-incremental [post]
+func (c *ApiController) RefreshFileVectorsIncremental() {
+	var file object.File
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &file)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	diff, ok, err := object.RefreshFileVectorsIncremental(&file, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(map[string]interface{}{
+		"success": ok,
+		"diff":    diff,
+	})
+}
+
+// GetFileVersionDiffs
+// @Title GetFileVersionDiffs
+// @Tag File API
+// @Description get version diffs for a file
+// @Param id query string true "The id (owner/name) of the file"
+// @Success 200 {array} object.FileVersionDiff The Response object
+// @router /get-file-version-diffs [get]
+func (c *ApiController) GetFileVersionDiffs() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	diffs, err := object.GetFileVersionDiffs(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(diffs)
+}
+
+// GetLatestFileVersionDiff
+// @Title GetLatestFileVersionDiff
+// @Tag File API
+// @Description get latest version diff for a file
+// @Param id query string true "The id (owner/name) of the file"
+// @Success 200 {object} object.FileVersionDiff The Response object
+// @router /get-latest-file-version-diff [get]
+func (c *ApiController) GetLatestFileVersionDiff() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	diff, err := object.GetLatestFileVersionDiff(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(diff)
+}
+
+// GetFileParseVersions
+// @Title GetFileParseVersions
+// @Tag File API
+// @Description get parse versions for a file
+// @Param id query string true "The id (owner/name) of the file"
+// @Success 200 {array} object.FileParseVersion The Response object
+// @router /get-file-parse-versions [get]
+func (c *ApiController) GetFileParseVersions() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	versions, err := object.GetFileParseVersions(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(versions)
+}
+
 // UploadFile
 // @Title UploadFile
 // @Tag File API

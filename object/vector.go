@@ -181,6 +181,16 @@ func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, 
 	return affected != 0, nil
 }
 
+func GetVectorsByFile(owner string, storeName string, fileKey string) ([]*Vector, error) {
+	vectors := []*Vector{}
+	err := adapter.engine.Where("owner = ? AND store = ? AND file = ?", owner, storeName, fileKey).
+		Asc("index").Find(&vectors)
+	if err != nil {
+		return nil, err
+	}
+	return vectors, nil
+}
+
 func (vector *Vector) GetId() string {
 	return fmt.Sprintf("%s/%s", vector.Owner, vector.Name)
 }

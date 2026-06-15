@@ -138,47 +138,10 @@ func streamMessageAnswerJob(responseWriter http.ResponseWriter, request *http.Re
 }
 
 func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host string, lang string, signedIn bool, responseError func(string, ...interface{})) {
-	executionTracer := object.NewExecutionTracer(id)
-	var writer *RefinedWriter
-
-	saveExecutionSteps := func() {
-		if executionTracer == nil {
-			return
-		}
-		if writer != nil {
-			writer.FinalizeReasoningStep()
-		}
-		stepsJson, jsonErr := executionTracer.ToJSON()
-		if jsonErr != nil {
-			fmt.Printf("failed to marshal execution steps: %s\n", jsonErr.Error())
-			return
-		}
-		msg, getErr := object.GetMessage(id)
-		if getErr != nil || msg == nil {
-			fmt.Printf("saveExecutionSteps: cannot get message %s: %v\n", id, getErr)
-			return
-		}
-		if msg.ExecutionSteps == stepsJson {
-			return
-		}
-		msg.ExecutionSteps = stepsJson
-		if _, updateErr := object.UpdateMessage(id, msg, true); updateErr != nil {
-			fmt.Printf("failed to save execution steps: %s\n", updateErr.Error())
-		}
-	}
-	defer saveExecutionSteps()
-
-	responseErrorStream := func(msg *object.Message, errorText string) {
-		if executionTracer != nil {
-			executionTracer.AddSimpleStep(object.StepTypeError, "Generation Failed", errorText, nil)
-		}
-		if writer != nil {
-			_ = writer.WriteMyErrorEvent(errorText)
-		} else {
-			if err := writeMessageErrorStream(responseWriter, lang, msg, errorText); err != nil {
-				if responseError != nil {
-					responseError(err.Error())
-				}
+	responseErrorStream := func(message *object.Message, errorText string) {
+		if err := writeMessageErrorStream(responseWriter, lang, message, errorText); err != nil {
+			if responseError != nil {
+				responseError(err.Error())
 			}
 		}
 	}
@@ -386,7 +349,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		}
 	}
 
-	writer = newRefinedWriter(context.Response{ResponseWriter: responseWriter}, executionTracer)
+	writer := &RefinedWriter{context.Response{ResponseWriter: responseWriter}, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -438,28 +401,16 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			ToolCalls: nil,
 		}
 		toolSession := &model.ToolSession{
-			McpToolSet:        mcpToolSet,
-			ToolMessages:      messages,
-			ExecutionRecorder: writer,
+			McpToolSet:   mcpToolSet,
+			ToolMessages: messages,
 		}
 		modelResult, err = model.QueryTextWithTools(modelProviderObj, question, writer, history, prompt, knowledge, toolSession, lang)
 	} else {
-		modelStepId := executionTracer.StartStep(object.StepTypeModelStart, fmt.Sprintf("Model: %s", modelProviderName), map[string]interface{}{
-			"model": modelProviderName,
-			"round": 0,
-		})
-		executionTracer.Persist()
 		if isReasonModel(modelProvider.SubType) {
 			modelResult, err = QueryCarrierText(question, writer, history, prompt, knowledge, modelProviderObj, chat.NeedTitle, store.SuggestionCount, lang)
 		} else {
 			modelResult, err = modelProviderObj.QueryText(question, writer, history, prompt, knowledge, nil, lang)
 		}
-		if err != nil {
-			executionTracer.EndStep(modelStepId, object.StepStatusFailed, "", err.Error())
-		} else {
-			executionTracer.EndStep(modelStepId, object.StepStatusCompleted, fmt.Sprintf("%d tokens", modelResult.TotalTokenCount), "")
-		}
-		executionTracer.Persist()
 	}
 	if err != nil {
 		if errors.Is(err, errMessageAnswerCanceled) {
@@ -475,8 +426,11 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		return
 	}
 
-	if len(vectorScores) > 0 || len(knowledge) > 0 {
-		_ = writer.WriteVectorEvent(vectorScores, knowledge)
+	if len(vectorScores) > 0 {
+		bytes, err := json.Marshal(vectorScores)
+		if err == nil {
+			_, _ = responseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
+		}
 	}
 
 	if writer.writerCleaner.cleaned == false {
@@ -505,16 +459,12 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 
 	answer := writer.MessageString()
 	defer func() {
-		if writer != nil {
-			_ = writer.WriteEndEvent("end")
-		} else {
-			event := fmt.Sprintf("event: end\ndata: %s\n\n", "end")
-			if _, writeErr := responseWriter.Write([]byte(event)); writeErr != nil {
-				fmt.Printf("write end SSE event failed: %s\n", writeErr.Error())
-			}
-			if flusher, ok := responseWriter.(http.Flusher); ok {
-				flusher.Flush()
-			}
+		event := fmt.Sprintf("event: end\ndata: %s\n\n", "end")
+		if _, writeErr := responseWriter.Write([]byte(event)); writeErr != nil {
+			fmt.Printf("write end SSE event failed: %s\n", writeErr.Error())
+		}
+		if flusher, ok := responseWriter.(http.Flusher); ok {
+			flusher.Flush()
 		}
 	}()
 	message.ReasonText = writer.ReasonString()
@@ -552,15 +502,6 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	message.Suggestions = textSuggestions
 
 	message.VectorScores = vectorScores
-
-	writer.FinalizeReasoningStep()
-
-	executionTracer.AddSimpleStep(object.StepTypeFinalOutput, "Final Output", fmt.Sprintf("%d chars", len(message.Text)), map[string]interface{}{
-		"tokenCount": message.TokenCount,
-		"price":      message.Price,
-		"currency":   message.Currency,
-	})
-	executionTracer.Persist()
 
 	// Normalize price precision before persisting or creating transactions
 	message.Price = model.AddPrices(message.Price, 0)

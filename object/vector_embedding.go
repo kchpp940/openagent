@@ -106,6 +106,10 @@ func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text st
 }
 
 func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeName string, fileKey string, fileUrl string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, int, error) {
+	return addVectorsForFileIncremental(embeddingProviderObj, storeName, fileKey, fileUrl, splitProviderName, embeddingProviderName, modelSubType, lang, false)
+}
+
+func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvider, storeName string, fileKey string, fileUrl string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string, incremental bool) (bool, int, error) {
 	var (
 		affected        bool
 		totalTokenCount int
@@ -116,6 +120,8 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 	if err != nil {
 		return false, 0, err
 	}
+
+	contentHash := calculateHash(text)
 
 	splitProviderType := splitProviderName
 	if splitProviderType == "" {
@@ -135,13 +141,190 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 		return false, 0, err
 	}
 
-	textSections, err := splitProvider.SplitText(text)
+	newChunks, err := splitProvider.SplitText(text)
 	if err != nil {
 		return false, 0, err
 	}
 
-	for i, textSection := range textSections {
-		logs.Info("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s", i+1, len(textSections), storeName, fileKey, i, textSection)
+	newChunkHash := calculateChunksHash(newChunks)
+	newChunkHashes := calculateChunkHashes(newChunks)
+
+	owner := "admin"
+	fileName := getFileName(storeName, fileKey)
+	existingFile, err := getFile(owner, fileName)
+	if err != nil {
+		return false, 0, err
+	}
+
+	var oldParseVersion *FileParseVersion
+	if existingFile != nil {
+		oldParseVersion, _ = GetLatestFileParseVersion(owner, fileName)
+	}
+
+	var oldChunks []string
+	if oldParseVersion != nil {
+		oldVectors, _ := GetVectorsByFile(owner, storeName, fileKey)
+		oldChunks = make([]string, len(oldVectors))
+		for _, v := range oldVectors {
+			if v.Index < len(oldChunks) {
+				oldChunks[v.Index] = v.Text
+			}
+		}
+	}
+
+	var diffs []ChunkDiff
+	var diff *FileVersionDiff
+	var newVersion int = 1
+
+	if existingFile != nil {
+		newVersion = existingFile.ParseVersion + 1
+	}
+
+	if incremental && existingFile != nil && existingFile.ContentHash != "" {
+		if existingFile.ContentHash == contentHash && existingFile.ChunkHash == newChunkHash {
+			logs.Info("File content unchanged, skipping re-parse for store: [%s], file: [%s]", storeName, fileKey)
+			return false, 0, nil
+		}
+
+		diffs = computeChunkDiff(oldChunks, newChunks)
+
+		diff = &FileVersionDiff{
+			Owner:            owner,
+			Name:             fileName,
+			Version:          newVersion,
+			CreatedTime:      util.GetCurrentTime(),
+			FromParseVersion: existingFile.ParseVersion,
+			ToParseVersion:   newVersion,
+			FromContentHash:  existingFile.ContentHash,
+			ToContentHash:    contentHash,
+			FromChunkHash:    existingFile.ChunkHash,
+			ToChunkHash:      newChunkHash,
+			Status:           FileStatusVectorizing,
+		}
+
+		addedSamples, deletedSamples, modifiedSamples, _ := summarizeDiff(diffs, 5)
+		for _, d := range diffs {
+			switch d.Type {
+			case ChunkDiffAdded:
+				diff.AddedCount++
+			case ChunkDiffDeleted:
+				diff.DeletedCount++
+			case ChunkDiffModified:
+				diff.ModifiedCount++
+			case ChunkDiffUnchanged:
+				diff.UnchangedCount++
+			}
+		}
+		diff.AddedChunks = addedSamples
+		diff.DeletedChunks = deletedSamples
+		diff.ModifiedChunks = modifiedSamples
+
+		_, err = AddFileVersionDiff(diff)
+		if err != nil {
+			logs.Error("Failed to save version diff: %v", err)
+		}
+
+		vectorsToDelete := make(map[int]bool)
+		for _, d := range diffs {
+			if d.Type == ChunkDiffDeleted || d.Type == ChunkDiffModified {
+				vectorsToDelete[d.Index] = true
+			}
+		}
+
+		oldVectorMap := make(map[int]*Vector)
+		for _, v := range oldVectors {
+			oldVectorMap[v.Index] = v
+		}
+
+		for idx := range vectorsToDelete {
+			if v, ok := oldVectorMap[idx]; ok {
+				_, _ = DeleteVector(v)
+			}
+		}
+
+		chunksToProcess := make([]int, 0)
+		for i, d := range diffs {
+			if d.Type == ChunkDiffAdded || d.Type == ChunkDiffModified {
+				chunksToProcess = append(chunksToProcess, i)
+			}
+		}
+
+		logs.Info("Incremental re-parse for store: [%s], file: [%s]: added=%d, deleted=%d, modified=%d, unchanged=%d, processing=%d chunks",
+			storeName, fileKey, diff.AddedCount, diff.DeletedCount, diff.ModifiedCount, diff.UnchangedCount, len(chunksToProcess))
+
+		hasErrors := false
+		for _, i := range chunksToProcess {
+			textSection := newChunks[i]
+			logs.Info("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s", i+1, len(chunksToProcess), storeName, fileKey, i, textSection)
+
+			var (
+				sectionAffected   bool
+				sectionTokenCount int
+			)
+			operation := func() error {
+				var opErr error
+				sectionAffected, sectionTokenCount, opErr = addEmbeddedVector(embeddingProviderObj, textSection, storeName, fileKey, i, embeddingProviderName, modelSubType, lang)
+				if opErr != nil {
+					if isRetryableError(opErr) {
+						return opErr
+					}
+					return backoff.Permanent(opErr)
+				}
+				return nil
+			}
+			err = backoff.Retry(operation, backoff.NewExponentialBackOff())
+			if err != nil {
+				logs.Error("Failed to generate embedding after retries: %v", err)
+				hasErrors = true
+				continue
+			}
+
+			affected = affected || sectionAffected
+			totalTokenCount += sectionTokenCount
+		}
+
+		if hasErrors {
+			diff.Status = FileStatusPartialFailed
+			diff.ErrorText = "Some vectors failed to generate"
+		} else {
+			diff.Status = FileStatusFinished
+		}
+		_, _ = UpdateFileVersionDiff(diff)
+
+		if existingFile != nil {
+			existingFile.ParseVersion = newVersion
+			existingFile.ContentHash = contentHash
+			existingFile.ChunkHash = newChunkHash
+			existingFile.VectorVersion = existingFile.VectorVersion + 1
+			existingFile.LatestDiff = diff
+			if hasErrors {
+				existingFile.Status = FileStatusPartialFailed
+			} else {
+				existingFile.Status = FileStatusFinished
+			}
+			_, _ = UpdateFile(existingFile.GetId(), existingFile)
+		}
+
+		parseVersion := &FileParseVersion{
+			Owner:         owner,
+			Name:          fileName,
+			Version:       newVersion,
+			CreatedTime:   util.GetCurrentTime(),
+			ContentHash:   contentHash,
+			ChunkHash:     newChunkHash,
+			VectorVersion: existingFile.VectorVersion,
+			ChunkCount:    len(newChunks),
+			ChunkHashes:   newChunkHashes,
+			Status:        diff.Status,
+			ErrorText:     diff.ErrorText,
+		}
+		_, _ = AddFileParseVersion(parseVersion)
+
+		return affected, totalTokenCount, nil
+	}
+
+	for i, textSection := range newChunks {
+		logs.Info("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s", i+1, len(newChunks), storeName, fileKey, i, textSection)
 
 		var (
 			sectionAffected   bool
@@ -168,11 +351,83 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 		totalTokenCount += sectionTokenCount
 	}
 
+	if existingFile != nil {
+		existingFile.ParseVersion = newVersion
+		existingFile.ContentHash = contentHash
+		existingFile.ChunkHash = newChunkHash
+		existingFile.VectorVersion = 1
+		_, _ = UpdateFile(existingFile.GetId(), existingFile)
+
+		parseVersion := &FileParseVersion{
+			Owner:         owner,
+			Name:          fileName,
+			Version:       newVersion,
+			CreatedTime:   util.GetCurrentTime(),
+			ContentHash:   contentHash,
+			ChunkHash:     newChunkHash,
+			VectorVersion: 1,
+			ChunkCount:    len(newChunks),
+			ChunkHashes:   newChunkHashes,
+			Status:        FileStatusFinished,
+		}
+		_, _ = AddFileParseVersion(parseVersion)
+
+		diff = &FileVersionDiff{
+			Owner:            owner,
+			Name:             fileName,
+			Version:          newVersion,
+			CreatedTime:      util.GetCurrentTime(),
+			FromParseVersion: 0,
+			ToParseVersion:   newVersion,
+			FromContentHash:  "",
+			ToContentHash:    contentHash,
+			FromChunkHash:    "",
+			ToChunkHash:      newChunkHash,
+			AddedCount:       len(newChunks),
+			AddedChunks:      make([]ChunkDiff, 0),
+			Status:           FileStatusFinished,
+		}
+		for i := 0; i < len(newChunks) && i < 5; i++ {
+			diff.AddedChunks = append(diff.AddedChunks, ChunkDiff{
+				Index:   i,
+				Type:    ChunkDiffAdded,
+				NewText: newChunks[i],
+				NewHash: calculateHash(newChunks[i]),
+			})
+		}
+		_, _ = AddFileVersionDiff(diff)
+	}
+
 	return affected, totalTokenCount, nil
 }
 
 func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
 	err := updateFileStatus(owner, storeName, fileKey, FileStatusProcessing, "", 0)
+	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		return false, err
+	}
+
+	affected, tokenCount, opErr := op()
+
+	fileStatus := FileStatusFinished
+	errorText := ""
+	if opErr != nil {
+		fileStatus = FileStatusError
+		errorText = opErr.Error()
+	}
+
+	err = updateFileStatus(owner, storeName, fileKey, fileStatus, errorText, tokenCount)
+	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		return affected, errors.Join(opErr, err)
+	}
+
+	return affected, opErr
+}
+
+func withFileStatusIncremental(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
+	err := updateFileStatus(owner, storeName, fileKey, FileStatusParsing, "", 0)
 	if err != nil {
 		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
 		return false, err

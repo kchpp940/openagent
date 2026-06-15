@@ -123,6 +123,10 @@ func initAPI() {
 	beego.Router("/api/add-file", &controllers.ApiController{}, "POST:AddFile")
 	beego.Router("/api/delete-file", &controllers.ApiController{}, "POST:DeleteFile")
 	beego.Router("/api/refresh-file-vectors", &controllers.ApiController{}, "POST:RefreshFileVectors")
+	beego.Router("/api/refresh-file-vectors-incremental", &controllers.ApiController{}, "POST:RefreshFileVectorsIncremental")
+	beego.Router("/api/get-file-version-diffs", &controllers.ApiController{}, "GET:GetFileVersionDiffs")
+	beego.Router("/api/get-latest-file-version-diff", &controllers.ApiController{}, "GET:GetLatestFileVersionDiff")
+	beego.Router("/api/get-file-parse-versions", &controllers.ApiController{}, "GET:GetFileParseVersions")
 	beego.Router("/api/upload-file", &controllers.ApiController{}, "POST:UploadFile")
 
 	beego.Router("/api/get-global-vectors", &controllers.ApiController{}, "GET:GetGlobalVectors")
@@ -148,7 +152,6 @@ func initAPI() {
 	beego.Router("/api/get-global-messages", &controllers.ApiController{}, "GET:GetGlobalMessages")
 	beego.Router("/api/get-messages", &controllers.ApiController{}, "GET:GetMessages")
 	beego.Router("/api/get-message", &controllers.ApiController{}, "GET:GetMessage")
-	beego.Router("/api/get-message-execution-steps", &controllers.ApiController{}, "GET:GetMessageExecutionSteps")
 	beego.Router("/api/get-message-answer", &controllers.ApiController{}, "GET:GetMessageAnswer")
 	beego.Router("/api/cancel-message-answer", &controllers.ApiController{}, "POST:CancelMessageAnswer")
 	beego.Router("/api/get-answer", &controllers.ApiController{}, "GET:GetAnswer")
