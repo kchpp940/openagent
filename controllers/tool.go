@@ -127,6 +127,9 @@ func (c *ApiController) UpdateTool() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if success {
+		object.AsyncTriggerToolCapabilityCheck(&t, c.GetAcceptLanguage())
+	}
 
 	c.ResponseOk(success)
 }
@@ -151,6 +154,9 @@ func (c *ApiController) AddTool() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+	if success {
+		object.AsyncTriggerToolCapabilityCheck(&t, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)

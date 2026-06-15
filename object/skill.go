@@ -58,6 +58,9 @@ type Skill struct {
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
 	State string `xorm:"varchar(100)" json:"state"`
+
+	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (s *Skill) GetId() string {
@@ -365,7 +368,18 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, error) {
 		names = append(names, name)
 	}
 	if hasAll {
-		return GetSkills(owner)
+		allSkills, err := GetSkills(owner)
+		if err != nil {
+			return nil, err
+		}
+		filtered := make([]*Skill, 0, len(allSkills))
+		for _, s := range allSkills {
+			if IsCapabilityFailed(s.LatestCapabilityStatus) {
+				continue
+			}
+			filtered = append(filtered, s)
+		}
+		return filtered, nil
 	}
 
 	var skills []*Skill
@@ -376,6 +390,9 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, error) {
 			return nil, err
 		}
 		if s == nil {
+			continue
+		}
+		if IsCapabilityFailed(s.LatestCapabilityStatus) {
 			continue
 		}
 

@@ -18,9 +18,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/conf"
+	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
@@ -227,9 +229,39 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
+	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if len(failed) > 0 {
+		names := make([]string, 0, len(failed))
+		for _, v := range failed {
+			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+		}
+		lang := c.GetAcceptLanguage()
+		c.ResponseError(fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by failed capabilities"), strings.Join(names, ", ")))
+		return
+	}
+
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	if len(warnings) > 0 {
+		names := make([]string, 0, len(warnings))
+		for _, v := range warnings {
+			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+		}
+		lang := c.GetAcceptLanguage()
+		c.Data["json"] = Response{
+			Status: "ok",
+			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
+			Data:   success,
+		}
+		c.ServeJSON()
 		return
 	}
 
@@ -302,9 +334,39 @@ func (c *ApiController) AddStore() {
 		}
 	}
 
+	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if len(failed) > 0 {
+		names := make([]string, 0, len(failed))
+		for _, v := range failed {
+			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+		}
+		lang := c.GetAcceptLanguage()
+		c.ResponseError(fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by failed capabilities"), strings.Join(names, ", ")))
+		return
+	}
+
 	success, err := object.AddStore(&store)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	if len(warnings) > 0 {
+		names := make([]string, 0, len(warnings))
+		for _, v := range warnings {
+			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
+		}
+		lang := c.GetAcceptLanguage()
+		c.Data["json"] = Response{
+			Status: "ok",
+			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
+			Data:   success,
+		}
+		c.ServeJSON()
 		return
 	}
 
@@ -498,4 +560,28 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
+}
+
+// CheckStoreCapability validates a store's referenced servers/skills/tools
+// and returns any failed (blocking) and warning violations.
+// @Title CheckStoreCapability
+// @Tag Store API
+// @Param body body object.Store true "The store to validate"
+// @Success 200 {object} object. The Response object
+// @router /check-store-capability [post]
+func (c *ApiController) CheckStoreCapability() {
+	var store object.Store
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &store); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	failed, warnings, err := object.ValidateStoreCapabilities(&store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(map[string]interface{}{
+		"failed":   failed,
+		"warnings": warnings,
+	})
 }

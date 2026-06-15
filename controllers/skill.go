@@ -124,6 +124,9 @@ func (c *ApiController) UpdateSkill() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if success {
+		object.AsyncTriggerSkillCapabilityCheck(&s, c.GetAcceptLanguage())
+	}
 
 	c.ResponseOk(success)
 }
@@ -148,6 +151,9 @@ func (c *ApiController) AddSkill() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+	if success {
+		object.AsyncTriggerSkillCapabilityCheck(&s, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)

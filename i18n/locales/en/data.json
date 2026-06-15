@@ -339,6 +339,8 @@
     "No issues detected": "No issues detected",
     "Some checks failed": "Some checks failed",
     "Some warnings detected": "Some warnings detected",
-    "All checks passed": "All checks passed"
+    "All checks passed": "All checks passed",
+    "Store blocked by failed capabilities": "Store cannot be saved: the following tools have failed availability checks and must be fixed first: %s",
+    "Store capability warnings": "Store saved, but the following tools have warnings: %s"
   }
 }

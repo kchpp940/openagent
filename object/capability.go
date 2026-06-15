@@ -29,6 +29,7 @@ import (
 	"github.com/the-open-agent/openagent/i18n"
 	mcppkg "github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/tool"
+	"github.com/the-open-agent/openagent/util"
 )
 
 type CapabilityStatus string
@@ -731,4 +732,246 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// ---------------------------------------------------------------------------
+// Persistence helpers – write the latest capability check result back to the
+// corresponding entity row.
+// ---------------------------------------------------------------------------
+
+// SaveServerCapabilityStatus writes the latestCapabilityStatus and
+// latestCheckedAt fields for the given server.
+func SaveServerCapabilityStatus(owner, name string, status CapabilityStatus) error {
+	if owner == "" || name == "" {
+		return nil
+	}
+	now := util.GetCurrentTime()
+	_, err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Cols("latest_capability_status", "latest_checked_at").
+		Update(&Server{
+			LatestCapabilityStatus: string(status),
+			LatestCheckedAt:        now,
+		})
+	return err
+}
+
+// SaveSkillCapabilityStatus writes the latestCapabilityStatus and
+// latestCheckedAt fields for the given skill.
+func SaveSkillCapabilityStatus(owner, name string, status CapabilityStatus) error {
+	if owner == "" || name == "" {
+		return nil
+	}
+	now := util.GetCurrentTime()
+	_, err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Cols("latest_capability_status", "latest_checked_at").
+		Update(&Skill{
+			LatestCapabilityStatus: string(status),
+			LatestCheckedAt:        now,
+		})
+	return err
+}
+
+// SaveToolCapabilityStatus writes the latestCapabilityStatus and
+// latestCheckedAt fields for the given tool.
+func SaveToolCapabilityStatus(owner, name string, status CapabilityStatus) error {
+	if owner == "" || name == "" {
+		return nil
+	}
+	now := util.GetCurrentTime()
+	_, err := adapter.engine.Where("owner = ? AND name = ?", owner, name).
+		Cols("latest_capability_status", "latest_checked_at").
+		Update(&Tool{
+			LatestCapabilityStatus: string(status),
+			LatestCheckedAt:        now,
+		})
+	return err
+}
+
+// AsyncTriggerServerCapabilityCheck runs a capability check in a background
+// goroutine and persists the overall status. Safe to fire-and-forget.
+func AsyncTriggerServerCapabilityCheck(s *Server, lang string) {
+	if s == nil || s.Owner == "" || s.Name == "" {
+		return
+	}
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result := NewServerCapabilityChecker(s).Check(ctx, lang)
+		if result != nil {
+			_ = SaveServerCapabilityStatus(s.Owner, s.Name, result.OverallStatus)
+		}
+	}()
+}
+
+// AsyncTriggerSkillCapabilityCheck runs a capability check in a background
+// goroutine and persists the overall status. Safe to fire-and-forget.
+func AsyncTriggerSkillCapabilityCheck(s *Skill, lang string) {
+	if s == nil || s.Owner == "" || s.Name == "" {
+		return
+	}
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		result := NewSkillCapabilityChecker(s).Check(ctx, lang)
+		if result != nil {
+			_ = SaveSkillCapabilityStatus(s.Owner, s.Name, result.OverallStatus)
+		}
+	}()
+}
+
+// AsyncTriggerToolCapabilityCheck runs a capability check in a background
+// goroutine and persists the overall status. Safe to fire-and-forget.
+func AsyncTriggerToolCapabilityCheck(t *Tool, lang string) {
+	if t == nil || t.Owner == "" || t.Name == "" {
+		return
+	}
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result := NewToolCapabilityChecker(t).Check(ctx, lang)
+		if result != nil {
+			_ = SaveToolCapabilityStatus(t.Owner, t.Name, result.OverallStatus)
+		}
+	}()
+}
+
+// IsCapabilityFailed returns true if the stored status equals "fail".
+// Empty / unknown status is treated as not-failed (lenient).
+func IsCapabilityFailed(status string) bool {
+	return status == string(CapabilityStatusFail)
+}
+
+// IsCapabilityWarning returns true if the stored status equals "warning".
+func IsCapabilityWarning(status string) bool {
+	return status == string(CapabilityStatusWarning)
+}
+
+// ---------------------------------------------------------------------------
+// Store validation – check that the MCP server, skills and tools referenced
+// by a Store all have acceptable capability status.
+//
+// Rules:
+//   - "fail"    → blocked, caller must abort the operation
+//   - "warning" → allowed, but the caller should warn the user
+//   - "pass" / "" / unknown → allowed without restriction
+// ---------------------------------------------------------------------------
+
+type CapabilityViolation struct {
+	Kind   string `json:"kind"`   // "server" | "skill" | "tool"
+	Name   string `json:"name"`   // entity name
+	Status string `json:"status"` // e.g. "fail" | "warning"
+}
+
+// ValidateStoreCapabilities loads every server/skill/tool referenced by the
+// store and partitions them into failed and warning lists.
+func ValidateStoreCapabilities(store *Store) (failed []CapabilityViolation, warnings []CapabilityViolation, err error) {
+	if store == nil {
+		return nil, nil, nil
+	}
+	owner := strings.TrimSpace(store.Owner)
+	if owner == "" {
+		owner = "admin"
+	}
+
+	// --- MCP server ---------------------------------------------------------
+	if strings.TrimSpace(store.McpServer) != "" {
+		srv, e := GetServerByOwnerAndName(owner, store.McpServer)
+		if e != nil {
+			return nil, nil, e
+		}
+		if srv != nil {
+			if IsCapabilityFailed(srv.LatestCapabilityStatus) {
+				failed = append(failed, CapabilityViolation{Kind: "server", Name: srv.Name, Status: srv.LatestCapabilityStatus})
+			} else if IsCapabilityWarning(srv.LatestCapabilityStatus) {
+				warnings = append(warnings, CapabilityViolation{Kind: "server", Name: srv.Name, Status: srv.LatestCapabilityStatus})
+			}
+		}
+	}
+
+	// --- Skills -------------------------------------------------------------
+	skillNames := store.Skills
+	if len(skillNames) == 1 && skillNames[0] == "All" {
+		allSkills, e := GetSkills(owner)
+		if e != nil {
+			return nil, nil, e
+		}
+		for _, s := range allSkills {
+			if s == nil || s.State != "Active" {
+				continue
+			}
+			if IsCapabilityFailed(s.LatestCapabilityStatus) {
+				failed = append(failed, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			} else if IsCapabilityWarning(s.LatestCapabilityStatus) {
+				warnings = append(warnings, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			}
+		}
+	} else {
+		for _, name := range skillNames {
+			name = strings.TrimSpace(name)
+			if name == "" || name == "All" {
+				continue
+			}
+			s, e := GetSkillByOwnerAndName(owner, name)
+			if e != nil {
+				return nil, nil, e
+			}
+			if s == nil {
+				continue
+			}
+			if IsCapabilityFailed(s.LatestCapabilityStatus) {
+				failed = append(failed, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			} else if IsCapabilityWarning(s.LatestCapabilityStatus) {
+				warnings = append(warnings, CapabilityViolation{Kind: "skill", Name: s.Name, Status: s.LatestCapabilityStatus})
+			}
+		}
+	}
+
+	// --- Tools --------------------------------------------------------------
+	toolNames := store.Tools
+	if len(toolNames) == 1 && toolNames[0] == "All" {
+		allTools, e := GetTools(owner)
+		if e != nil {
+			return nil, nil, e
+		}
+		for _, t := range allTools {
+			if t == nil || t.State != "Active" {
+				continue
+			}
+			if IsCapabilityFailed(t.LatestCapabilityStatus) {
+				failed = append(failed, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			} else if IsCapabilityWarning(t.LatestCapabilityStatus) {
+				warnings = append(warnings, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			}
+		}
+	} else {
+		for _, name := range toolNames {
+			name = strings.TrimSpace(name)
+			if name == "" || name == "All" {
+				continue
+			}
+			t, e := GetToolByOwnerAndName(owner, name)
+			if e != nil {
+				return nil, nil, e
+			}
+			if t == nil {
+				continue
+			}
+			if IsCapabilityFailed(t.LatestCapabilityStatus) {
+				failed = append(failed, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			} else if IsCapabilityWarning(t.LatestCapabilityStatus) {
+				warnings = append(warnings, CapabilityViolation{Kind: "tool", Name: t.Name, Status: t.LatestCapabilityStatus})
+			}
+		}
+	}
+
+	return failed, warnings, nil
 }

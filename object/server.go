@@ -49,6 +49,9 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
+
+	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (s *Server) GetId() string {
@@ -224,6 +227,9 @@ func DeleteServer(server *Server) (bool, error) {
 func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 	if s.Url == "" {
 		return nil, nil
+	}
+	if IsCapabilityFailed(s.LatestCapabilityStatus) {
+		return nil, fmt.Errorf("MCP server %q failed the latest availability check; please fix its configuration and re-check before using it", s.Name)
 	}
 
 	cli, err := mcp.NewClient(s.Url, s.Token)

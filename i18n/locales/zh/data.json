@@ -339,6 +339,8 @@
     "No issues detected": "未检测到问题",
     "Some checks failed": "部分检查失败",
     "Some warnings detected": "检测到部分警告",
-    "All checks passed": "所有检查通过"
+    "All checks passed": "所有检查通过",
+    "Store blocked by failed capabilities": "无法保存 Store：以下工具可用性检查失败，必须先修复：%s",
+    "Store capability warnings": "Store 已保存，但以下工具存在警告：%s"
   }
 }

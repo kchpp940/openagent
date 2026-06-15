@@ -21,7 +21,7 @@ import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import * as Setting from "./Setting";
 import * as ToolBackend from "./backend/ToolBackend";
 import i18next from "i18next";
-import {DeleteOutlined, EditOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
+import {CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
 
 class ToolListPage extends BaseListPage {
   constructor(props) {
@@ -184,6 +184,44 @@ class ToolListPage extends BaseListPage {
         key: "state",
         width: "110px",
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
+      },
+      {
+        title: i18next.t("capability:Availability"),
+        dataIndex: "latestCapabilityStatus",
+        key: "latestCapabilityStatus",
+        width: "130px",
+        sorter: (a, b) => (a.latestCapabilityStatus || "").localeCompare(b.latestCapabilityStatus || ""),
+        render: (status, record) => {
+          let icon, color, text;
+          switch (status) {
+          case "pass":
+            icon = <CheckCircleOutlined style={{color: "#52c41a"}} />;
+            color = "success";
+            text = i18next.t("capability:Passed");
+            break;
+          case "fail":
+            icon = <CloseCircleOutlined style={{color: "#ff4d4f"}} />;
+            color = "error";
+            text = i18next.t("capability:Unavailable");
+            break;
+          case "warning":
+            icon = <ExclamationCircleOutlined style={{color: "#faad14"}} />;
+            color = "warning";
+            text = i18next.t("capability:Needs attention");
+            break;
+          default:
+            icon = <ExclamationCircleOutlined style={{color: "#8c8c8c", opacity: 0.5}} />;
+            color = "default";
+            text = i18next.t("capability:Not checked");
+          }
+          return (
+            <Tooltip title={record.latestCheckedAt ? `${i18next.t("capability:Availability")}: ${text}` : i18next.t("capability:Not checked")}>
+              <Tag icon={icon} color={color} style={{margin: 0}}>
+                {text}
+              </Tag>
+            </Tooltip>
+          );
+        },
       },
       {
         title: i18next.t("capability:Check availability"),

@@ -113,6 +113,9 @@ func (c *ApiController) UpdateServer() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if success {
+		object.AsyncTriggerServerCapabilityCheck(&server, c.GetAcceptLanguage())
+	}
 
 	c.ResponseOk(success)
 }
@@ -137,6 +140,9 @@ func (c *ApiController) AddServer() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+	if success {
+		object.AsyncTriggerServerCapabilityCheck(&server, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)
