@@ -120,7 +120,20 @@ class FileListPage extends BaseListPage {
     FileBackend.refreshFileVectors(this.state.data[index])
       .then((res) => {
         if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          const {success, diff} = res.data;
+          if (diff && (diff.addedCount > 0 || diff.deletedCount > 0 || diff.modifiedCount > 0)) {
+            Setting.showMessage("success", i18next.t("file:Full refresh completed") +
+              ` (${i18next.t("file:Added")}: ${diff.addedCount}, ` +
+              `${i18next.t("file:Deleted")}: ${diff.deletedCount}, ` +
+              `${i18next.t("file:Modified")}: ${diff.modifiedCount})`);
+          } else if (diff && diff.status === "Finished") {
+            Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          } else if (diff && diff.status === "PartialFailed") {
+            Setting.showMessage("warning", i18next.t("file:Full refresh completed with partial failures") +
+              ` (${i18next.t("file:Failed")}: ${diff.failedChunkIndices?.length || 0})`);
+          } else {
+            Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          }
           this.fetch({pagination: this.state.pagination});
         } else {
           Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);

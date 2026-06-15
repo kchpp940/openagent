@@ -81,8 +81,12 @@ type FileVersionDiff struct {
 	DeletedChunks  []ChunkDiff `xorm:"mediumtext" json:"deletedChunks"`
 	ModifiedChunks []ChunkDiff `xorm:"mediumtext" json:"modifiedChunks"`
 
-	Status    FileStatus `xorm:"varchar(100)" json:"status"`
-	ErrorText string     `xorm:"mediumtext" json:"errorText"`
+	Status                 FileStatus `xorm:"varchar(100)" json:"status"`
+	ParseError             string     `xorm:"mediumtext" json:"parseError,omitempty"`
+	DeleteVectorsError     string     `xorm:"mediumtext" json:"deleteVectorsError,omitempty"`
+	VectorGenerationErrors []string   `xorm:"mediumtext" json:"vectorGenerationErrors,omitempty"`
+	FailedChunkIndices     []int      `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
+	ErrorText              string     `xorm:"mediumtext" json:"errorText"`
 }
 
 type FileParseVersion struct {
@@ -97,7 +101,12 @@ type FileParseVersion struct {
 	ChunkCount    int               `json:"chunkCount"`
 	ChunkHashes   map[string]string `xorm:"mediumtext" json:"chunkHashes"`
 	Status        FileStatus        `xorm:"varchar(100)" json:"status"`
-	ErrorText     string            `xorm:"mediumtext" json:"errorText"`
+
+	ParseError             string   `xorm:"mediumtext" json:"parseError,omitempty"`
+	DeleteVectorsError     string   `xorm:"mediumtext" json:"deleteVectorsError,omitempty"`
+	VectorGenerationErrors []string `xorm:"mediumtext" json:"vectorGenerationErrors,omitempty"`
+	FailedChunkIndices     []int    `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
+	ErrorText              string   `xorm:"mediumtext" json:"errorText"`
 }
 
 type File struct {
@@ -405,9 +414,11 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 		return nil, err
 	}
 
+	existingFile, _ := getFile(owner, getFileName(storeName, objectKey))
+
 	fileRecord := &File{
 		Owner:           owner,
-		Name:            objectKey,
+		Name:            getFileName(storeName, objectKey),
 		CreatedTime:     util.GetCurrentTime(),
 		Filename:        filename,
 		Size:            fileSize,
@@ -415,15 +426,38 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 		StorageProvider: provider.Name,
 		Url:             fileUrl,
 		TokenCount:      0,
-		Status:          FileStatusPending,
+		Status:          FileStatusParsing,
 		ParseVersion:    0,
 		VectorVersion:   0,
 	}
 
-	_, err = AddFile(fileRecord)
+	if existingFile != nil {
+		fileRecord.ParseVersion = existingFile.ParseVersion
+		fileRecord.VectorVersion = existingFile.VectorVersion
+		fileRecord.ContentHash = existingFile.ContentHash
+		fileRecord.ChunkHash = existingFile.ChunkHash
+	}
+
+	var upserted bool
+	if existingFile != nil {
+		upserted, err = UpdateFile(fileRecord.GetId(), fileRecord)
+	} else {
+		upserted, err = AddFile(fileRecord)
+	}
 	if err != nil {
 		return nil, err
 	}
+	if !upserted {
+		return nil, fmt.Errorf("failed to save file record")
+	}
+
+	go func() {
+		logs.Info("Starting async vector generation for uploaded file: store=%s, file=%s", storeName, objectKey)
+		_, _, err := AddVectorsForFileIncremental(defaultStore, objectKey, fileUrl, lang)
+		if err != nil {
+			logs.Error("Async vector generation failed for file %s: %v", objectKey, err)
+		}
+	}()
 
 	return fileRecord, nil
 }
@@ -556,76 +590,71 @@ func computeChunkDiff(oldChunks []string, newChunks []string) []ChunkDiff {
 		newHashes[i] = calculateHash(c)
 	}
 
-	oldHashToIndex := make(map[string][]int)
-	for i, h := range oldHashes {
-		oldHashToIndex[h] = append(oldHashToIndex[h], i)
-	}
-
-	newHashToIndex := make(map[string][]int)
-	for i, h := range newHashes {
-		newHashToIndex[h] = append(newHashToIndex[h], i)
-	}
-
 	diffs := []ChunkDiff{}
-	usedOld := make(map[int]bool)
-	usedNew := make(map[int]bool)
+	i, j := 0, 0
 
-	for i, newHash := range newHashes {
-		if oldIndices, ok := oldHashToIndex[newHash]; ok && len(oldIndices) > 0 {
-			oldIdx := oldIndices[0]
-			oldHashToIndex[newHash] = oldIndices[1:]
-			usedOld[oldIdx] = true
-			usedNew[i] = true
+	for i < len(oldHashes) && j < len(newHashes) {
+		if oldHashes[i] == newHashes[j] {
 			diffs = append(diffs, ChunkDiff{
-				Index:   i,
+				Index:   j,
 				Type:    ChunkDiffUnchanged,
-				OldText: oldChunks[oldIdx],
-				NewText: newChunks[i],
-				OldHash: oldHash,
-				NewHash: newHash,
-			})
-		}
-	}
-
-	for i, oldHash := range oldHashes {
-		if !usedOld[i] {
-			diffs = append(diffs, ChunkDiff{
-				Index:   i,
-				Type:    ChunkDiffDeleted,
 				OldText: oldChunks[i],
-				OldHash: oldHash,
+				NewText: newChunks[j],
+				OldHash: oldHashes[i],
+				NewHash: newHashes[j],
 			})
+			i++
+			j++
+			continue
 		}
-	}
 
-	for i, newHash := range newHashes {
-		if !usedNew[i] {
-			if oldIndices, ok := oldHashToIndex[newHash]; ok {
-				for _, oldIdx := range oldIndices {
-					if !usedOld[oldIdx] {
-						usedOld[oldIdx] = true
-						usedNew[i] = true
-						diffs = append(diffs, ChunkDiff{
-							Index:   i,
-							Type:    ChunkDiffModified,
-							OldText: oldChunks[oldIdx],
-							NewText: newChunks[i],
-							OldHash: oldHashes[oldIdx],
-							NewHash: newHash,
-						})
-						break
-					}
-				}
-			}
-			if !usedNew[i] {
+		nextMatchOld, nextMatchNew := findNextMatch(oldHashes, newHashes, i, j)
+
+		if nextMatchOld == -1 && nextMatchNew == -1 {
+			break
+		}
+
+		if nextMatchOld != -1 && (nextMatchNew == -1 || (nextMatchOld - i) <= (nextMatchNew - j)) {
+			for k := i; k < nextMatchOld; k++ {
 				diffs = append(diffs, ChunkDiff{
-					Index:   i,
-					Type:    ChunkDiffAdded,
-					NewText: newChunks[i],
-					NewHash: newHash,
+					Index:   j,
+					Type:    ChunkDiffDeleted,
+					OldText: oldChunks[k],
+					OldHash: oldHashes[k],
 				})
 			}
+			i = nextMatchOld
+		} else if nextMatchNew != -1 {
+			for k := j; k < nextMatchNew; k++ {
+				diffs = append(diffs, ChunkDiff{
+					Index:   k,
+					Type:    ChunkDiffAdded,
+					NewText: newChunks[k],
+					NewHash: newHashes[k],
+				})
+			}
+			j = nextMatchNew
 		}
+	}
+
+	for i < len(oldHashes) {
+		diffs = append(diffs, ChunkDiff{
+			Index:   j,
+			Type:    ChunkDiffDeleted,
+			OldText: oldChunks[i],
+			OldHash: oldHashes[i],
+		})
+		i++
+	}
+
+	for j < len(newHashes) {
+		diffs = append(diffs, ChunkDiff{
+			Index:   j,
+			Type:    ChunkDiffAdded,
+			NewText: newChunks[j],
+			NewHash: newHashes[j],
+		})
+		j++
 	}
 
 	sort.SliceStable(diffs, func(i, j int) bool {
@@ -633,6 +662,41 @@ func computeChunkDiff(oldChunks []string, newChunks []string) []ChunkDiff {
 	})
 
 	return diffs
+}
+
+func findNextMatch(oldHashes, newHashes []string, i, j int) (int, int) {
+	lookahead := 20
+
+	oldHashToIndices := make(map[string][]int)
+	endOld := i + lookahead
+	if endOld > len(oldHashes) {
+		endOld = len(oldHashes)
+	}
+	for k := i; k < endOld; k++ {
+		oldHashToIndices[oldHashes[k]] = append(oldHashToIndices[oldHashes[k]], k)
+	}
+
+	endNew := j + lookahead
+	if endNew > len(newHashes) {
+		endNew = len(newHashes)
+	}
+
+	bestOld, bestNew := -1, -1
+	for k := j; k < endNew; k++ {
+		if oldIndices, ok := oldHashToIndices[newHashes[k]]; ok {
+			for _, oldIdx := range oldIndices {
+				if oldIdx >= i {
+					if bestOld == -1 || (oldIdx - i) + (k - j) < (bestOld - i) + (bestNew - j) {
+						bestOld = oldIdx
+						bestNew = k
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return bestOld, bestNew
 }
 
 func summarizeDiff(diffs []ChunkDiff, maxSamples int) (added, deleted, modified, unchanged []ChunkDiff) {

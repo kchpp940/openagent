@@ -61,9 +61,12 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 		}
 
 		// Persist file information in the file table
+		fileName := getFileName(store.Name, objectKey)
+		existingFile, _ := getFile(store.Owner, fileName)
+
 		fileRecord := &File{
 			Owner:           store.Owner,
-			Name:            getFileName(store.Name, objectKey),
+			Name:            fileName,
 			CreatedTime:     util.GetCurrentTime(),
 			Filename:        filename,
 			Size:            int64(len(bs)),
@@ -71,15 +74,32 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			StorageProvider: store.StorageProvider,
 			Url:             fileUrl,
 			TokenCount:      0,
-			Status:          FileStatusPending, // Initial status before embedding
+			Status:          FileStatusParsing,
 		}
-		_, err = AddFile(fileRecord)
+
+		if existingFile != nil {
+			fileRecord.ParseVersion = existingFile.ParseVersion
+			fileRecord.VectorVersion = existingFile.VectorVersion
+			fileRecord.ContentHash = existingFile.ContentHash
+			fileRecord.ChunkHash = existingFile.ChunkHash
+		}
+
+		var upserted bool
+		if existingFile != nil {
+			upserted, err = UpdateFile(fileRecord.GetId(), fileRecord)
+		} else {
+			upserted, err = AddFile(fileRecord)
+		}
 		if err != nil {
 			return false, nil, err
 		}
+		if !upserted {
+			return false, nil, fmt.Errorf("failed to save file record")
+		}
 
 		go func() {
-			_, vectorErr := AddVectorsForFile(store, objectKey, fileUrl, lang)
+			logs.Info("Starting async vector generation for tree file: store=%s, file=%s", store.Name, objectKey)
+			_, _, vectorErr := AddVectorsForFileIncremental(store, objectKey, fileUrl, lang)
 			if vectorErr != nil {
 				logs.Error("Failed to generate vectors for file %s: %v", objectKey, vectorErr)
 			}

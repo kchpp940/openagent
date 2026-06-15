@@ -221,7 +221,7 @@ func (c *ApiController) DeleteFile() {
 // RefreshFileVectors
 // @Title RefreshFileVectors
 // @Tag File API
-// @Description refresh file vectors
+// @Description refresh file vectors (full refresh with version tracking)
 // @Param body body object.File true "The details of the file object"
 // @Success 200 {object} controllers.Response The Response object
 // @router /refresh-file-vectors [post]
@@ -233,13 +233,16 @@ func (c *ApiController) RefreshFileVectors() {
 		return
 	}
 
-	ok, err := object.RefreshFileVectors(&file, c.GetAcceptLanguage())
+	diff, ok, err := object.RefreshFileVectors(&file, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(ok)
+	c.ResponseOk(map[string]interface{}{
+		"success": ok,
+		"diff":    diff,
+	})
 }
 
 // RefreshFileVectorsIncremental

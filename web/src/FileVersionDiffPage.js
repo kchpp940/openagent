@@ -140,6 +140,64 @@ class FileVersionDiffPage extends BaseListPage {
       return null;
     }
 
+    const errorItems = [];
+
+    if (diff.parseError) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Parse Error")} span={2} key="parse-error">
+          <Text type="danger">{diff.parseError}</Text>
+        </Descriptions.Item>
+      );
+    }
+
+    if (diff.deleteVectorsError) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Delete Vectors Error")} span={2} key="delete-error">
+          <Text type="danger">{diff.deleteVectorsError}</Text>
+        </Descriptions.Item>
+      );
+    }
+
+    if (diff.vectorGenerationErrors && diff.vectorGenerationErrors.length > 0) {
+      const maxErrorsToShow = 5;
+      const displayErrors = diff.vectorGenerationErrors.slice(0, maxErrorsToShow);
+      const moreCount = diff.vectorGenerationErrors.length - maxErrorsToShow;
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Vector Generation Errors")} span={2} key="vector-errors">
+          <div>
+            {displayErrors.map((err, idx) => (
+              <div key={idx} style={{marginBottom: 4}}>
+                <Text type="danger">{err}</Text>
+              </div>
+            ))}
+            {moreCount > 0 && (
+              <Text type="secondary">
+                ... {i18next.t("file:{count} more errors").replace("{count}", moreCount)}
+              </Text>
+            )}
+          </div>
+        </Descriptions.Item>
+      );
+    }
+
+    if (diff.failedChunkIndices && diff.failedChunkIndices.length > 0) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Failed Chunks")} span={2} key="failed-chunks">
+          <Tag color="error">
+            {diff.failedChunkIndices.length} {i18next.t("file:chunks")}: [{diff.failedChunkIndices.join(", ")}]
+          </Tag>
+        </Descriptions.Item>
+      );
+    }
+
+    if (diff.errorText && !diff.parseError && !diff.deleteVectorsError && !diff.vectorGenerationErrors) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Error")} span={2} key="error-text">
+          <Text type="danger">{diff.errorText}</Text>
+        </Descriptions.Item>
+      );
+    }
+
     return (
       <Card style={{marginBottom: 16}}>
         <Descriptions bordered size="small" column={2}>
@@ -155,11 +213,7 @@ class FileVersionDiffPage extends BaseListPage {
           <Descriptions.Item label={i18next.t("file:Content Hash")}>
             <Text code copyable>{diff.toContentHash?.substring(0, 16)}...</Text>
           </Descriptions.Item>
-          {diff.errorText && (
-            <Descriptions.Item label={i18next.t("file:Error")} span={2}>
-              <Text type="danger">{diff.errorText}</Text>
-            </Descriptions.Item>
-          )}
+          {errorItems}
         </Descriptions>
       </Card>
     );

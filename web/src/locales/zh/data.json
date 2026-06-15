@@ -94,6 +94,8 @@
     "Deleted": "删除",
     "Deleted Chunks": "删除段落",
     "Full Refresh": "全量刷新",
+    "Full refresh completed": "全量刷新完成",
+    "Full refresh completed with partial failures": "全量刷新完成，部分失败",
     "Generating vectors, please wait...": "正在生成向量，请稍候...",
     "Incremental Refresh": "增量刷新",
     "Incremental refresh completed": "增量刷新完成",
@@ -118,7 +120,14 @@
     "Error": "错误",
     "From → To": "从 → 到",
     "Status": "状态",
-    "Version": "版本"
+    "Version": "版本",
+    "Parse Error": "解析错误",
+    "Delete Vectors Error": "删除向量错误",
+    "Vector Generation Errors": "向量生成错误",
+    "Failed": "失败",
+    "Failed Chunks": "失败的段落",
+    "chunks": "个段落",
+    "{count} more errors": "还有 {count} 个错误"
   },
   "form": {
     "Edit Form": "编辑表单",

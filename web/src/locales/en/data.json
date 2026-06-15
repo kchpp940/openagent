@@ -94,6 +94,8 @@
     "Deleted": "Deleted",
     "Deleted Chunks": "Deleted Chunks",
     "Full Refresh": "Full Refresh",
+    "Full refresh completed": "Full refresh completed",
+    "Full refresh completed with partial failures": "Full refresh completed with partial failures",
     "Generating vectors, please wait...": "Generating vectors, please wait...",
     "Incremental Refresh": "Incremental Refresh",
     "Incremental refresh completed": "Incremental refresh completed",
@@ -118,7 +120,14 @@
     "Error": "Error",
     "From → To": "From → To",
     "Status": "Status",
-    "Version": "Version"
+    "Version": "Version",
+    "Parse Error": "Parse Error",
+    "Delete Vectors Error": "Delete Vectors Error",
+    "Vector Generation Errors": "Vector Generation Errors",
+    "Failed": "Failed",
+    "Failed Chunks": "Failed Chunks",
+    "chunks": "chunks",
+    "{count} more errors": "{count} more errors"
   },
   "form": {
     "Edit Form": "Edit Form",

@@ -506,13 +506,13 @@ func AddVectorsForFile(store *Store, fileName string, fileUrl string, lang strin
 	return ok, err
 }
 
-func RefreshFileVectors(file *File, lang string) (bool, error) {
+func RefreshFileVectors(file *File, lang string) (*FileVersionDiff, bool, error) {
 	store, err := getStore(file.Owner, file.Store)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if store == nil {
-		return false, fmt.Errorf(i18n.Translate(lang, "account:The store: %s is not found"), file.Store)
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "account:The store: %s is not found"), file.Store)
 	}
 
 	var objectKey string
@@ -523,19 +523,44 @@ func RefreshFileVectors(file *File, lang string) (bool, error) {
 		objectKey = file.Name
 	}
 	if objectKey == "" {
-		return false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
 	}
 
 	if file.Url == "" {
-		return false, fmt.Errorf(i18n.Translate(lang, "object:The file URL for: %s is empty"), file.Name)
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "object:The file URL for: %s is empty"), file.Name)
 	}
 
-	_, err = DeleteVectorsByFile(store.Owner, store.Name, objectKey)
+	modelProvider, err := store.GetModelProvider()
 	if err != nil {
-		return false, err
+		return nil, false, err
+	}
+	if modelProvider == nil {
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
 	}
 
-	return AddVectorsForFile(store, objectKey, file.Url, lang)
+	embeddingProvider, err := store.GetEmbeddingProvider()
+	if err != nil {
+		return nil, false, err
+	}
+	if embeddingProvider == nil {
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "object:The embedding provider for store: %s is not found"), store.GetId())
+	}
+
+	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider(lang)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var ok bool
+	_, err = withFileStatusIncremental(store.Owner, store.Name, objectKey, func() (bool, int, error) {
+		return addVectorsForFileIncremental(embeddingProviderObj, store.Name, objectKey, file.Url, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang, false)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	diff, _ := GetLatestFileVersionDiff(file.Owner, file.Name)
+	return diff, ok, err
 }
 
 func RefreshFileVectorsIncremental(file *File, lang string) (*FileVersionDiff, bool, error) {
@@ -591,7 +616,7 @@ func RefreshFileVectorsIncremental(file *File, lang string) (*FileVersionDiff, b
 		return nil, false, err
 	}
 
-	diff, err := GetLatestFileVersionDiff(file.Owner, file.Name)
+	diff, _ := GetLatestFileVersionDiff(file.Owner, file.Name)
 	return diff, ok, err
 }
 
@@ -619,9 +644,7 @@ func AddVectorsForFileIncremental(store *Store, fileName string, fileUrl string,
 
 	var ok bool
 	_, err = withFileStatusIncremental(store.Owner, store.Name, fileName, func() (bool, int, error) {
-		var err2 error
-		ok, _, err2 = addVectorsForFileIncremental(embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang, true)
-		return ok, 0, err2
+		return addVectorsForFileIncremental(embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang, true)
 	})
 	if err != nil {
 		return nil, false, err
