@@ -16,7 +16,6 @@ import React, {useEffect, useMemo, useRef, useState} from "react";
 import {Avatar, Badge, Button, Drawer, Dropdown, Input, List, Modal, Space, Table, Tag, Tooltip, Typography} from "antd";
 import {
   CheckCircleOutlined,
-  CloseCircleOutlined,
   CommentOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -24,7 +23,6 @@ import {
   ExclamationCircleOutlined,
   FullscreenOutlined,
   MessageOutlined,
-  QuestionCircleOutlined,
   ReloadOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
@@ -39,7 +37,7 @@ import * as Setting from "./Setting";
 import * as TaskBackend from "./backend/TaskBackend";
 
 const {TextArea} = Input;
-const {Text, Paragraph} = Typography;
+const {Text} = Typography;
 
 const taskChartCardStyle = {
   minWidth: 0,
@@ -88,7 +86,7 @@ function countUnresolved(comments) {
   return comments.filter((c) => c.status !== "resolved").length;
 }
 
-export default function TaskAnalysisReport({result, downloadFileName, taskId, currentUser, onCommentChange}) {
+export default function TaskAnalysisReport({result, downloadFileName, taskId, onCommentChange}) {
   const radarRef = useRef(null);
   const barRef = useRef(null);
   const pieRef = useRef(null);
@@ -98,6 +96,9 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
   const [commentsDrawerOpen, setCommentsDrawerOpen] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [allComments, setAllComments] = useState([]);
+  const [groupedComments, setGroupedComments] = useState({});
+  const [backendAnchors, setBackendAnchors] = useState([]);
+  const [commentCounts, setCommentCounts] = useState({total: 0, open: 0, resolved: 0, disputed: 0, unresolved: 0});
   const [activeTarget, setActiveTarget] = useState(null);
   const [newCommentText, setNewCommentText] = useState("");
   const [editingComment, setEditingComment] = useState(null);
@@ -117,9 +118,17 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
     try {
       const res = await TaskBackend.getReportComments(taskId);
       if (res.status === "ok") {
-        setAllComments(res.data || []);
+        const data = res.data || {};
+        const comments = data.comments || [];
+        const grouped = data.grouped || {};
+        const anchors = (data.anchors && data.anchors.anchors) ? data.anchors.anchors : [];
+        const counts = data.counts || {total: comments.length, open: 0, resolved: 0, disputed: 0, unresolved: 0};
+        setAllComments(comments);
+        setGroupedComments(grouped);
+        setBackendAnchors(anchors);
+        setCommentCounts(counts);
         commentsLoadedRef.current = true;
-        notifyParent(res.data || []);
+        notifyParent(counts, comments);
       }
     } catch (err) {
       Setting.showMessage("error", err?.message || String(err));
@@ -128,22 +137,48 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
     }
   };
 
-  const notifyParent = (comments) => {
+  const notifyParent = (counts, comments) => {
     if (onCommentChange) {
-      onCommentChange(comments);
+      onCommentChange({counts: counts || commentCounts, comments: comments || allComments});
     }
   };
 
-  const commentsByItemKey = useMemo(() => {
-    const map = {};
-    (allComments || []).forEach((c) => {
-      if (!map[c.stableItemKey]) {
-        map[c.stableItemKey] = [];
+  const fieldAnchorKey = (cat, item, field) => {
+    return `${cat}||${item}::${field}`;
+  };
+
+  const anchorsByFieldKey = useMemo(() => {
+    const m = {};
+    (backendAnchors || []).forEach((a) => {
+      if (a.anchorType === "field") {
+        const k = fieldAnchorKey(a.categoryName, a.itemName, a.referencedField);
+        m[k] = a;
       }
-      map[c.stableItemKey].push(c);
     });
-    return map;
-  }, [allComments]);
+    return m;
+  }, [backendAnchors]);
+
+  const anchorsByStableItem = useMemo(() => {
+    const m = {};
+    (backendAnchors || []).forEach((a) => {
+      if (!m[a.stableItemKey]) m[a.stableItemKey] = [];
+      m[a.stableItemKey].push(a);
+    });
+    return m;
+  }, [backendAnchors]);
+
+  const anchorsByStableItemPrimary = useMemo(() => {
+    const m = {};
+    (backendAnchors || []).forEach((a) => {
+      if (a.anchorType === "item" && !m[a.stableItemKey]) {
+        m[a.stableItemKey] = a;
+      }
+    });
+    (backendAnchors || []).forEach((a) => {
+      if (!m[a.stableItemKey]) m[a.stableItemKey] = a;
+    });
+    return m;
+  }, [backendAnchors]);
 
   if (!result) {
     return null;
@@ -212,6 +247,36 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
     }
   };
 
+  const findAnchorByField = (catName, itemName, field) => {
+    const k = fieldAnchorKey(catName, itemName, field);
+    return anchorsByFieldKey[k] || null;
+  };
+
+  const buildTargetFromAnchor = (anchor, catName, itemName) => {
+    if (!anchor) {
+      return {
+        categoryName: catName,
+        itemName: itemName,
+        referencedField: "",
+        referencedContent: "",
+      };
+    }
+    return {
+      anchorCategory: anchor.anchorCategory,
+      anchorItem: anchor.anchorItem,
+      anchorField: anchor.anchorField,
+      contentHash: anchor.contentHash,
+      stableCategoryKey: anchor.stableCategoryKey,
+      stableItemKey: anchor.stableItemKey,
+      categoryName: anchor.categoryName,
+      itemName: anchor.itemName,
+      referencedField: anchor.referencedField,
+      referencedContent: anchor.referencedContent,
+      categoryIndex: anchor.categoryIndex,
+      itemIndex: anchor.itemIndex,
+    };
+  };
+
   const openCommentsDrawer = (target) => {
     setActiveTarget(target);
     setNewCommentText("");
@@ -220,9 +285,22 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
     setCommentsDrawerOpen(true);
   };
 
+  const getItemComments = (stableItemKey) => {
+    if (!stableItemKey) return [];
+    return groupedComments[stableItemKey] || [];
+  };
+
   const getTargetComments = () => {
     if (!activeTarget) return [];
-    return commentsByItemKey[activeTarget.stableItemKey] || [];
+    if (activeTarget.stableItemKey && groupedComments[activeTarget.stableItemKey]) {
+      return groupedComments[activeTarget.stableItemKey];
+    }
+    return allComments.filter((c) => {
+      if (activeTarget.anchorField && c.anchorField === activeTarget.anchorField) return true;
+      if (activeTarget.anchorItem && c.anchorItem === activeTarget.anchorItem) return true;
+      if (activeTarget.stableItemKey && c.stableItemKey === activeTarget.stableItemKey) return true;
+      return false;
+    });
   };
 
   const handleAddComment = async() => {
@@ -233,14 +311,18 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
       const payload = {
         taskOwner,
         taskName,
-        stableCategoryKey: activeTarget.stableCategoryKey,
-        stableItemKey: activeTarget.stableItemKey,
-        categoryName: activeTarget.categoryName,
-        itemName: activeTarget.itemName,
-        categoryIndex: activeTarget.categoryIndex,
-        itemIndex: activeTarget.itemIndex,
+        anchorCategory: activeTarget.anchorCategory || "",
+        anchorItem: activeTarget.anchorItem || "",
+        anchorField: activeTarget.anchorField || "",
+        contentHash: activeTarget.contentHash || "",
+        stableCategoryKey: activeTarget.stableCategoryKey || "",
+        stableItemKey: activeTarget.stableItemKey || "",
+        categoryName: activeTarget.categoryName || "",
+        itemName: activeTarget.itemName || "",
         referencedField: activeTarget.referencedField || "",
         referencedContent: activeTarget.referencedContent || "",
+        categoryIndex: typeof activeTarget.categoryIndex === "number" ? activeTarget.categoryIndex : -1,
+        itemIndex: typeof activeTarget.itemIndex === "number" ? activeTarget.itemIndex : -1,
         content: newCommentText.trim(),
       };
       const res = await TaskBackend.addReportComment(payload);
@@ -273,10 +355,11 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
     if (!editingComment || !editingText.trim()) return;
     setSubmitting(true);
     try {
-      const res = await TaskBackend.updateReportComment(editingComment.id, {
-        ...editingComment,
+      const payload = {
         content: editingText.trim(),
-      });
+        referencedContent: editingComment.referencedContent || "",
+      };
+      const res = await TaskBackend.updateReportComment(editingComment.id, payload);
       if (res.status === "ok") {
         Setting.showMessage("success", i18next.t("general:Successfully saved"));
         cancelEditComment();
@@ -342,8 +425,6 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
   };
 
   const renderCommentActions = (comment) => {
-    const isAuthor = !currentUser || comment.author === currentUser;
-    const actions = [];
     if (editingComment?.id === comment.id) {
       return (
         <Space>
@@ -356,21 +437,20 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
         </Space>
       );
     }
-    if (isAuthor) {
-      actions.push({
-        key: "edit",
-        label: i18next.t("general:Edit"),
-        icon: <EditOutlined />,
-        onClick: () => startEditComment(comment),
-      });
-      actions.push({
-        key: "delete",
-        label: i18next.t("general:Delete"),
-        icon: <DeleteOutlined />,
-        danger: true,
-        onClick: () => handleDeleteComment(comment.id),
-      });
-    }
+    const actions = [];
+    actions.push({
+      key: "edit",
+      label: i18next.t("general:Edit"),
+      icon: <EditOutlined />,
+      onClick: () => startEditComment(comment),
+    });
+    actions.push({
+      key: "delete",
+      label: i18next.t("general:Delete"),
+      icon: <DeleteOutlined />,
+      danger: true,
+      onClick: () => handleDeleteComment(comment.id),
+    });
     if (comment.status === "open") {
       actions.push({
         key: "resolve",
@@ -447,25 +527,9 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
   })();
 
   const hasCharts = categories.length > 0;
-  const totalUnresolved = countUnresolved(allComments);
+  const totalUnresolved = Number(commentCounts.unresolved) || 0;
 
-  const buildItemTarget = (cat, catIdx, item, itemIdx, fieldName, fieldValue) => {
-    const stableCategoryKey = TaskBackend.generateStableCategoryKey(cat.name, catIdx);
-    const stableItemKey = TaskBackend.generateStableItemKey(cat.name, item.name, catIdx, itemIdx);
-    return {
-      stableCategoryKey,
-      stableItemKey,
-      categoryName: cat.name,
-      itemName: item.name,
-      categoryIndex: catIdx,
-      itemIndex: itemIdx,
-      referencedField: fieldName,
-      referencedContent: fieldValue,
-    };
-  };
-
-  const CommentBadgeButton = ({target, size = "small"}) => {
-    const itemComments = commentsByItemKey[target.stableItemKey] || [];
+  const CommentBadgeButton = ({target, itemComments, size = "small"}) => {
     const unresolved = countUnresolved(itemComments);
     const badgeColor = getCommentBadgeColor(itemComments);
     return (
@@ -500,11 +564,19 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
       width: "12%",
       render: (text, record, idx) => {
         const item = record;
-        const target = buildItemTarget(cat, catIdx, item, idx, "", "");
+        const listAnchors = anchorsByStableItem;
+        const prim = anchorsByStableItemPrimary;
+        const stableKeyGuess = (listAnchors && Object.keys(listAnchors).find((k) => {
+          const arr = listAnchors[k] || [];
+          return arr.some((a) => a.categoryIndex === catIdx && a.itemIndex === idx);
+        })) || null;
+        const primary = stableKeyGuess ? prim[stableKeyGuess] : null;
+        const itemComments = stableKeyGuess ? getItemComments(stableKeyGuess) : [];
+        const target = buildTargetFromAnchor(primary, cat.name, item.name);
         return (
           <div style={{display: "flex", alignItems: "center", gap: "4px"}}>
             <span>{text}</span>
-            <CommentBadgeButton target={target} />
+            <CommentBadgeButton target={target} itemComments={itemComments} />
           </div>
         );
       },
@@ -518,8 +590,14 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
         const text = `${score}${i18next.t("task:Score Unit")}`;
         const hex = getScoreBandColor(score, categories);
         const item = record;
-        const target = buildItemTarget(cat, catIdx, item, idx, "score", String(score));
-        const itemComments = commentsByItemKey[target.stableItemKey] || [];
+        const anchor = findAnchorByField(cat.name, item.name, "score");
+        const target = buildTargetFromAnchor(anchor, cat.name, item.name);
+        const listAnchors = anchorsByStableItem;
+        const stableKeyGuess = (listAnchors && Object.keys(listAnchors).find((k) => {
+          const arr = listAnchors[k] || [];
+          return arr.some((a) => a.categoryIndex === catIdx && a.itemIndex === idx);
+        })) || null;
+        const itemComments = stableKeyGuess ? getItemComments(stableKeyGuess) : [];
         const badgeColor = getCommentBadgeColor(itemComments);
         const unresolved = countUnresolved(itemComments);
         return (
@@ -551,7 +629,8 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
       width: "27%",
       render: (text, record, idx) => {
         const item = record;
-        const target = buildItemTarget(cat, catIdx, item, idx, "advantage", text);
+        const anchor = findAnchorByField(cat.name, item.name, "advantage");
+        const target = buildTargetFromAnchor(anchor, cat.name, item.name);
         return (
           <div style={{position: "relative"}}>
             {text}
@@ -577,7 +656,8 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
       width: "27%",
       render: (text, record, idx) => {
         const item = record;
-        const target = buildItemTarget(cat, catIdx, item, idx, "disadvantage", text);
+        const anchor = findAnchorByField(cat.name, item.name, "disadvantage");
+        const target = buildTargetFromAnchor(anchor, cat.name, item.name);
         return (
           <div style={{position: "relative"}}>
             {text}
@@ -603,7 +683,8 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
       width: "26%",
       render: (text, record, idx) => {
         const item = record;
-        const target = buildItemTarget(cat, catIdx, item, idx, "suggestion", text);
+        const anchor = findAnchorByField(cat.name, item.name, "suggestion");
+        const target = buildTargetFromAnchor(anchor, cat.name, item.name);
         return (
           <div style={{position: "relative"}}>
             {text}
@@ -634,7 +715,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
         {activeTarget.referencedField && (
           <div style={{fontSize: "12px", color: "#8c8c8c", marginTop: "4px"}}>
             {i18next.t(`task:${activeTarget.referencedField.charAt(0).toUpperCase() + activeTarget.referencedField.slice(1)}`)}
-            {activeTarget.referencedField === "score" ? `: ${activeTarget.referencedContent}` : ""}
+            {activeTarget.referencedField === "score" && activeTarget.referencedContent ? `: ${activeTarget.referencedContent}` : ""}
           </div>
         )}
       </div>
@@ -656,19 +737,31 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
           {i18next.t("task:Overall Score")}：<span style={{color: "#1677ff", fontSize: "20px"}}>{result.score}</span>
         </div>
         {taskId && totalUnresolved > 0 && (
-          <Tooltip title={`${totalUnresolved} ${i18next.t("task:unresolved comments")}`}>
+          <Tooltip title={`${totalUnresolved} ${i18next.t("task:unresolved comments")} (${Number(commentCounts.open) || 0} ${i18next.t("task:Open")}, ${Number(commentCounts.disputed) || 0} ${i18next.t("task:Disputed")})`}>
             <Badge count={totalUnresolved} color="#1677ff">
               <Button type="text" icon={<CommentOutlined />} onClick={() => {
-                const firstWithComments = (allComments || []).find((c) => c.status !== "resolved");
+                const firstWithComments = Object.keys(groupedComments || {}).find((k) => {
+                  const arr = groupedComments[k] || [];
+                  return arr.some((c) => c.status !== "resolved");
+                });
                 if (firstWithComments) {
-                  setActiveTarget({
-                    stableCategoryKey: firstWithComments.stableCategoryKey,
-                    stableItemKey: firstWithComments.stableItemKey,
-                    categoryName: firstWithComments.categoryName,
-                    itemName: firstWithComments.itemName,
-                    categoryIndex: firstWithComments.categoryIndex,
-                    itemIndex: firstWithComments.itemIndex,
-                  });
+                  const arr = groupedComments[firstWithComments] || [];
+                  const first = arr.find((c) => c.status !== "resolved") || arr[0];
+                  const target = buildTargetFromAnchor({
+                    anchorCategory: first.anchorCategory,
+                    anchorItem: first.anchorItem,
+                    anchorField: first.anchorField,
+                    contentHash: first.contentHash,
+                    stableCategoryKey: first.stableCategoryKey,
+                    stableItemKey: first.stableItemKey,
+                    categoryName: first.categoryName,
+                    itemName: first.itemName,
+                    referencedField: first.referencedField,
+                    referencedContent: first.referencedContent,
+                    categoryIndex: first.categoryIndex,
+                    itemIndex: first.itemIndex,
+                  }, first.categoryName, first.itemName);
+                  setActiveTarget(target);
                   setCommentsDrawerOpen(true);
                 }
               }}>
@@ -751,11 +844,15 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, cu
         </div>
       </Modal>
       {categories.map((cat, idx) => {
-        const stableCategoryKey = TaskBackend.generateStableCategoryKey(cat.name, idx);
+        const listAnchors = anchorsByStableItem;
+        const catStableKeys = Object.keys(listAnchors).filter((k) => {
+          const arr = listAnchors[k] || [];
+          return arr.some((a) => a.categoryIndex === idx);
+        });
         const catComments = [];
-        (cat.items || []).forEach((item, iIdx) => {
-          const stableItemKey = TaskBackend.generateStableItemKey(cat.name, item.name, idx, iIdx);
-          (commentsByItemKey[stableItemKey] || []).forEach((c) => catComments.push(c));
+        catStableKeys.forEach((k) => {
+          const arr = groupedComments[k] || [];
+          arr.forEach((c) => catComments.push(c));
         });
         const catUnresolved = countUnresolved(catComments);
         return (

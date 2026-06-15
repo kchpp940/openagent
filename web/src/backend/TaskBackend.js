@@ -105,7 +105,17 @@ export function analyzeTask(owner, name) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
-export function addReportComment(comment) {
+export function getTaskResultAnchors(taskId) {
+  return fetch(`${Setting.ServerUrl}/api/get-task-result-anchors?id=${encodeURIComponent(taskId)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function addReportComment(payload) {
   return fetch(`${Setting.ServerUrl}/api/add-report-comment`, {
     method: "POST",
     credentials: "include",
@@ -113,7 +123,7 @@ export function addReportComment(comment) {
       "Accept-Language": Setting.getAcceptLanguage(),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(comment),
+    body: JSON.stringify(payload),
   }).then(res => Setting.handleFetchResponse(res));
 }
 
@@ -137,7 +147,7 @@ export function getReportCommentCount(taskId) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
-export function updateReportComment(commentId, comment) {
+export function updateReportComment(commentId, payload) {
   return fetch(`${Setting.ServerUrl}/api/update-report-comment?id=${commentId}`, {
     method: "POST",
     credentials: "include",
@@ -145,7 +155,7 @@ export function updateReportComment(commentId, comment) {
       "Accept-Language": Setting.getAcceptLanguage(),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(comment),
+    body: JSON.stringify(payload),
   }).then(res => Setting.handleFetchResponse(res));
 }
 
@@ -187,21 +197,4 @@ export function deleteReportComment(commentId) {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
   }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function generateStableCategoryKey(categoryName, categoryIndex) {
-  const sanitized = (categoryName || "").toLowerCase()
-    .replace(/[^a-z0-9]/g, "_")
-    .substring(0, 60);
-  return `cat_${categoryIndex}_${sanitized}`;
-}
-
-export function generateStableItemKey(categoryName, itemName, categoryIndex, itemIndex) {
-  const sanitizedCat = (categoryName || "").toLowerCase()
-    .replace(/[^a-z0-9]/g, "_")
-    .substring(0, 60);
-  const sanitizedItem = (itemName || "").toLowerCase()
-    .replace(/[^a-z0-9]/g, "_")
-    .substring(0, 60);
-  return `item_${categoryIndex}_${itemIndex}_${sanitizedCat}_${sanitizedItem}`;
 }

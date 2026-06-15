@@ -50,7 +50,7 @@ class TaskEditPage extends React.Component {
       analyzeError: "",
       loading: false,
       uploadingDocument: false,
-      commentCounts: {total: 0, open: 0, resolved: 0, disputed: 0},
+      commentCounts: {total: 0, open: 0, resolved: 0, disputed: 0, unresolved: 0},
     };
     this.analyzeProgressIntervalId = null;
     this.analyzeStartTime = null;
@@ -113,20 +113,35 @@ class TaskEditPage extends React.Component {
     TaskBackend.getReportCommentCount(taskId)
       .then((res) => {
         if (res.status === "ok" && res.data) {
-          this.setState({commentCounts: res.data});
+          const c = res.data || {};
+          if (c.unresolved == null) {
+            c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
+          }
+          this.setState({commentCounts: c});
         }
       })
       .catch(() => {});
   }
 
-  handleReportCommentChange = (comments) => {
-    const counts = {total: comments.length, open: 0, resolved: 0, disputed: 0};
-    comments.forEach((c) => {
-      if (counts[c.status] !== undefined) {
-        counts[c.status]++;
+  handleReportCommentChange = (payload) => {
+    const data = payload || {};
+    if (data.counts) {
+      const c = {...data.counts};
+      if (c.unresolved == null) {
+        c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
       }
-    });
-    this.setState({commentCounts: counts});
+      this.setState({commentCounts: c});
+    } else if (Array.isArray(data)) {
+      const comments = data;
+      const counts = {total: comments.length, open: 0, resolved: 0, disputed: 0, unresolved: 0};
+      comments.forEach((c) => {
+        if (counts[c.status] !== undefined) {
+          counts[c.status]++;
+        }
+      });
+      counts.unresolved = counts.open + counts.disputed;
+      this.setState({commentCounts: counts});
+    }
   };
 
   getEffectiveScale() {
@@ -351,10 +366,10 @@ class TaskEditPage extends React.Component {
         <div style={{marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"}}>
           <div style={{display: "flex", alignItems: "center", gap: "12px"}}>
             <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("task:Edit Task")}</span>
-            {this.state.commentCounts && (this.state.commentCounts.open > 0 || this.state.commentCounts.disputed > 0) && (
+            {this.state.commentCounts && Number(this.state.commentCounts.unresolved) > 0 && (
               <Space>
-                <Tooltip title={`${this.state.commentCounts.open || 0} ${i18next.t("task:open comments")}, ${this.state.commentCounts.disputed || 0} ${i18next.t("task:disputed")}`}>
-                  <Badge count={(this.state.commentCounts.open || 0) + (this.state.commentCounts.disputed || 0)} offset={[4, 0]}>
+                <Tooltip title={`${Number(this.state.commentCounts.unresolved) || 0} ${i18next.t("task:unresolved comments")} (${Number(this.state.commentCounts.open) || 0} ${i18next.t("task:Open")}, ${Number(this.state.commentCounts.disputed) || 0} ${i18next.t("task:Disputed")})`}>
+                  <Badge count={Number(this.state.commentCounts.unresolved) || 0} offset={[4, 0]} color="#1677ff">
                     <Button type="text" size="small" icon={<CommentOutlined style={{color: "#1677ff"}} />} style={{padding: "0 4px"}} />
                   </Badge>
                 </Tooltip>
@@ -545,7 +560,6 @@ class TaskEditPage extends React.Component {
                     result={task.result}
                     downloadFileName={`${task.owner}_${task.name}_report.docx`}
                     taskId={`${task.owner}/${task.name}`}
-                    currentUser={this.props.account?.name}
                     onCommentChange={this.handleReportCommentChange}
                   />
                 )}

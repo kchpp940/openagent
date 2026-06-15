@@ -15,7 +15,10 @@
 package object
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -29,49 +32,288 @@ const (
 	ReportCommentStatusDisputed = "disputed"
 )
 
+const (
+	AnchorTypeCategory = "category"
+	AnchorTypeItem     = "item"
+	AnchorTypeField    = "field"
+)
+
 type ReportComment struct {
 	Id                int64  `xorm:"pk autoincr" json:"id"`
 	Owner             string `xorm:"varchar(100) notnull index" json:"owner"`
 	TaskOwner         string `xorm:"varchar(100) notnull index" json:"taskOwner"`
 	TaskName          string `xorm:"varchar(100) notnull index" json:"taskName"`
-	StableCategoryKey string `xorm:"varchar(200) notnull index" json:"stableCategoryKey"`
-	StableItemKey     string `xorm:"varchar(200) notnull index" json:"stableItemKey"`
+
+	AnchorCategory string `xorm:"varchar(100) index" json:"anchorCategory"`
+	AnchorItem     string `xorm:"varchar(200) index" json:"anchorItem"`
+	AnchorField    string `xorm:"varchar(300) index" json:"anchorField"`
+	ContentHash    string `xorm:"varchar(24) index" json:"contentHash"`
+
+	StableCategoryKey string `xorm:"varchar(200) index" json:"-"`
+	StableItemKey     string `xorm:"varchar(200) index" json:"-"`
+
 	CategoryName      string `xorm:"varchar(200)" json:"categoryName"`
 	ItemName          string `xorm:"varchar(200)" json:"itemName"`
-	CategoryIndex     int    `xorm:"int" json:"categoryIndex"`
-	ItemIndex         int    `xorm:"int" json:"itemIndex"`
 	ReferencedField   string `xorm:"varchar(50)" json:"referencedField"`
 	ReferencedContent string `xorm:"mediumtext" json:"referencedContent"`
-	Content           string `xorm:"mediumtext" json:"content"`
-	Status            string `xorm:"varchar(20) notnull default 'open'" json:"status"`
-	Author            string `xorm:"varchar(100) notnull" json:"author"`
-	Resolver          string `xorm:"varchar(100)" json:"resolver"`
-	CreatedTime       string `xorm:"varchar(100)" json:"createdTime"`
-	UpdatedTime       string `xorm:"varchar(100)" json:"updatedTime"`
-	ResolvedTime      string `xorm:"varchar(100)" json:"resolvedTime"`
+
+	Content      string `xorm:"mediumtext" json:"content"`
+	Status       string `xorm:"varchar(20) notnull default 'open'" json:"status"`
+	Author       string `xorm:"varchar(100) notnull" json:"author"`
+	Resolver     string `xorm:"varchar(100)" json:"resolver"`
+	CreatedTime  string `xorm:"varchar(100)" json:"createdTime"`
+	UpdatedTime  string `xorm:"varchar(100)" json:"updatedTime"`
+	ResolvedTime string `xorm:"varchar(100)" json:"resolvedTime"`
 }
 
-func GetTaskStableKeys(result *TaskResult) (map[string]int, map[string]int) {
-	categoryKeys := map[string]int{}
-	itemKeys := map[string]int{}
+type TaskAnchor struct {
+	AnchorType        string `json:"anchorType"`
+	AnchorField       string `json:"anchorField"`
+	AnchorItem        string `json:"anchorItem"`
+	AnchorCategory    string `json:"anchorCategory"`
+	ContentHash       string `json:"contentHash"`
+	StableCategoryKey string `json:"stableCategoryKey"`
+	StableItemKey     string `json:"stableItemKey"`
+	CategoryName      string `json:"categoryName"`
+	ItemName          string `json:"itemName"`
+	ReferencedField   string `json:"referencedField"`
+	ReferencedContent string `json:"referencedContent"`
+	CategoryIndex     int    `json:"categoryIndex"`
+	ItemIndex         int    `json:"itemIndex"`
+}
+
+type TaskAnchorsResult struct {
+	Anchors []*TaskAnchor `json:"anchors"`
+}
+
+func normalizeAnchorToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		} else if r == ' ' || r == '-' || r == '_' || r == '/' || r == '.' {
+			if b.Len() > 0 && b.String()[b.Len()-1] != '_' {
+				b.WriteRune('_')
+			}
+		}
+	}
+	res := strings.TrimRight(b.String(), "_")
+	if len(res) > 80 {
+		h := sha1.Sum([]byte(res))
+		res = res[:60] + hex.EncodeToString(h[:])[:12]
+	}
+	return res
+}
+
+func shortContentHash(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) > 500 {
+		trimmed = string(runes[:500])
+	}
+	h := sha1.Sum([]byte(trimmed))
+	return hex.EncodeToString(h[:])[:16]
+}
+
+func GenerateCategoryAnchor(categoryName string) string {
+	return "C:" + normalizeAnchorToken(categoryName)
+}
+
+func GenerateItemAnchor(categoryName string, itemName string) string {
+	c := normalizeAnchorToken(categoryName)
+	i := normalizeAnchorToken(itemName)
+	return "I:" + c + "||" + i
+}
+
+func GenerateFieldAnchor(categoryName string, itemName string, field string, content string) string {
+	itemAnchor := GenerateItemAnchor(categoryName, itemName)
+	h := shortContentHash(content)
+	if h != "" {
+		return "F:" + itemAnchor + "::" + field + "#" + h
+	}
+	return "F:" + itemAnchor + "::" + field
+}
+
+func (r *ReportComment) FillAnchorsFromTask() {
+	if r.CategoryName != "" && r.AnchorCategory == "" {
+		r.AnchorCategory = GenerateCategoryAnchor(r.CategoryName)
+	}
+	if r.CategoryName != "" && r.ItemName != "" && r.AnchorItem == "" {
+		r.AnchorItem = GenerateItemAnchor(r.CategoryName, r.ItemName)
+	}
+	if r.CategoryName != "" && r.ItemName != "" && r.ReferencedField != "" && r.AnchorField == "" {
+		r.AnchorField = GenerateFieldAnchor(r.CategoryName, r.ItemName, r.ReferencedField, r.ReferencedContent)
+	}
+	if r.ReferencedContent != "" && r.ContentHash == "" {
+		r.ContentHash = shortContentHash(r.ReferencedContent)
+	}
+	if r.StableCategoryKey == "" && r.CategoryName != "" {
+		r.StableCategoryKey = GenerateStableCategoryKey(r.CategoryName, 0)
+	}
+	if r.StableItemKey == "" && r.CategoryName != "" && r.ItemName != "" {
+		r.StableItemKey = GenerateStableItemKey(r.CategoryName, r.ItemName, 0, 0)
+	}
+}
+
+func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
+	res := &TaskAnchorsResult{Anchors: []*TaskAnchor{}}
 	if result == nil {
-		return categoryKeys, itemKeys
+		return res
 	}
 	for ci, cat := range result.Categories {
 		if cat == nil {
 			continue
 		}
-		catKey := GenerateStableCategoryKey(cat.Name, ci)
-		categoryKeys[catKey] = ci
+		catAnchor := GenerateCategoryAnchor(cat.Name)
+		stableCatKey := GenerateStableCategoryKey(cat.Name, ci)
+		res.Anchors = append(res.Anchors, &TaskAnchor{
+			AnchorType:        AnchorTypeCategory,
+			AnchorCategory:    catAnchor,
+			StableCategoryKey: stableCatKey,
+			CategoryName:      cat.Name,
+			CategoryIndex:     ci,
+		})
 		for ii, item := range cat.Items {
 			if item == nil {
 				continue
 			}
-			itemKey := GenerateStableItemKey(cat.Name, item.Name, ci, ii)
-			itemKeys[itemKey] = ii*1000 + ci
+			itemAnchor := GenerateItemAnchor(cat.Name, item.Name)
+			stableItemKey := GenerateStableItemKey(cat.Name, item.Name, ci, ii)
+
+			addField := func(field string, content interface{}) {
+				contentStr := ""
+				switch v := content.(type) {
+				case string:
+					contentStr = v
+				case int:
+					contentStr = fmt.Sprintf("%d", v)
+				case float64:
+					contentStr = fmt.Sprintf("%.4f", v)
+				case float32:
+					contentStr = fmt.Sprintf("%.4f", v)
+				}
+				fieldAnchor := GenerateFieldAnchor(cat.Name, item.Name, field, contentStr)
+				ch := shortContentHash(contentStr)
+				res.Anchors = append(res.Anchors, &TaskAnchor{
+					AnchorType:        AnchorTypeField,
+					AnchorCategory:    catAnchor,
+					AnchorItem:        itemAnchor,
+					AnchorField:       fieldAnchor,
+					ContentHash:       ch,
+					StableCategoryKey: stableCatKey,
+					StableItemKey:     stableItemKey,
+					CategoryName:      cat.Name,
+					ItemName:          item.Name,
+					ReferencedField:   field,
+					ReferencedContent: contentStr,
+					CategoryIndex:     ci,
+					ItemIndex:         ii,
+				})
+			}
+
+			res.Anchors = append(res.Anchors, &TaskAnchor{
+				AnchorType:        AnchorTypeItem,
+				AnchorCategory:    catAnchor,
+				AnchorItem:        itemAnchor,
+				StableCategoryKey: stableCatKey,
+				StableItemKey:     stableItemKey,
+				CategoryName:      cat.Name,
+				ItemName:          item.Name,
+				CategoryIndex:     ci,
+				ItemIndex:         ii,
+			})
+
+			addField("score", item.Score)
+			addField("advantage", item.Advantage)
+			addField("disadvantage", item.Disadvantage)
+			addField("suggestion", item.Suggestion)
 		}
 	}
-	return categoryKeys, itemKeys
+	return res
+}
+
+func findBestAnchorByFallback(anchors []*TaskAnchor, comment *ReportComment) *TaskAnchor {
+	if len(anchors) == 0 {
+		return nil
+	}
+	type cand struct {
+		a     *TaskAnchor
+		score int
+	}
+	candidates := []cand{}
+	for _, a := range anchors {
+		s := 0
+		if a.AnchorCategory != "" && a.AnchorCategory == comment.AnchorCategory {
+			s += 1000
+		}
+		if a.AnchorItem != "" && a.AnchorItem == comment.AnchorItem {
+			s += 100
+		}
+		if a.AnchorField != "" && comment.AnchorField != "" && a.AnchorField == comment.AnchorField {
+			s += 10
+		}
+		if a.ReferencedField != "" && a.ReferencedField == comment.ReferencedField {
+			s += 5
+		}
+		if a.ContentHash != "" && comment.ContentHash != "" && a.ContentHash == comment.ContentHash {
+			s += 50
+		}
+		if s > 0 {
+			candidates = append(candidates, cand{a, s})
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
+	return candidates[0].a
+}
+
+func GroupCommentsWithAnchors(comments []*ReportComment, anchors []*TaskAnchor) map[string][]*ReportComment {
+	result := map[string][]*ReportComment{}
+	anchorByField := map[string]*TaskAnchor{}
+	anchorByItem := map[string]*TaskAnchor{}
+	for _, a := range anchors {
+		if a.AnchorType == AnchorTypeField && a.AnchorField != "" {
+			anchorByField[a.AnchorField] = a
+		}
+		if a.AnchorType == AnchorTypeItem && a.AnchorItem != "" {
+			if _, exists := anchorByItem[a.AnchorItem]; !exists {
+				anchorByItem[a.AnchorItem] = a
+			}
+		}
+	}
+	for _, c := range comments {
+		var matchedKey string
+		if c.AnchorField != "" {
+			if a, ok := anchorByField[c.AnchorField]; ok {
+				matchedKey = a.StableItemKey
+			}
+		}
+		if matchedKey == "" && c.AnchorItem != "" {
+			if a, ok := anchorByItem[c.AnchorItem]; ok {
+				matchedKey = a.StableItemKey
+			}
+		}
+		if matchedKey == "" {
+			best := findBestAnchorByFallback(anchors, c)
+			if best != nil {
+				matchedKey = best.StableItemKey
+			}
+		}
+		if matchedKey == "" {
+			if c.StableItemKey != "" {
+				matchedKey = c.StableItemKey
+			} else {
+				matchedKey = "__orphan__"
+			}
+		}
+		result[matchedKey] = append(result[matchedKey], c)
+	}
+	return result
 }
 
 func sanitizeForStableKey(s string) string {
@@ -99,6 +341,7 @@ func GenerateStableItemKey(categoryName string, itemName string, categoryIndex i
 }
 
 func AddReportComment(comment *ReportComment) (int64, error) {
+	comment.FillAnchorsFromTask()
 	if comment.CreatedTime == "" {
 		comment.CreatedTime = util.GetCurrentTime()
 	}
@@ -149,10 +392,11 @@ func GetReportCommentsByTaskAndStatus(taskOwner string, taskName string, status 
 
 func GetReportCommentCountByTask(taskOwner string, taskName string) (map[string]int64, error) {
 	result := map[string]int64{
-		"total":    0,
-		"open":     0,
-		"resolved": 0,
-		"disputed": 0,
+		"total":      0,
+		"open":       0,
+		"resolved":   0,
+		"disputed":   0,
+		"unresolved": 0,
 	}
 
 	total, err := adapter.engine.Where("task_owner = ? AND task_name = ?", taskOwner, taskName).Count(&ReportComment{})
@@ -168,6 +412,7 @@ func GetReportCommentCountByTask(taskOwner string, taskName string) (map[string]
 		}
 		result[status] = count
 	}
+	result["unresolved"] = result[ReportCommentStatusOpen] + result[ReportCommentStatusDisputed]
 
 	return result, nil
 }
@@ -191,6 +436,7 @@ func UpdateReportComment(id int64, comment *ReportComment) (bool, error) {
 		return false, fmt.Errorf("report comment not found")
 	}
 
+	comment.FillAnchorsFromTask()
 	comment.UpdatedTime = util.GetCurrentTime()
 	_, err = adapter.engine.ID(core.PK{id}).AllCols().Update(comment)
 	if err != nil {

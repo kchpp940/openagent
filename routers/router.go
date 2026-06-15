@@ -174,6 +174,7 @@ func initAPI() {
 	beego.Router("/api/delete-task", &controllers.ApiController{}, "POST:DeleteTask")
 	beego.Router("/api/upload-task-document", &controllers.ApiController{}, "POST:UploadTaskDocument")
 	beego.Router("/api/analyze-task", &controllers.ApiController{}, "POST:AnalyzeTask")
+	beego.Router("/api/get-task-result-anchors", &controllers.ApiController{}, "GET:GetTaskResultAnchors")
 	beego.Router("/api/add-report-comment", &controllers.ApiController{}, "POST:AddReportComment")
 	beego.Router("/api/get-report-comments", &controllers.ApiController{}, "GET:GetReportComments")
 	beego.Router("/api/get-report-comment-count", &controllers.ApiController{}, "GET:GetReportCommentCount")

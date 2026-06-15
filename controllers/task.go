@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/beego/beego/logs"
 	"github.com/beego/beego/utils/pagination"
@@ -311,6 +312,36 @@ func (c *ApiController) AnalyzeTask() {
 	c.ResponseOk(result)
 }
 
+type addReportCommentRequest struct {
+	TaskOwner         string `json:"taskOwner"`
+	TaskName          string `json:"taskName"`
+	AnchorField       string `json:"anchorField"`
+	AnchorItem        string `json:"anchorItem"`
+	AnchorCategory    string `json:"anchorCategory"`
+	ContentHash       string `json:"contentHash"`
+	StableCategoryKey string `json:"stableCategoryKey"`
+	StableItemKey     string `json:"stableItemKey"`
+	CategoryName      string `json:"categoryName"`
+	ItemName          string `json:"itemName"`
+	ReferencedField   string `json:"referencedField"`
+	ReferencedContent string `json:"referencedContent"`
+	Content           string `json:"content"`
+	CategoryIndex     int    `json:"categoryIndex"`
+	ItemIndex         int    `json:"itemIndex"`
+}
+
+type updateReportCommentRequest struct {
+	Content           string `json:"content"`
+	ReferencedContent string `json:"referencedContent"`
+}
+
+type ReportCommentsPayload struct {
+	Comments []*object.ReportComment            `json:"comments"`
+	Grouped  map[string][]*object.ReportComment `json:"grouped"`
+	Anchors  *object.TaskAnchorsResult          `json:"anchors"`
+	Counts   map[string]int64                   `json:"counts"`
+}
+
 func (c *ApiController) checkTaskOwnership(taskOwner string, taskName string) (*object.Task, error) {
 	task, err := object.GetTask(fmt.Sprintf("%s/%s", taskOwner, taskName))
 	if err != nil {
@@ -328,32 +359,89 @@ func (c *ApiController) checkTaskOwnership(taskOwner string, taskName string) (*
 	return task, nil
 }
 
-// AddReportComment
-// @Title AddReportComment
+func (c *ApiController) loadTaskResultForAnchors(taskOwner string, taskName string) *object.TaskResult {
+	result, _, err := object.GetLatestTaskResult(taskOwner, taskName)
+	if err != nil || result == nil {
+		return nil
+	}
+	return result
+}
+
+// GetTaskResultAnchors
+// @Title GetTaskResultAnchors
 // @Tag Task API
-// @Description add a report comment for a task analysis item
-// @Param body body object.ReportComment true "The report comment details"
-// @Success 200 {object} controllers.Response The Response object
-// @router /add-report-comment [post]
-func (c *ApiController) AddReportComment() {
-	var comment object.ReportComment
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &comment)
+// @Description generate stable anchors for every category/item/field in the latest task analysis result
+// @Param id query string true "The task id (owner/name)"
+// @Success 200 {object} object.TaskAnchorsResult The Response object
+// @router /get-task-result-anchors [get]
+func (c *ApiController) GetTaskResultAnchors() {
+	id := c.Input().Get("id")
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	task, err := c.checkTaskOwnership(comment.TaskOwner, comment.TaskName)
+	_, err = c.checkTaskOwnership(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result := c.loadTaskResultForAnchors(owner, name)
+	anchors := object.BuildTaskResultAnchors(result)
+	c.ResponseOk(anchors)
+}
+
+// AddReportComment
+// @Title AddReportComment
+// @Tag Task API
+// @Description add a report comment for a task analysis item
+// @Param body body addReportCommentRequest true "The report comment details"
+// @Success 200 {object} controllers.Response The Response object
+// @router /add-report-comment [post]
+func (c *ApiController) AddReportComment() {
+	var req addReportCommentRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if strings.TrimSpace(req.Content) == "" {
+		c.ResponseError(c.T("general:Content cannot be empty"))
+		return
+	}
+
+	task, err := c.checkTaskOwnership(req.TaskOwner, req.TaskName)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
 	username := c.GetSessionUsername()
-	comment.Owner = task.Owner
-	comment.Author = username
 
-	affected, err := object.AddReportComment(&comment)
+	comment := &object.ReportComment{
+		Owner:             task.Owner,
+		TaskOwner:         req.TaskOwner,
+		TaskName:          req.TaskName,
+		AnchorCategory:    strings.TrimSpace(req.AnchorCategory),
+		AnchorItem:        strings.TrimSpace(req.AnchorItem),
+		AnchorField:       strings.TrimSpace(req.AnchorField),
+		ContentHash:       strings.TrimSpace(req.ContentHash),
+		StableCategoryKey: strings.TrimSpace(req.StableCategoryKey),
+		StableItemKey:     strings.TrimSpace(req.StableItemKey),
+		CategoryName:      req.CategoryName,
+		ItemName:          req.ItemName,
+		ReferencedField:   req.ReferencedField,
+		ReferencedContent: req.ReferencedContent,
+		Content:           strings.TrimSpace(req.Content),
+		Author:            username,
+	}
+
+	_, _ = req.CategoryIndex, req.ItemIndex
+
+	affected, err := object.AddReportComment(comment)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -365,9 +453,9 @@ func (c *ApiController) AddReportComment() {
 // GetReportComments
 // @Title GetReportComments
 // @Tag Task API
-// @Description get report comments by task id
+// @Description get report comments grouped by stable item keys, together with anchors and counts
 // @Param id query string true "The task id (owner/name)"
-// @Success 200 {array} object.ReportComment The Response object
+// @Success 200 {object} ReportCommentsPayload The Response object
 // @router /get-report-comments [get]
 func (c *ApiController) GetReportComments() {
 	id := c.Input().Get("id")
@@ -389,13 +477,40 @@ func (c *ApiController) GetReportComments() {
 		return
 	}
 
-	c.ResponseOk(comments)
+	result := c.loadTaskResultForAnchors(owner, name)
+	anchors := object.BuildTaskResultAnchors(result)
+	grouped := object.GroupCommentsWithAnchors(comments, anchors.Anchors)
+	counts, err := object.GetReportCommentCountByTask(owner, name)
+	if err != nil {
+		counts = map[string]int64{"total": int64(len(comments)), "open": 0, "resolved": 0, "disputed": 0, "unresolved": 0}
+		for _, c2 := range comments {
+			switch c2.Status {
+			case object.ReportCommentStatusOpen:
+				counts["open"]++
+				counts["unresolved"]++
+			case object.ReportCommentStatusDisputed:
+				counts["disputed"]++
+				counts["unresolved"]++
+			case object.ReportCommentStatusResolved:
+				counts["resolved"]++
+			}
+		}
+	}
+
+	payload := &ReportCommentsPayload{
+		Comments: comments,
+		Grouped:  grouped,
+		Anchors:  anchors,
+		Counts:   counts,
+	}
+
+	c.ResponseOk(payload)
 }
 
 // GetReportCommentCount
 // @Title GetReportCommentCount
 // @Tag Task API
-// @Description get report comment counts by task id
+// @Description get report comment counts by task id, including unresolved(open+disputed)
 // @Param id query string true "The task id (owner/name)"
 // @Success 200 {object} map[string]int64 The Response object
 // @router /get-report-comment-count [get]
@@ -425,9 +540,9 @@ func (c *ApiController) GetReportCommentCount() {
 // UpdateReportComment
 // @Title UpdateReportComment
 // @Tag Task API
-// @Description update a report comment
+// @Description update content of a report comment (author-only, author taken from session)
 // @Param id query int true "The comment id"
-// @Param body body object.ReportComment true "The report comment details"
+// @Param body body updateReportCommentRequest true "The content update"
 // @Success 200 {object} controllers.Response The Response object
 // @router /update-report-comment [post]
 func (c *ApiController) UpdateReportComment() {
@@ -438,8 +553,8 @@ func (c *ApiController) UpdateReportComment() {
 		return
 	}
 
-	var comment object.ReportComment
-	err = json.Unmarshal(c.Ctx.Input.RequestBody, &comment)
+	var req updateReportCommentRequest
+	err = json.Unmarshal(c.Ctx.Input.RequestBody, &req)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -467,8 +582,21 @@ func (c *ApiController) UpdateReportComment() {
 		return
 	}
 
-	comment.Id = id
-	success, err := object.UpdateReportComment(id, &comment)
+	trimmed := strings.TrimSpace(req.Content)
+	if trimmed == "" {
+		c.ResponseError(c.T("general:Content cannot be empty"))
+		return
+	}
+
+	patched := *existing
+	patched.Content = trimmed
+	if strings.TrimSpace(req.ReferencedContent) != "" {
+		patched.ReferencedContent = req.ReferencedContent
+		patched.ContentHash = ""
+	}
+	patched.FillAnchorsFromTask()
+
+	success, err := object.UpdateReportComment(id, &patched)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -480,7 +608,7 @@ func (c *ApiController) UpdateReportComment() {
 // ResolveReportComment
 // @Title ResolveReportComment
 // @Tag Task API
-// @Description resolve a report comment
+// @Description resolve a report comment (resolver taken from session)
 // @Param id query int true "The comment id"
 // @Success 200 {object} controllers.Response The Response object
 // @router /resolve-report-comment [post]
@@ -521,7 +649,7 @@ func (c *ApiController) ResolveReportComment() {
 // ReopenReportComment
 // @Title ReopenReportComment
 // @Tag Task API
-// @Description reopen a resolved report comment
+// @Description reopen a resolved report comment (operator from session)
 // @Param id query int true "The comment id"
 // @Success 200 {object} controllers.Response The Response object
 // @router /reopen-report-comment [post]
@@ -562,7 +690,7 @@ func (c *ApiController) ReopenReportComment() {
 // DisputeReportComment
 // @Title DisputeReportComment
 // @Tag Task API
-// @Description mark a report comment as disputed
+// @Description mark a report comment as disputed (operator from session)
 // @Param id query int true "The comment id"
 // @Success 200 {object} controllers.Response The Response object
 // @router /dispute-report-comment [post]
@@ -603,7 +731,7 @@ func (c *ApiController) DisputeReportComment() {
 // DeleteReportComment
 // @Title DeleteReportComment
 // @Tag Task API
-// @Description delete a report comment
+// @Description delete a report comment (author-only, admin allowed)
 // @Param id query int true "The comment id"
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-report-comment [post]

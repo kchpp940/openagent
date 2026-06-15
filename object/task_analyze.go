@@ -380,3 +380,24 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	logs.Info("[analyze-task] done task=%s score=%.2f categories=%d", taskID, result.Score, len(result.Categories))
 	return result, nil
 }
+
+func GetLatestTaskResult(taskOwner string, taskName string) (*TaskResult, float64, error) {
+	id := fmt.Sprintf("%s/%s", taskOwner, taskName)
+	task, err := GetTask(id)
+	if err != nil {
+		return nil, 0, err
+	}
+	if task == nil {
+		return nil, 0, fmt.Errorf("task not found: %s", id)
+	}
+	score := task.Score
+	if strings.TrimSpace(task.Result) == "" {
+		return nil, score, nil
+	}
+	var result TaskResult
+	if err := json.Unmarshal([]byte(task.Result), &result); err != nil {
+		return nil, score, fmt.Errorf("parse task result JSON failed: %v", err)
+	}
+	normalizeTaskResult(&result)
+	return &result, score, nil
+}
