@@ -54,8 +54,9 @@ type Tool struct {
 
 	State string `xorm:"varchar(100)" json:"state"`
 
-	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityStatus     string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt            string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityConfigHash string `xorm:"varchar(100)" json:"latestCapabilityConfigHash"`
 }
 
 func (t *Tool) GetId() string {
@@ -327,7 +328,7 @@ func CheckToolCapability(t *Tool, lang string, configHash ...string) *Capability
 
 	if t.Owner != "" && t.Name != "" {
 		_, _ = SaveCapabilityCheckRecord(t.Owner, "tool", t.Name, result, hash)
-		_ = UpdateToolCapabilityStatus(t, result)
+		_ = UpdateToolCapabilityStatus(t, result, hash)
 	}
 
 	return result

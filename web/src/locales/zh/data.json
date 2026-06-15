@@ -831,7 +831,11 @@
     "Welcome title - Tooltip": "欢迎弹窗的标题",
     "Write": "写入",
     "files and": "文件及",
-    "folders are checked": "文件夹已选"
+    "folders are checked": "文件夹已选",
+    "Capability check failed - cannot save store": "可用性检查失败 - 无法保存配置",
+    "Some tools need attention before saving": "保存前部分工具需要处理",
+    "Failed or needs re-checking": "失败或需重新检查",
+    "Warnings (allowed)": "警告（允许继续）"
   },
   "system": {
     "API Latency": "API延迟",
@@ -1002,6 +1006,25 @@
     "Some checks failed. Please review the items below and fix the issues.": "部分检查失败。请查看以下项目并修复问题。",
     "Some checks have warnings. Consider reviewing them.": "部分检查有警告。建议查看并确认。",
     "All checks passed! The configuration looks good.": "所有检查都通过了！配置看起来不错。",
-    "Click \"Check Availability\" to run diagnostics": "点击\"检查可用性\"运行诊断"
+    "Click \"Check Availability\" to run diagnostics": "点击\"检查可用性\"运行诊断",
+    "Click to view history": "点击查看检查历史",
+    "Check History": "检查历史",
+    "Check Records": "检查记录",
+    "No check records": "暂无检查记录",
+    "Check Details": "检查详情",
+    "Check Result": "检查结果",
+    "Checked at": "检查时间",
+    "Last checked at": "上次检查时间",
+    "Configuration has changed": "自上次检查后配置已变更",
+    "No check records found": "未找到检查记录",
+    "Select a record to view details": "选择一条记录查看详情",
+    "No check records available": "暂无可用检查记录",
+    "Failed checks": "失败的检查项",
+    "Suggestion": "修复建议",
+    "Valid": "有效",
+    "Invalid/Failed": "无效/失败",
+    "Stale (needs re-check)": "过期（需重新检查）",
+    "Unknown": "未知",
+    "Loading": "加载中"
   }
 }

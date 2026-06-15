@@ -328,9 +328,14 @@ func UpdateStore(id string, store *Store) (bool, error) {
 	if validation != nil && !validation.Ok {
 		var failedNames []string
 		for _, f := range validation.Failed {
-			failedNames = append(failedNames, fmt.Sprintf("%s (%s)", f.Name, f.Type))
+			failedNames = append(failedNames, fmt.Sprintf("%s (%s/%s)", f.Name, f.Type, f.Validity))
 		}
-		return false, fmt.Errorf("cannot save store: some tools failed capability check: %s. Please fix the configuration before enabling them", strings.Join(failedNames, ", "))
+		return false, &StoreValidationError{
+			Message:     fmt.Sprintf("cannot save store: some tools failed or need re-checking: %s. Please fix configuration or re-run capability checks", strings.Join(failedNames, ", ")),
+			FailedItems: validation.Failed,
+			Warnings:    validation.Warnings,
+			Validations: validation.Validations,
+		}
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(store)
@@ -353,9 +358,14 @@ func AddStore(store *Store) (bool, error) {
 	if validation != nil && !validation.Ok {
 		var failedNames []string
 		for _, f := range validation.Failed {
-			failedNames = append(failedNames, fmt.Sprintf("%s (%s)", f.Name, f.Type))
+			failedNames = append(failedNames, fmt.Sprintf("%s (%s/%s)", f.Name, f.Type, f.Validity))
 		}
-		return false, fmt.Errorf("cannot save store: some tools failed capability check: %s. Please fix the configuration before enabling them", strings.Join(failedNames, ", "))
+		return false, &StoreValidationError{
+			Message:     fmt.Sprintf("cannot save store: some tools failed or need re-checking: %s. Please fix configuration or re-run capability checks", strings.Join(failedNames, ", ")),
+			FailedItems: validation.Failed,
+			Warnings:    validation.Warnings,
+			Validations: validation.Validations,
+		}
 	}
 
 	affected, err := adapter.engine.Insert(store)
@@ -376,27 +386,65 @@ func DeleteStore(store *Store) (bool, error) {
 }
 
 type CapabilityWarning struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Type        string                      `json:"type"`
+	Name        string                      `json:"name"`
+	Status      string                      `json:"status"`
+	Validity    string                      `json:"validity"`
+	Message     string                      `json:"message"`
+	LatestCheck *EntityCapabilityValidation `json:"latestCheck,omitempty"`
+}
+
+type StoreValidationError struct {
+	Message     string                        `json:"message"`
+	FailedItems []*CapabilityWarning          `json:"failedItems,omitempty"`
+	Warnings    []*CapabilityWarning          `json:"warnings,omitempty"`
+	Validations []*EntityCapabilityValidation `json:"validations,omitempty"`
+}
+
+func (e *StoreValidationError) Error() string {
+	return e.Message
 }
 
 type CapabilityValidationResult struct {
-	Ok       bool                 `json:"ok"`
-	Failed   []*CapabilityWarning `json:"failed"`
-	Warnings []*CapabilityWarning `json:"warnings"`
+	Ok          bool                          `json:"ok"`
+	Failed      []*CapabilityWarning          `json:"failed"`
+	Warnings    []*CapabilityWarning          `json:"warnings"`
+	Validations []*EntityCapabilityValidation `json:"validations,omitempty"`
 }
 
 func ValidateStoreTools(store *Store) (*CapabilityValidationResult, error) {
 	result := &CapabilityValidationResult{
-		Ok:       true,
-		Failed:   []*CapabilityWarning{},
-		Warnings: []*CapabilityWarning{},
+		Ok:          true,
+		Failed:      []*CapabilityWarning{},
+		Warnings:    []*CapabilityWarning{},
+		Validations: []*EntityCapabilityValidation{},
 	}
 
 	if store == nil {
 		return result, nil
+	}
+
+	addValidation := func(v *EntityCapabilityValidation, entityType string) {
+		if v == nil {
+			return
+		}
+		result.Validations = append(result.Validations, v)
+
+		warning := &CapabilityWarning{
+			Type:        entityType,
+			Name:        v.EntityName,
+			Status:      v.Status,
+			Validity:    string(v.Validity),
+			Message:     v.Message,
+			LatestCheck: v,
+		}
+
+		if v.IsBlocked() {
+			result.Ok = false
+			result.Failed = append(result.Failed, warning)
+		} else if len(v.WarningChecks) > 0 {
+			result.Warnings = append(result.Warnings, warning)
+		}
 	}
 
 	if store.McpServer != "" {
@@ -405,70 +453,12 @@ func ValidateStoreTools(store *Store) (*CapabilityValidationResult, error) {
 			return result, err
 		}
 		if server != nil {
-			status := server.LatestCapabilityStatus
-			if status == string(CapabilityStatusFailed) {
-				result.Ok = false
-				result.Failed = append(result.Failed, &CapabilityWarning{
-					Type:    "server",
-					Name:    server.Name,
-					Status:  status,
-					Message: "MCP server capability check failed, tools will not work",
-				})
-			} else if status == string(CapabilityStatusPending) {
-				result.Warnings = append(result.Warnings, &CapabilityWarning{
-					Type:    "server",
-					Name:    server.Name,
-					Status:  status,
-					Message: "MCP server capability check is in progress",
-				})
-			} else if status == "" {
-				result.Warnings = append(result.Warnings, &CapabilityWarning{
-					Type:    "server",
-					Name:    server.Name,
-					Status:  "unknown",
-					Message: "MCP server capability has not been checked yet",
-				})
-			} else if status == string(CapabilityStatusWarning) {
-				result.Warnings = append(result.Warnings, &CapabilityWarning{
-					Type:    "server",
-					Name:    server.Name,
-					Status:  status,
-					Message: "MCP server has warnings, some features may not work",
-				})
+			entityId := fmt.Sprintf("%s/%s", store.Owner, server.Name)
+			v, err := ValidateEntityCapability(store.Owner, "server", entityId, server)
+			if err != nil {
+				return result, err
 			}
-		}
-	}
-
-	processSkillOrTool := func(entityType string, name string, status string, failedMsg string) {
-		if status == string(CapabilityStatusFailed) {
-			result.Ok = false
-			result.Failed = append(result.Failed, &CapabilityWarning{
-				Type:    entityType,
-				Name:    name,
-				Status:  status,
-				Message: failedMsg,
-			})
-		} else if status == "" {
-			result.Warnings = append(result.Warnings, &CapabilityWarning{
-				Type:    entityType,
-				Name:    name,
-				Status:  "unknown",
-				Message: fmt.Sprintf("%s capability has not been checked yet", entityType),
-			})
-		} else if status == string(CapabilityStatusWarning) {
-			result.Warnings = append(result.Warnings, &CapabilityWarning{
-				Type:    entityType,
-				Name:    name,
-				Status:  status,
-				Message: fmt.Sprintf("%s has warnings, some features may not work", entityType),
-			})
-		} else if status == string(CapabilityStatusPending) {
-			result.Warnings = append(result.Warnings, &CapabilityWarning{
-				Type:    entityType,
-				Name:    name,
-				Status:  status,
-				Message: fmt.Sprintf("%s capability check is in progress", entityType),
-			})
+			addValidation(v, "server")
 		}
 	}
 
@@ -491,8 +481,12 @@ func ValidateStoreTools(store *Store) (*CapabilityValidationResult, error) {
 				continue
 			}
 			if skill != nil {
-				processSkillOrTool("skill", skill.Name, skill.LatestCapabilityStatus,
-					"Skill capability check failed, load_skill tool will not work")
+				entityId := fmt.Sprintf("%s/%s", store.Owner, skill.Name)
+				v, err := ValidateEntityCapability(store.Owner, "skill", entityId, skill)
+				if err != nil {
+					return result, err
+				}
+				addValidation(v, "skill")
 			}
 		}
 	}
@@ -516,8 +510,12 @@ func ValidateStoreTools(store *Store) (*CapabilityValidationResult, error) {
 				continue
 			}
 			if tool != nil {
-				processSkillOrTool("tool", tool.Name, tool.LatestCapabilityStatus,
-					"Tool capability check failed, the tool will not work")
+				entityId := fmt.Sprintf("%s/%s", store.Owner, tool.Name)
+				v, err := ValidateEntityCapability(store.Owner, "tool", entityId, tool)
+				if err != nil {
+					return result, err
+				}
+				addValidation(v, "tool")
 			}
 		}
 	}

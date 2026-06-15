@@ -63,8 +63,9 @@ type Skill struct {
 
 	State string `xorm:"varchar(100)" json:"state"`
 
-	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityStatus     string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt            string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityConfigHash string `xorm:"varchar(100)" json:"latestCapabilityConfigHash"`
 }
 
 func (s *Skill) GetId() string {
@@ -585,7 +586,7 @@ func CheckSkillCapability(s *Skill, lang string, configHash ...string) *Capabili
 
 	if s.Owner != "" && s.Name != "" {
 		_, _ = SaveCapabilityCheckRecord(s.Owner, "skill", s.Name, result, hash)
-		_ = UpdateSkillCapabilityStatus(s, result)
+		_ = UpdateSkillCapabilityStatus(s, result, hash)
 	}
 
 	return result

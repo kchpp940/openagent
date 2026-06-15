@@ -230,7 +230,11 @@ func (c *ApiController) UpdateStore() {
 
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		if validationErr, ok := err.(*object.StoreValidationError); ok {
+			c.ResponseError(validationErr.Message, validationErr)
+		} else {
+			c.ResponseError(err.Error())
+		}
 		return
 	}
 
@@ -305,7 +309,11 @@ func (c *ApiController) AddStore() {
 
 	success, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		if validationErr, ok := err.(*object.StoreValidationError); ok {
+			c.ResponseError(validationErr.Message, validationErr)
+		} else {
+			c.ResponseError(err.Error())
+		}
 		return
 	}
 

@@ -143,36 +143,45 @@ func FormatCheckSummary(result *CapabilityCheckResult) string {
 		result.FailedChecks, result.WarningChecks, result.SkippedChecks)
 }
 
-func UpdateServerCapabilityStatus(server *Server, result *CapabilityCheckResult) error {
+func UpdateServerCapabilityStatus(server *Server, result *CapabilityCheckResult, configHash ...string) error {
 	if server == nil {
 		return nil
 	}
 	now := time.Now().Format(time.RFC3339)
 	server.LatestCapabilityStatus = string(result.OverallStatus)
 	server.LatestCheckedAt = now
-	_, err := adapter.engine.ID(server.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(server)
+	if len(configHash) > 0 {
+		server.LatestCapabilityConfigHash = configHash[0]
+	}
+	_, err := adapter.engine.ID(server.GetId()).Cols("latest_capability_status", "latest_checked_at", "latest_capability_config_hash").Update(server)
 	return err
 }
 
-func UpdateSkillCapabilityStatus(skill *Skill, result *CapabilityCheckResult) error {
+func UpdateSkillCapabilityStatus(skill *Skill, result *CapabilityCheckResult, configHash ...string) error {
 	if skill == nil {
 		return nil
 	}
 	now := time.Now().Format(time.RFC3339)
 	skill.LatestCapabilityStatus = string(result.OverallStatus)
 	skill.LatestCheckedAt = now
-	_, err := adapter.engine.ID(skill.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(skill)
+	if len(configHash) > 0 {
+		skill.LatestCapabilityConfigHash = configHash[0]
+	}
+	_, err := adapter.engine.ID(skill.GetId()).Cols("latest_capability_status", "latest_checked_at", "latest_capability_config_hash").Update(skill)
 	return err
 }
 
-func UpdateToolCapabilityStatus(tool *Tool, result *CapabilityCheckResult) error {
+func UpdateToolCapabilityStatus(tool *Tool, result *CapabilityCheckResult, configHash ...string) error {
 	if tool == nil {
 		return nil
 	}
 	now := time.Now().Format(time.RFC3339)
 	tool.LatestCapabilityStatus = string(result.OverallStatus)
 	tool.LatestCheckedAt = now
-	_, err := adapter.engine.ID(tool.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(tool)
+	if len(configHash) > 0 {
+		tool.LatestCapabilityConfigHash = configHash[0]
+	}
+	_, err := adapter.engine.ID(tool.GetId()).Cols("latest_capability_status", "latest_checked_at", "latest_capability_config_hash").Update(tool)
 	return err
 }
 
@@ -304,11 +313,153 @@ func UpdateEntityStatusFromRecord(entity interface{}, record *CapabilityCheckRec
 	case *Server:
 		e.LatestCapabilityStatus = record.Status
 		e.LatestCheckedAt = record.CheckedAt
+		e.LatestCapabilityConfigHash = record.ConfigHash
 	case *Skill:
 		e.LatestCapabilityStatus = record.Status
 		e.LatestCheckedAt = record.CheckedAt
+		e.LatestCapabilityConfigHash = record.ConfigHash
 	case *Tool:
 		e.LatestCapabilityStatus = record.Status
 		e.LatestCheckedAt = record.CheckedAt
+		e.LatestCapabilityConfigHash = record.ConfigHash
 	}
+}
+
+type EntityCapabilityValidity string
+
+const (
+	EntityCapabilityValid    EntityCapabilityValidity = "valid"
+	EntityCapabilityInvalid  EntityCapabilityValidity = "invalid"
+	EntityCapabilityStale    EntityCapabilityValidity = "stale"
+	EntityCapabilityPending  EntityCapabilityValidity = "pending"
+	EntityCapabilityUnknown  EntityCapabilityValidity = "unknown"
+)
+
+type EntityCapabilityValidation struct {
+	EntityType         string                     `json:"entityType"`
+	EntityId           string                     `json:"entityId"`
+	EntityName         string                     `json:"entityName"`
+	Validity           EntityCapabilityValidity   `json:"validity"`
+	Status             string                     `json:"status"`
+	CurrentConfigHash  string                     `json:"currentConfigHash"`
+	LatestRecordHash   string                     `json:"latestRecordHash,omitempty"`
+	LatestRecord       *CapabilityCheckRecord     `json:"latestRecord,omitempty"`
+	MatchingRecord     *CapabilityCheckRecord     `json:"matchingRecord,omitempty"`
+	FailedChecks       []*CapabilityCheckItem     `json:"failedChecks,omitempty"`
+	WarningChecks      []*CapabilityCheckItem     `json:"warningChecks,omitempty"`
+	Message            string                     `json:"message"`
+}
+
+func (v *EntityCapabilityValidation) IsBlocked() bool {
+	return v.Validity == EntityCapabilityInvalid ||
+		v.Validity == EntityCapabilityStale ||
+		v.Validity == EntityCapabilityPending ||
+		v.Validity == EntityCapabilityUnknown
+}
+
+func ValidateEntityCapability(owner, entityType, entityId string, entity interface{}) (*EntityCapabilityValidation, error) {
+	result := &EntityCapabilityValidation{
+		EntityType: entityType,
+		EntityId:   entityId,
+		Validity:   EntityCapabilityUnknown,
+		Message:    "Capability has not been checked yet",
+	}
+
+	if entity == nil {
+		result.Message = "Entity is nil"
+		return result, nil
+	}
+
+	currentHash := CalculateConfigHash(entity)
+	result.CurrentConfigHash = currentHash
+
+	switch e := entity.(type) {
+	case *Server:
+		result.EntityName = e.Name
+	case *Skill:
+		result.EntityName = e.Name
+	case *Tool:
+		result.EntityName = e.Name
+	}
+
+	latestRecord, err := GetLatestCapabilityCheckRecord(owner, entityType, entityId)
+	if err != nil {
+		return result, fmt.Errorf("failed to get latest check record: %v", err)
+	}
+	result.LatestRecord = latestRecord
+
+	if latestRecord == nil {
+		result.Validity = EntityCapabilityUnknown
+		result.Message = "No capability check records found. Please run a capability check first."
+		return result, nil
+	}
+
+	result.LatestRecordHash = latestRecord.ConfigHash
+	result.Status = latestRecord.Status
+
+	if latestRecord.Status == string(CapabilityStatusPending) {
+		result.Validity = EntityCapabilityPending
+		result.Message = "Capability check is in progress. Please wait for it to complete."
+		return result, nil
+	}
+
+	if latestRecord.ConfigHash != currentHash {
+		result.Validity = EntityCapabilityStale
+		result.Message = fmt.Sprintf("Configuration has changed since last check (last checked at %s). Please re-run capability check.", latestRecord.CheckedAt)
+		if latestRecord.CheckResult != nil {
+			for _, c := range latestRecord.CheckResult.Checks {
+				if c.Status == CapabilityStatusFailed {
+					result.FailedChecks = append(result.FailedChecks, c)
+				} else if c.Status == CapabilityStatusWarning {
+					result.WarningChecks = append(result.WarningChecks, c)
+				}
+			}
+		}
+		return result, nil
+	}
+
+	matchingRecord, err := GetLatestCapabilityCheckRecordByHash(owner, entityType, entityId, currentHash)
+	if err != nil {
+		return result, fmt.Errorf("failed to get matching check record: %v", err)
+	}
+	result.MatchingRecord = matchingRecord
+
+	if matchingRecord == nil {
+		result.Validity = EntityCapabilityStale
+		result.Message = "No matching check record for current configuration. Please re-run capability check."
+		return result, nil
+	}
+
+	switch matchingRecord.Status {
+	case string(CapabilityStatusPassed):
+		result.Validity = EntityCapabilityValid
+		result.Message = "All capability checks passed for current configuration"
+	case string(CapabilityStatusWarning):
+		result.Validity = EntityCapabilityValid
+		result.Message = "Capability checks passed with warnings for current configuration"
+		if matchingRecord.CheckResult != nil {
+			for _, c := range matchingRecord.CheckResult.Checks {
+				if c.Status == CapabilityStatusWarning {
+					result.WarningChecks = append(result.WarningChecks, c)
+				}
+			}
+		}
+	case string(CapabilityStatusFailed):
+		result.Validity = EntityCapabilityInvalid
+		result.Message = "Capability checks failed for current configuration"
+		if matchingRecord.CheckResult != nil {
+			for _, c := range matchingRecord.CheckResult.Checks {
+				if c.Status == CapabilityStatusFailed {
+					result.FailedChecks = append(result.FailedChecks, c)
+				} else if c.Status == CapabilityStatusWarning {
+					result.WarningChecks = append(result.WarningChecks, c)
+				}
+			}
+		}
+	default:
+		result.Validity = EntityCapabilityUnknown
+		result.Message = fmt.Sprintf("Unknown capability status: %s", matchingRecord.Status)
+	}
+
+	return result, nil
 }

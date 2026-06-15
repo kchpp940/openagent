@@ -52,8 +52,9 @@ type Server struct {
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
 
-	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityStatus     string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt            string `xorm:"varchar(100)" json:"latestCheckedAt"`
+	LatestCapabilityConfigHash string `xorm:"varchar(100)" json:"latestCapabilityConfigHash"`
 }
 
 func (s *Server) GetId() string {
@@ -375,7 +376,7 @@ func CheckServerCapability(s *Server, configHash ...string) *CapabilityCheckResu
 
 	if s.Owner != "" && s.Name != "" {
 		_, _ = SaveCapabilityCheckRecord(s.Owner, "server", s.Name, result, hash)
-		_ = UpdateServerCapabilityStatus(s, result)
+		_ = UpdateServerCapabilityStatus(s, result, hash)
 	}
 
 	return result
