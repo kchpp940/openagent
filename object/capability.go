@@ -97,8 +97,12 @@ func FailedCheck(name, description, message, fixSuggestion string, fixCommand ..
 	return item
 }
 
-func WarningCheck(name, description, message, fixSuggestion string) *CapabilityCheckItem {
-	return NewCheckItem(name, description, CapabilityStatusWarning, message, fixSuggestion)
+func WarningCheck(name, description, message, fixSuggestion string, fixCommand ...string) *CapabilityCheckItem {
+	item := NewCheckItem(name, description, CapabilityStatusWarning, message, fixSuggestion)
+	if len(fixCommand) > 0 {
+		item.FixCommand = fixCommand[0]
+	}
+	return item
 }
 
 func SkippedCheck(name, description, message string) *CapabilityCheckItem {

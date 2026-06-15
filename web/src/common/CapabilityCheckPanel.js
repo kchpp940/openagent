@@ -62,12 +62,18 @@ class CapabilityCheckPanel extends React.Component {
   }
 
   componentDidMount() {
+    if (this.props.result !== undefined) {
+      return;
+    }
     if (this.props.autoCheck !== false) {
       this.runCheck();
     }
   }
 
   componentDidUpdate(prevProps) {
+    if (this.props.result !== undefined) {
+      return;
+    }
     if (this.props.checkTrigger !== undefined && prevProps.checkTrigger !== this.props.checkTrigger) {
       this.runCheck();
     }
@@ -76,6 +82,11 @@ class CapabilityCheckPanel extends React.Component {
   async runCheck() {
     const {onCheck} = this.props;
     if (!onCheck) {
+      return;
+    }
+
+    if (this.props.result !== undefined) {
+      onCheck();
       return;
     }
 
@@ -231,7 +242,10 @@ class CapabilityCheckPanel extends React.Component {
 
   render() {
     const {title, description} = this.props;
-    const {loading, result, expandedKeys} = this.state;
+    const {expandedKeys} = this.state;
+
+    const loading = this.props.loading !== undefined ? this.props.loading : this.state.loading;
+    const result = this.props.result !== undefined ? this.props.result : this.state.result;
 
     return (
       <div>

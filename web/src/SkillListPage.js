@@ -14,15 +14,16 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Popconfirm, Table, Tag, Tooltip} from "antd";
+import {Button, Popconfirm, Table, Tag, Tooltip, Badge, Modal} from "antd";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as SkillBackend from "./backend/SkillBackend";
 import i18next from "i18next";
-import {DeleteOutlined, DownloadOutlined, EditOutlined, ShopOutlined} from "@ant-design/icons";
+import {DeleteOutlined, DownloadOutlined, EditOutlined, ShopOutlined, SafetyOutlined} from "@ant-design/icons";
 import LoadSkillModal from "./LoadSkillModal";
 import SkillMarketplaceModal from "./SkillMarketplaceModal";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 const SKILL_TYPES = ["writing", "coding", "analysis", "translation", "reasoning", "search", "custom"];
 
@@ -33,6 +34,10 @@ class SkillListPage extends BaseListPage {
       ...this.state,
       loadModalVisible: false,
       marketplaceVisible: false,
+      capabilityResults: {},
+      checkingSkills: {},
+      checkModalVisible: false,
+      currentCheckSkill: null,
     };
   }
 
@@ -98,6 +103,95 @@ class SkillListPage extends BaseListPage {
         Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
+
+  checkSkillCapability = (record) => {
+    const skillName = record.name;
+
+    this.setState((prevState) => ({
+      checkingSkills: {
+        ...prevState.checkingSkills,
+        [skillName]: true,
+      },
+    }));
+
+    SkillBackend.checkSkillCapability(record)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState((prevState) => ({
+            capabilityResults: {
+              ...prevState.capabilityResults,
+              [skillName]: res.data,
+            },
+            checkingSkills: {
+              ...prevState.checkingSkills,
+              [skillName]: false,
+            },
+          }));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to check")}: ${res.msg}`);
+          this.setState((prevState) => ({
+            checkingSkills: {
+              ...prevState.checkingSkills,
+              [skillName]: false,
+            },
+          }));
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to check")}: ${error}`);
+        this.setState((prevState) => ({
+          checkingSkills: {
+            ...prevState.checkingSkills,
+            [skillName]: false,
+          },
+        }));
+      });
+  };
+
+  openCheckModal = (record) => {
+    const skillName = record.name;
+    const result = this.state.capabilityResults[skillName];
+
+    this.setState({
+      checkModalVisible: true,
+      currentCheckSkill: record,
+    });
+
+    if (!result) {
+      this.checkSkillCapability(record);
+    }
+  };
+
+  closeCheckModal = () => {
+    this.setState({
+      checkModalVisible: false,
+      currentCheckSkill: null,
+    });
+  };
+
+  getSkillCapabilityStatusBadge = (skillName) => {
+    const result = this.state.capabilityResults[skillName];
+    const isChecking = this.state.checkingSkills[skillName];
+
+    if (isChecking) {
+      return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
+    }
+
+    if (!result) {
+      return <Badge status="default" text={i18next.t("capability:Not checked")} />;
+    }
+
+    switch (result.overallStatus) {
+      case "passed":
+        return <Badge status="success" text={i18next.t("capability:Passed")} />;
+      case "failed":
+        return <Badge status="error" text={i18next.t("capability:Failed")} />;
+      case "warning":
+        return <Badge status="warning" text={i18next.t("capability:Warning")} />;
+      default:
+        return <Badge status="default" text={result.overallStatus} />;
+    }
+  };
 
   renderTable(skills) {
     const columns = [
@@ -168,13 +262,30 @@ class SkillListPage extends BaseListPage {
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
       },
       {
+        title: i18next.t("capability:Availability"),
+        dataIndex: "capability",
+        key: "capability",
+        width: "130px",
+        render: (_, record) => this.getSkillCapabilityStatusBadge(record.name),
+      },
+      {
         title: i18next.t("general:Action"),
         dataIndex: "action",
         key: "action",
-        width: "130px",
+        width: "180px",
         fixed: "right",
         render: (text, record) => (
           <div style={{display: "flex", alignItems: "center", gap: "2px", flexWrap: "nowrap"}}>
+            <Tooltip title={i18next.t("capability:Check Availability")}>
+              <Button
+                type="text"
+                size="small"
+                icon={<SafetyOutlined />}
+                loading={this.state.checkingSkills[record.name]}
+                style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
+                onClick={() => this.openCheckModal(record)}
+              />
+            </Tooltip>
             <Tooltip title={i18next.t("general:Edit")}>
               <Button type="text" size="small" icon={<EditOutlined />} style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}} onClick={() => this.props.history.push(`/skills/${record.name}`)} />
             </Tooltip>
@@ -253,6 +364,30 @@ class SkillListPage extends BaseListPage {
           loading={this.state.loading}
           onChange={this.handleTableChange}
         />
+        <Modal
+          title={i18next.t("capability:Skill Capability Check") + " - " + (this.state.currentCheckSkill?.name || "")}
+          open={this.state.checkModalVisible}
+          onCancel={this.closeCheckModal}
+          width={720}
+          footer={[
+            <Button key="close" onClick={this.closeCheckModal}>
+              {i18next.t("general:Close")}
+            </Button>,
+          ]}
+        >
+          {this.state.currentCheckSkill && (
+            <CapabilityCheckPanel
+              result={this.state.capabilityResults[this.state.currentCheckSkill.name]}
+              loading={this.state.checkingSkills[this.state.currentCheckSkill.name]}
+              title={i18next.t("capability:Verify skill desc")}
+              description={i18next.t("capability:Check if the skill is properly configured and ready to use")}
+              checkType="skill"
+              entityId={this.state.currentCheckSkill.name}
+              entity={this.state.currentCheckSkill}
+              onCheck={() => this.checkSkillCapability(this.state.currentCheckSkill)}
+            />
+          )}
+        </Modal>
       </div>
     );
   }

@@ -18,6 +18,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
@@ -276,13 +279,151 @@ func CheckToolCapability(t *Tool, lang string) *CapabilityCheckResult {
 
 	result.AddCheck(checkToolBasicConfig(t))
 	result.AddCheck(checkToolTypeSupport(t))
+	result.AddCheck(checkToolEnvVars(t))
 	result.AddCheck(checkToolRequiredConfig(t))
+	result.AddCheck(checkToolExecutables(t))
 	result.AddCheck(checkToolInitialization(t, lang))
+	result.AddCheck(checkToolRegistration(t, lang))
 	result.AddCheck(checkToolSchemas(t, lang))
 	result.AddCheck(checkToolDryRun(t, lang))
 	result.AddCheck(checkToolState(t))
 
 	return result
+}
+
+var envVarPattern = regexp.MustCompile(`\$\{?[A-Z_][A-Z0-9_]*\}?`)
+
+func checkToolEnvVars(t *Tool) *CapabilityCheckItem {
+	name := "env_variables"
+	desc := "Check environment variable references in configuration"
+
+	fieldsToCheck := map[string]string{
+		"providerUrl":  t.ProviderUrl,
+		"clientId":     t.ClientId,
+		"clientSecret": t.ClientSecret,
+	}
+
+	var unresolvedVars []string
+	var resolvedCount int
+
+	for fieldName, value := range fieldsToCheck {
+		if value == "" || value == "***" {
+			continue
+		}
+		matches := envVarPattern.FindAllString(value, -1)
+		for _, m := range matches {
+			varName := strings.Trim(m, "${}")
+			if val := getenvSafe(varName); val == "" {
+				unresolvedVars = append(unresolvedVars, fmt.Sprintf("%s (in %s)", varName, fieldName))
+			} else {
+				resolvedCount++
+			}
+		}
+	}
+
+	if len(unresolvedVars) > 0 {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("%d environment variable(s) may not be set: %s", len(unresolvedVars), strings.Join(unresolvedVars, ", ")),
+			fmt.Sprintf("Set the required environment variables or check their spelling"),
+			fmt.Sprintf("export %s=your_value", strings.Split(unresolvedVars[0], " ")[0]),
+		)
+	}
+
+	if resolvedCount > 0 {
+		return PassedCheck(name, desc, fmt.Sprintf("All %d environment variable references can be resolved", resolvedCount))
+	}
+
+	return PassedCheck(name, desc, "No environment variable references found in configuration")
+}
+
+func getenvSafe(name string) string {
+	return os.Getenv(name)
+}
+
+func checkToolExecutables(t *Tool) *CapabilityCheckItem {
+	name := "executables"
+	desc := "Check if required external commands are available"
+
+	requiredCmds := getToolRequiredCommands(t)
+	if len(requiredCmds) == 0 {
+		return SkippedCheck(name, desc, "No external commands required for this tool type")
+	}
+
+	var missingCmds []string
+	var foundCmds []string
+
+	for _, cmd := range requiredCmds {
+		path, err := exec.LookPath(cmd)
+		if err != nil {
+			missingCmds = append(missingCmds, cmd)
+		} else {
+			foundCmds = append(foundCmds, fmt.Sprintf("%s (%s)", cmd, path))
+		}
+	}
+
+	if len(missingCmds) > 0 {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Missing required command(s): %s", strings.Join(missingCmds, ", ")),
+			fmt.Sprintf("Install the required commands for %s tool", t.Type),
+			fmt.Sprintf("brew install %s", missingCmds[0]),
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("All required commands available: %s", strings.Join(foundCmds, ", ")))
+}
+
+func getToolRequiredCommands(t *Tool) []string {
+	switch t.Type {
+	case "video_download":
+		return []string{"yt-dlp"}
+	case "shell":
+		return []string{}
+	case "local_file":
+		return []string{}
+	default:
+		return []string{}
+	}
+}
+
+func checkToolRegistration(t *Tool, lang string) *CapabilityCheckItem {
+	name := "tool_registration"
+	desc := "Check if tools can be registered to tool registry"
+
+	tp, err := tool.New(getToolConfig(t), lang)
+	if err != nil {
+		return SkippedCheck(name, desc, "Skipped: tool initialization failed")
+	}
+
+	builtinTools := tp.BuiltinTools()
+	if len(builtinTools) == 0 {
+		return WarningCheck(name, desc,
+			"No built-in tools found for registration",
+			"This tool type may not expose any callable functions",
+		)
+	}
+
+	reg := tool.NewToolRegistry()
+	for _, bt := range builtinTools {
+		reg.RegisterTool(bt)
+	}
+
+	protocolTools := reg.GetToolsAsProtocolTools()
+	if len(protocolTools) == 0 {
+		return FailedCheck(name, desc,
+			"Failed to convert builtin tools to protocol tools",
+			"Tool schemas may be invalid, check tool implementation",
+		)
+	}
+
+	if len(protocolTools) != len(builtinTools) {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("Only %d/%d tools were successfully converted to protocol tools", len(protocolTools), len(builtinTools)),
+			"Some tool schemas may be invalid",
+		)
+	}
+
+	return PassedCheck(name, desc,
+		fmt.Sprintf("Successfully registered %d tool(s) to tool registry", len(protocolTools)))
 }
 
 func checkToolBasicConfig(t *Tool) *CapabilityCheckItem {

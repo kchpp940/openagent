@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -329,13 +331,86 @@ func GetPaginationServers(owner string, offset, limit int, field, value, sortFie
 func CheckServerCapability(s *Server) *CapabilityCheckResult {
 	result := NewCapabilityCheckResult()
 
-	result.AddCheck(checkServerUrl(s))
+	result.AddCheck(checkServerBasicConfig(s))
+	result.AddCheck(checkServerEnvVars(s))
 	result.AddCheck(checkMcpConnection(s))
 	result.AddCheck(checkMcpToolList(s))
 	result.AddCheck(checkMcpToolSchema(s))
 	result.AddCheck(checkMcpDryRun(s))
 
 	return result
+}
+
+func checkServerBasicConfig(s *Server) *CapabilityCheckItem {
+	name := "basic_config"
+	desc := "Check basic server configuration"
+
+	if s.Name == "" {
+		return FailedCheck(name, desc,
+			"Server name is empty",
+			"Please provide a name for the MCP server",
+		)
+	}
+
+	if s.Url == "" {
+		return FailedCheck(name, desc,
+			"Server URL is empty",
+			"Please enter the MCP server URL in the configuration",
+		)
+	}
+
+	if !strings.HasPrefix(s.Url, "http://") && !strings.HasPrefix(s.Url, "https://") {
+		return FailedCheck(name, desc,
+			"Server URL must start with http:// or https://",
+			"Add the correct protocol prefix to the URL",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Basic configuration is complete: %s", s.Name))
+}
+
+var serverEnvVarPattern = regexp.MustCompile(`\$\{?[A-Z_][A-Z0-9_]*\}?`)
+
+func checkServerEnvVars(s *Server) *CapabilityCheckItem {
+	name := "env_variables"
+	desc := "Check environment variable references in configuration"
+
+	fieldsToCheck := map[string]string{
+		"url":   s.Url,
+		"token": s.Token,
+	}
+
+	var unresolvedVars []string
+	var resolvedCount int
+
+	for fieldName, value := range fieldsToCheck {
+		if value == "" {
+			continue
+		}
+		matches := serverEnvVarPattern.FindAllString(value, -1)
+		for _, m := range matches {
+			varName := strings.Trim(m, "${}")
+			if val := os.Getenv(varName); val == "" {
+				unresolvedVars = append(unresolvedVars, fmt.Sprintf("%s (in %s)", varName, fieldName))
+			} else {
+				resolvedCount++
+			}
+		}
+	}
+
+	if len(unresolvedVars) > 0 {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("%d environment variable(s) may not be set: %s", len(unresolvedVars), strings.Join(unresolvedVars, ", ")),
+			"Set the required environment variables or check their spelling",
+			fmt.Sprintf("export %s=your_value", strings.Split(unresolvedVars[0], " ")[0]),
+		)
+	}
+
+	if resolvedCount > 0 {
+		return PassedCheck(name, desc, fmt.Sprintf("All %d environment variable references can be resolved", resolvedCount))
+	}
+
+	return PassedCheck(name, desc, "No environment variable references found in configuration")
 }
 
 func checkServerUrl(s *Server) *CapabilityCheckItem {

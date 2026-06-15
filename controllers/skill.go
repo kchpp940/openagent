@@ -214,6 +214,6 @@ func (c *ApiController) CheckSkillCapability() {
 		return
 	}
 
-	result := object.CheckSkillCapability(&skill)
+	result := object.CheckSkillCapability(&skill, c.GetAcceptLanguage())
 	c.ResponseOk(result)
 }

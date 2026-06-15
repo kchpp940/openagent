@@ -974,6 +974,7 @@
     "Time": "时间"
   },
   "capability": {
+    "Availability": "可用性",
     "Availability Check": "可用性检查",
     "Capability Check": "可用性检查",
     "Server Capability Check": "服务器可用性检查",
@@ -985,6 +986,8 @@
     "Failed": "失败",
     "Warning": "警告",
     "Skipped": "跳过",
+    "Not checked": "未检查",
+    "Checking...": "检查中...",
     "passed": "通过",
     "failed": "失败",
     "warnings": "警告",

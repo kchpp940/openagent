@@ -15,6 +15,7 @@
 package object
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ThinkInAIXYZ/go-mcp/protocol"
+	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -531,16 +534,234 @@ func (skillLoader) Load(owner string, allowedSkillNames []string, skillName stri
 	return LoadSkillPromptContent(owner, skillName, referenceName)
 }
 
-func CheckSkillCapability(s *Skill) *CapabilityCheckResult {
+func CheckSkillCapability(s *Skill, lang string) *CapabilityCheckResult {
 	result := NewCapabilityCheckResult()
 
 	result.AddCheck(checkSkillBasicConfig(s))
 	result.AddCheck(checkSkillContent(s))
 	result.AddCheck(checkSkillDescription(s))
 	result.AddCheck(checkSkillReferences(s))
+	result.AddCheck(checkSkillToolRegistration(s))
+	result.AddCheck(checkSkillToolSchema(s))
+	result.AddCheck(checkSkillDryRun(s))
 	result.AddCheck(checkSkillState(s))
 
 	return result
+}
+
+type skillCapabilityLoader struct {
+	skill *Skill
+}
+
+func (l *skillCapabilityLoader) Load(owner string, allowedSkillNames []string, skillName string, referenceName string) (string, error) {
+	if l.skill == nil {
+		return "", fmt.Errorf("skill is nil")
+	}
+	if !skillNameMatches(l.skill, skillName) {
+		return "", fmt.Errorf("skill not found: %s", skillName)
+	}
+	return LoadSkillPromptContentFromSkill(l.skill, referenceName)
+}
+
+func LoadSkillPromptContentFromSkill(s *Skill, referenceName string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("skill is nil")
+	}
+	if s.State != "Active" {
+		return "", fmt.Errorf("skill is not active: %s", s.Name)
+	}
+
+	buf := strings.TrimSpace(s.Content)
+	if referenceName == "" {
+		if len(s.References) > 0 {
+			refNames := make([]string, 0, len(s.References))
+			for _, ref := range s.References {
+				if strings.TrimSpace(ref.Name) != "" {
+					refNames = append(refNames, ref.Name)
+				}
+			}
+			sort.Strings(refNames)
+			if len(refNames) > 0 {
+				buf += "\n\n## Available References\n"
+				for _, name := range refNames {
+					buf += "- " + name + "\n"
+				}
+			}
+		}
+		return strings.TrimSpace(buf), nil
+	}
+
+	for _, ref := range s.References {
+		if ref.Name == referenceName {
+			if strings.TrimSpace(ref.Content) == "" {
+				return "", fmt.Errorf("reference is empty: %s", referenceName)
+			}
+			if buf != "" {
+				buf += "\n\n"
+			}
+			buf += "## Reference: " + referenceName + "\n\n" + strings.TrimSpace(ref.Content)
+			return strings.TrimSpace(buf), nil
+		}
+	}
+
+	return "", fmt.Errorf("reference not found: %s", referenceName)
+}
+
+func checkSkillToolRegistration(s *Skill) *CapabilityCheckItem {
+	name := "tool_registration"
+	desc := "Check if load_skill tool can be registered"
+
+	if s.Name == "" {
+		return SkippedCheck(name, desc, "Skipped: skill name is empty")
+	}
+
+	loader := &skillCapabilityLoader{skill: s}
+	builtinTool := tool.NewLoadSkillBuiltin(s.Owner, []string{s.Name}, loader)
+	if builtinTool == nil {
+		return FailedCheck(name, desc,
+			"Failed to create load_skill builtin tool",
+			"Check skill configuration and dependencies",
+		)
+	}
+
+	reg := tool.NewToolRegistry()
+	reg.RegisterTool(builtinTool)
+
+	tools := reg.GetToolsAsProtocolTools()
+	if len(tools) == 0 {
+		return FailedCheck(name, desc,
+			"load_skill tool failed to register as protocol tool",
+			"Tool schema may be invalid, check tool definition",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("load_skill tool registered successfully (%d protocol tool)", len(tools)))
+}
+
+func checkSkillToolSchema(s *Skill) *CapabilityCheckItem {
+	name := "tool_schema"
+	desc := "Check if load_skill tool schema is valid"
+
+	if s.Name == "" {
+		return SkippedCheck(name, desc, "Skipped: skill name is empty")
+	}
+
+	loader := &skillCapabilityLoader{skill: s}
+	builtinTool := tool.NewLoadSkillBuiltin(s.Owner, []string{s.Name}, loader)
+	if builtinTool == nil {
+		return SkippedCheck(name, desc, "Skipped: failed to create load_skill tool")
+	}
+
+	reg := tool.NewToolRegistry()
+	reg.RegisterTool(builtinTool)
+
+	tools := reg.GetToolsAsProtocolTools()
+	if len(tools) == 0 {
+		return SkippedCheck(name, desc, "Skipped: no tools registered")
+	}
+
+	var schemaTool *protocol.Tool
+	for _, t := range tools {
+		if t.Name == "load_skill" {
+			schemaTool = t
+			break
+		}
+	}
+
+	if schemaTool == nil {
+		return FailedCheck(name, desc,
+			"load_skill tool not found in registered tools",
+			"Check tool registration logic",
+		)
+	}
+
+	if schemaTool.Description == "" {
+		return WarningCheck(name, desc,
+			"load_skill tool has no description",
+			"Adding a description helps the model understand when to use this tool",
+		)
+	}
+
+	inputSchema := schemaTool.InputSchema
+	if inputSchema.Type == "" && len(inputSchema.Properties) == 0 {
+		return WarningCheck(name, desc,
+			"load_skill tool has empty input schema",
+			"Define input schema so the model knows what parameters to pass",
+		)
+	}
+
+	return PassedCheck(name, desc,
+		fmt.Sprintf("load_skill tool schema is valid (type=%s, properties=%d, required=%d)",
+			inputSchema.Type, len(inputSchema.Properties), len(inputSchema.Required)))
+}
+
+func checkSkillDryRun(s *Skill) *CapabilityCheckItem {
+	name := "dry_run"
+	desc := "Check if load_skill dry-run call succeeds"
+
+	if s.Name == "" || strings.TrimSpace(s.Content) == "" {
+		return SkippedCheck(name, desc, "Skipped: skill name or content is empty")
+	}
+
+	loader := &skillCapabilityLoader{skill: s}
+	builtinTool := tool.NewLoadSkillBuiltin(s.Owner, []string{s.Name}, loader)
+	if builtinTool == nil {
+		return SkippedCheck(name, desc, "Skipped: failed to create load_skill tool")
+	}
+
+	reg := tool.NewToolRegistry()
+	reg.RegisterTool(builtinTool)
+
+	result, err := reg.ExecuteTool(context.Background(), "load_skill", map[string]interface{}{
+		"skill": s.Name,
+	})
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Dry-run call to load_skill failed: %v", err),
+			"Check skill content and loader implementation",
+		)
+	}
+
+	if result == nil {
+		return FailedCheck(name, desc,
+			"Dry-run call returned nil result",
+			"Check tool execution logic",
+		)
+	}
+
+	if result.IsError {
+		var errorText string
+		for _, c := range result.Content {
+			if tc, ok := c.(*protocol.TextContent); ok {
+				errorText += tc.Text + " "
+			}
+		}
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Dry-run call returned error: %s", strings.TrimSpace(errorText)),
+			"Check skill configuration and content validity",
+		)
+	}
+
+	var resultText string
+	for _, c := range result.Content {
+		if tc, ok := c.(*protocol.TextContent); ok {
+			resultText += tc.Text + "\n"
+		}
+	}
+	resultText = strings.TrimSpace(resultText)
+
+	if resultText == "" {
+		return WarningCheck(name, desc,
+			"Dry-run call returned empty content",
+			"Skill content may be empty or the loader may have an issue",
+		)
+	}
+
+	truncatedResult := resultText
+	if len(truncatedResult) > 100 {
+		truncatedResult = truncatedResult[:100] + "..."
+	}
+	return PassedCheck(name, desc, fmt.Sprintf("Dry-run load_skill succeeded: %s", truncatedResult))
 }
 
 func checkSkillBasicConfig(s *Skill) *CapabilityCheckItem {

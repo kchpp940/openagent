@@ -14,17 +14,25 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Popconfirm, Switch, Table, Tag, Tooltip} from "antd";
+import {Button, Popconfirm, Switch, Table, Tag, Tooltip, Badge, Modal} from "antd";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as ToolBackend from "./backend/ToolBackend";
 import i18next from "i18next";
-import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
+import {DeleteOutlined, EditOutlined, SafetyOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, ClockCircleOutlined} from "@ant-design/icons";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 class ToolListPage extends BaseListPage {
   constructor(props) {
     super(props);
+    this.state = {
+      ...this.state,
+      capabilityResults: {},
+      checkingTools: {},
+      checkModalVisible: false,
+      currentCheckTool: null,
+    };
   }
 
   newTool() {
@@ -91,6 +99,95 @@ class ToolListPage extends BaseListPage {
         Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
+
+  checkToolCapability = (record) => {
+    const toolName = record.name;
+
+    this.setState((prevState) => ({
+      checkingTools: {
+        ...prevState.checkingTools,
+        [toolName]: true,
+      },
+    }));
+
+    ToolBackend.checkToolCapability(record)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState((prevState) => ({
+            capabilityResults: {
+              ...prevState.capabilityResults,
+              [toolName]: res.data,
+            },
+            checkingTools: {
+              ...prevState.checkingTools,
+              [toolName]: false,
+            },
+          }));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to check")}: ${res.msg}`);
+          this.setState((prevState) => ({
+            checkingTools: {
+              ...prevState.checkingTools,
+              [toolName]: false,
+            },
+          }));
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to check")}: ${error}`);
+        this.setState((prevState) => ({
+          checkingTools: {
+            ...prevState.checkingTools,
+            [toolName]: false,
+          },
+        }));
+      });
+  };
+
+  openCheckModal = (record) => {
+    const toolName = record.name;
+    const result = this.state.capabilityResults[toolName];
+
+    this.setState({
+      checkModalVisible: true,
+      currentCheckTool: record,
+    });
+
+    if (!result) {
+      this.checkToolCapability(record);
+    }
+  };
+
+  closeCheckModal = () => {
+    this.setState({
+      checkModalVisible: false,
+      currentCheckTool: null,
+    });
+  };
+
+  getCapabilityStatusBadge = (toolName) => {
+    const result = this.state.capabilityResults[toolName];
+    const isChecking = this.state.checkingTools[toolName];
+
+    if (isChecking) {
+      return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
+    }
+
+    if (!result) {
+      return <Badge status="default" text={i18next.t("capability:Not checked")} />;
+    }
+
+    switch (result.overallStatus) {
+      case "passed":
+        return <Badge status="success" text={i18next.t("capability:Passed")} />;
+      case "failed":
+        return <Badge status="error" text={i18next.t("capability:Failed")} />;
+      case "warning":
+        return <Badge status="warning" text={i18next.t("capability:Warning")} />;
+      default:
+        return <Badge status="default" text={result.overallStatus} />;
+    }
+  };
 
   renderTable(tools) {
     const columns = [
@@ -161,13 +258,30 @@ class ToolListPage extends BaseListPage {
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
       },
       {
+        title: i18next.t("capability:Availability"),
+        dataIndex: "capability",
+        key: "capability",
+        width: "130px",
+        render: (_, record) => this.getCapabilityStatusBadge(record.name),
+      },
+      {
         title: i18next.t("general:Action"),
         dataIndex: "action",
         key: "action",
-        width: "130px",
+        width: "180px",
         fixed: "right",
         render: (text, record) => (
           <div style={{display: "flex", alignItems: "center", gap: "2px", flexWrap: "nowrap"}}>
+            <Tooltip title={i18next.t("capability:Check Availability")}>
+              <Button
+                type="text"
+                size="small"
+                icon={<SafetyOutlined />}
+                loading={this.state.checkingTools[record.name]}
+                style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
+                onClick={() => this.openCheckModal(record)}
+              />
+            </Tooltip>
             <Tooltip title={i18next.t("general:Edit")}>
               <Button type="text" size="small" icon={<EditOutlined />} style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}} onClick={() => this.props.history.push(`/tools/${record.name}`)} />
             </Tooltip>
@@ -215,6 +329,30 @@ class ToolListPage extends BaseListPage {
           loading={this.state.loading}
           onChange={this.handleTableChange}
         />
+        <Modal
+          title={i18next.t("capability:Tool Capability Check") + " - " + (this.state.currentCheckTool?.name || "")}
+          open={this.state.checkModalVisible}
+          onCancel={this.closeCheckModal}
+          width={720}
+          footer={[
+            <Button key="close" onClick={this.closeCheckModal}>
+              {i18next.t("general:Close")}
+            </Button>,
+          ]}
+        >
+          {this.state.currentCheckTool && (
+            <CapabilityCheckPanel
+              result={this.state.capabilityResults[this.state.currentCheckTool.name]}
+              loading={this.state.checkingTools[this.state.currentCheckTool.name]}
+              title={i18next.t("capability:Verify tool desc")}
+              description={i18next.t("capability:Check if the tool is properly configured and functional")}
+              checkType="tool"
+              entityId={this.state.currentCheckTool.name}
+              entity={this.state.currentCheckTool}
+              onCheck={() => this.checkToolCapability(this.state.currentCheckTool)}
+            />
+          )}
+        </Modal>
       </div>
     );
   }

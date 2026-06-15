@@ -974,6 +974,7 @@
     "Time": "Time"
   },
   "capability": {
+    "Availability": "Availability",
     "Availability Check": "Availability Check",
     "Capability Check": "Capability Check",
     "Server Capability Check": "Server Capability Check",
@@ -985,6 +986,8 @@
     "Failed": "Failed",
     "Warning": "Warning",
     "Skipped": "Skipped",
+    "Not checked": "Not checked",
+    "Checking...": "Checking...",
     "passed": "passed",
     "failed": "failed",
     "warnings": "warnings",
