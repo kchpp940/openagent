@@ -15,7 +15,7 @@
 import React from "react";
 import {Link} from "react-router-dom";
 import Loading from "./common/Loading";
-import {Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag, Typography, List, Collapse, Alert} from "antd";
+import {Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag} from "antd";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
@@ -28,16 +28,6 @@ import i18next from "i18next";
 import FileTree from "./FileTree";
 import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  WarningOutlined,
-  ClockCircleOutlined,
-  SyncOutlined,
-  CopyOutlined,
-  MinusCircleOutlined,
-} from "@ant-design/icons";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -66,8 +56,6 @@ class StoreEditPage extends React.Component {
       isNewStore: props.location?.state?.isNewStore || false,
       ownerUsers: [],
       ownerUsersLoading: false,
-      capabilityErrorModalVisible: false,
-      capabilityValidationError: null,
     };
   }
 
@@ -915,55 +903,13 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
-          if (res.data && res.data.failedItems && res.data.failedItems.length > 0) {
-            this.setState({
-              capabilityValidationError: res.data,
-              capabilityErrorModalVisible: true,
-            });
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-          }
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
-
-  closeCapabilityErrorModal = () => {
-    this.setState({
-      capabilityErrorModalVisible: false,
-      capabilityValidationError: null,
-    });
-  };
-
-  getValidityLabel = (validity) => {
-    const map = {
-      valid: {text: i18next.t("capability:Valid"), color: "green"},
-      invalid: {text: i18next.t("capability:Invalid/Failed"), color: "red"},
-      stale: {text: i18next.t("capability:Stale (needs re-check)"), color: "orange"},
-      pending: {text: i18next.t("capability:Checking..."), color: "blue"},
-      unknown: {text: i18next.t("capability:Unknown"), color: "default"},
-    };
-    return map[validity] || map.unknown;
-  };
-
-  getValidityIcon = (validity) => {
-    switch (validity) {
-      case "valid": return <CheckCircleOutlined style={{color: "#52c41a"}} />;
-      case "invalid": return <CloseCircleOutlined style={{color: "#ff4d4f"}} />;
-      case "stale": return <SyncOutlined spin style={{color: "#faad14"}} />;
-      case "pending": return <ClockCircleOutlined style={{color: "#1890ff"}} />;
-      default: return <MinusCircleOutlined style={{color: "#bfbfbf"}} />;
-    }
-  };
-
-  copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text).then(
-      () => Setting.showMessage("success", i18next.t("general:Copied to clipboard")),
-      () => Setting.showMessage("error", i18next.t("general:Failed to copy"))
-    );
-  };
 
   claimStore() {
     Modal.confirm({
@@ -1019,156 +965,6 @@ class StoreEditPage extends React.Component {
         {
           this.state.store !== null ? this.renderStore() : <Loading type="page" tip={i18next.t("general:Loading")} />
         }
-        <Modal
-          title={
-            <span style={{display: "flex", alignItems: "center", gap: "8px"}}>
-              <CloseCircleOutlined style={{color: "#ff4d4f"}} />
-              {i18next.t("store:Capability check failed - cannot save store")}
-            </span>
-          }
-          open={this.state.capabilityErrorModalVisible}
-          onCancel={this.closeCapabilityErrorModal}
-          width={900}
-          footer={[
-            <Button key="close" type="primary" onClick={this.closeCapabilityErrorModal}>
-              {i18next.t("general:Close")}
-            </Button>,
-          ]}
-        >
-          {this.state.capabilityValidationError && (
-            <div>
-              <Alert
-                type="error"
-                showIcon
-                message={i18next.t("store:Some tools need attention before saving")}
-                description={this.state.capabilityValidationError.message}
-                style={{marginBottom: "16px"}}
-              />
-              <div style={{fontWeight: "bold", marginBottom: "12px"}}>
-                {i18next.t("store:Failed or needs re-checking")}:
-              </div>
-              <List
-                dataSource={this.state.capabilityValidationError.failedItems || []}
-                renderItem={(item) => {
-                  const validityInfo = this.getValidityLabel(item.validity);
-                  return (
-                    <List.Item key={`${item.type}-${item.name}`}>
-                      <List.Item.Meta
-                        avatar={this.getValidityIcon(item.validity)}
-                        title={
-                          <Space>
-                            <span style={{fontWeight: 600}}>{item.name}</span>
-                            <Tag color="default">{item.type}</Tag>
-                            <Tag color={validityInfo.color}>{validityInfo.text}</Tag>
-                          </Space>
-                        }
-                        description={
-                          <div>
-                            <div style={{marginBottom: "8px"}}>{item.message}</div>
-                            {item.latestCheck && (
-                              <div style={{background: "#fafafa", padding: "12px", borderRadius: "6px", border: "1px solid #f0f0f0"}}>
-                                <CapabilityCheckPanel
-                                  result={item.latestCheck.matchingRecord?.checkResult || item.latestCheck.latestRecord?.checkResult}
-                                  loading={false}
-                                  title={i18next.t("capability:Latest Check Result")}
-                                  description={
-                                    item.latestCheck.matchingRecord
-                                      ? `${i18next.t("capability:Checked at")}: ${item.latestCheck.matchingRecord.checkedAt}`
-                                      : item.latestCheck.latestRecord
-                                        ? `${i18next.t("capability:Last checked at")}: ${item.latestCheck.latestRecord.checkedAt} (${i18next.t("capability:Configuration has changed")})`
-                                        : i18next.t("capability:No check records found")
-                                  }
-                                  checkType={item.type}
-                                  entityId={item.name}
-                                  showRefresh={false}
-                                />
-                                {(item.latestCheck.failedChecks || []).length > 0 && (
-                                  <div style={{marginTop: "12px"}}>
-                                    <div style={{fontWeight: "bold", marginBottom: "8px", color: "#ff4d4f"}}>
-                                      {i18next.t("capability:Failed checks")}:
-                                    </div>
-                                    <Collapse size="small" ghost>
-                                      {item.latestCheck.failedChecks.map((check, idx) => (
-                                        <Collapse.Panel
-                                          key={idx}
-                                          header={
-                                            <Space>
-                                              <CloseCircleOutlined style={{color: "#ff4d4f"}} />
-                                              <span>{check.description || check.name}</span>
-                                            </Space>
-                                          }
-                                        >
-                                          <div style={{padding: "8px 4px"}}>
-                                            <Typography.Paragraph style={{marginBottom: "8px", color: "var(--ant-color-text-secondary)"}}>
-                                              {check.message}
-                                            </Typography.Paragraph>
-                                            {check.fixSuggestion && (
-                                              <Alert
-                                                type="warning"
-                                                showIcon
-                                                message={i18next.t("capability:Suggestion")}
-                                                description={check.fixSuggestion}
-                                                style={{marginBottom: "8px"}}
-                                              />
-                                            )}
-                                            {check.fixCommand && (
-                                              <div style={{position: "relative", background: "#fff", border: "1px solid #f0f0f0", borderRadius: "6px", padding: "10px 12px", fontFamily: "monospace", fontSize: "13px"}}>
-                                                {check.fixCommand}
-                                                <Button
-                                                  type="text"
-                                                  size="small"
-                                                  icon={<CopyOutlined />}
-                                                  style={{position: "absolute", top: "4px", right: "4px"}}
-                                                  onClick={() => this.copyToClipboard(check.fixCommand)}
-                                                />
-                                              </div>
-                                            )}
-                                          </div>
-                                        </Collapse.Panel>
-                                      ))}
-                                    </Collapse>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        }
-                      />
-                    </List.Item>
-                  );
-                }}
-              />
-              {this.state.capabilityValidationError.warnings && this.state.capabilityValidationError.warnings.length > 0 && (
-                <div style={{marginTop: "16px"}}>
-                  <div style={{fontWeight: "bold", marginBottom: "12px"}}>
-                    {i18next.t("store:Warnings (allowed)")}:
-                  </div>
-                  <List
-                    size="small"
-                    dataSource={this.state.capabilityValidationError.warnings}
-                    renderItem={(item) => {
-                      const validityInfo = this.getValidityLabel(item.validity);
-                      return (
-                        <List.Item key={`warn-${item.type}-${item.name}`}>
-                          <List.Item.Meta
-                            avatar={<WarningOutlined style={{color: "#faad14"}} />}
-                            title={
-                              <Space>
-                                <span style={{fontWeight: 600}}>{item.name}</span>
-                                <Tag color="default">{item.type}</Tag>
-                              </Space>
-                            }
-                            description={item.message}
-                          />
-                        </List.Item>
-                      );
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </Modal>
       </div>
     );
   }

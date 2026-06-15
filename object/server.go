@@ -18,8 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -51,10 +49,6 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
-
-	LatestCapabilityStatus     string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt            string `xorm:"varchar(100)" json:"latestCheckedAt"`
-	LatestCapabilityConfigHash string `xorm:"varchar(100)" json:"latestCapabilityConfigHash"`
 }
 
 func (s *Server) GetId() string {
@@ -114,17 +108,9 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 }
 
 func AddServer(server *Server) (bool, error) {
-	configHash := CalculateConfigHash(server)
-	server.LatestCapabilityStatus = string(CapabilityStatusPending)
-	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(server)
 	if err != nil {
 		return false, err
-	}
-	if affected > 0 {
-		go func(s *Server, hash string) {
-			CheckServerCapability(s, hash)
-		}(server, configHash)
 	}
 	return affected != 0, nil
 }
@@ -143,19 +129,10 @@ func UpdateServer(id string, server *Server) (bool, error) {
 		server.Token = oldServer.Token
 	}
 
-	configHash := CalculateConfigHash(server)
-	server.LatestCapabilityStatus = string(CapabilityStatusPending)
-	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
-
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
 		return false, err
 	}
-
-	go func(s *Server, hash string) {
-		CheckServerCapability(s, hash)
-	}(server, configHash)
-
 	return true, nil
 }
 
@@ -347,259 +324,4 @@ func GetPaginationServers(owner string, offset, limit int, field, value, sortFie
 		return servers, err
 	}
 	return servers, nil
-}
-
-func CheckServerCapability(s *Server, configHash ...string) *CapabilityCheckResult {
-	hash := ""
-	if len(configHash) > 0 {
-		hash = configHash[0]
-	}
-	if hash == "" {
-		hash = CalculateConfigHash(s)
-	}
-
-	if hash != "" {
-		existing, err := GetLatestCapabilityCheckRecordByHash(s.Owner, "server", s.Name, hash)
-		if err == nil && existing != nil && existing.Status != string(CapabilityStatusPending) {
-			return existing.CheckResult
-		}
-	}
-
-	result := NewCapabilityCheckResult()
-
-	result.AddCheck(checkServerBasicConfig(s))
-	result.AddCheck(checkServerEnvVars(s))
-	result.AddCheck(checkMcpConnection(s))
-	result.AddCheck(checkMcpToolList(s))
-	result.AddCheck(checkMcpToolSchema(s))
-	result.AddCheck(checkMcpDryRun(s))
-
-	if s.Owner != "" && s.Name != "" {
-		_, _ = SaveCapabilityCheckRecord(s.Owner, "server", s.Name, result, hash)
-		_ = UpdateServerCapabilityStatus(s, result, hash)
-	}
-
-	return result
-}
-
-func checkServerBasicConfig(s *Server) *CapabilityCheckItem {
-	name := "basic_config"
-	desc := "Check basic server configuration"
-
-	if s.Name == "" {
-		return FailedCheck(name, desc,
-			"Server name is empty",
-			"Please provide a name for the MCP server",
-		)
-	}
-
-	if s.Url == "" {
-		return FailedCheck(name, desc,
-			"Server URL is empty",
-			"Please enter the MCP server URL in the configuration",
-		)
-	}
-
-	if !strings.HasPrefix(s.Url, "http://") && !strings.HasPrefix(s.Url, "https://") {
-		return FailedCheck(name, desc,
-			"Server URL must start with http:// or https://",
-			"Add the correct protocol prefix to the URL",
-		)
-	}
-
-	return PassedCheck(name, desc, fmt.Sprintf("Basic configuration is complete: %s", s.Name))
-}
-
-var serverEnvVarPattern = regexp.MustCompile(`\$\{?[A-Z_][A-Z0-9_]*\}?`)
-
-func checkServerEnvVars(s *Server) *CapabilityCheckItem {
-	name := "env_variables"
-	desc := "Check environment variable references in configuration"
-
-	fieldsToCheck := map[string]string{
-		"url":   s.Url,
-		"token": s.Token,
-	}
-
-	var unresolvedVars []string
-	var resolvedCount int
-
-	for fieldName, value := range fieldsToCheck {
-		if value == "" {
-			continue
-		}
-		matches := serverEnvVarPattern.FindAllString(value, -1)
-		for _, m := range matches {
-			varName := strings.Trim(m, "${}")
-			if val := os.Getenv(varName); val == "" {
-				unresolvedVars = append(unresolvedVars, fmt.Sprintf("%s (in %s)", varName, fieldName))
-			} else {
-				resolvedCount++
-			}
-		}
-	}
-
-	if len(unresolvedVars) > 0 {
-		return WarningCheck(name, desc,
-			fmt.Sprintf("%d environment variable(s) may not be set: %s", len(unresolvedVars), strings.Join(unresolvedVars, ", ")),
-			"Set the required environment variables or check their spelling",
-			fmt.Sprintf("export %s=your_value", strings.Split(unresolvedVars[0], " ")[0]),
-		)
-	}
-
-	if resolvedCount > 0 {
-		return PassedCheck(name, desc, fmt.Sprintf("All %d environment variable references can be resolved", resolvedCount))
-	}
-
-	return PassedCheck(name, desc, "No environment variable references found in configuration")
-}
-
-func checkServerUrl(s *Server) *CapabilityCheckItem {
-	name := "server_url"
-	desc := "Check if server URL is configured"
-
-	if s.Url == "" {
-		return FailedCheck(name, desc,
-			"Server URL is empty",
-			"Please enter the MCP server URL in the configuration",
-		)
-	}
-
-	if !strings.HasPrefix(s.Url, "http://") && !strings.HasPrefix(s.Url, "https://") {
-		return FailedCheck(name, desc,
-			"Server URL must start with http:// or https://",
-			"Add the correct protocol prefix to the URL",
-		)
-	}
-
-	return PassedCheck(name, desc, fmt.Sprintf("Server URL is configured: %s", s.Url))
-}
-
-func checkMcpConnection(s *Server) *CapabilityCheckItem {
-	name := "mcp_connection"
-	desc := "Check MCP server connection"
-
-	if s.Url == "" {
-		return SkippedCheck(name, desc, "Skipped: server URL is empty")
-	}
-
-	cli, err := mcp.NewClient(s.Url, s.Token)
-	if err != nil {
-		return FailedCheck(name, desc,
-			fmt.Sprintf("Failed to connect to MCP server: %v", err),
-			"Verify the server URL is correct and the server is running",
-		)
-	}
-	defer cli.Close()
-
-	return PassedCheck(name, desc, "Successfully connected to MCP server")
-}
-
-func checkMcpToolList(s *Server) *CapabilityCheckItem {
-	name := "tool_list"
-	desc := "Check if tool list can be fetched"
-
-	if s.Url == "" {
-		return SkippedCheck(name, desc, "Skipped: server URL is empty")
-	}
-
-	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
-	if err != nil {
-		return FailedCheck(name, desc,
-			fmt.Sprintf("Failed to fetch tool list: %v", err),
-			"Check if the MCP server is running and supports tools/list",
-		)
-	}
-
-	if len(tools) == 0 {
-		return WarningCheck(name, desc,
-			"No tools found on the server",
-			"The server may not expose any tools, or there may be a configuration issue",
-		)
-	}
-
-	return PassedCheck(name, desc, fmt.Sprintf("Successfully fetched %d tools", len(tools)))
-}
-
-func checkMcpToolSchema(s *Server) *CapabilityCheckItem {
-	name := "tool_schema"
-	desc := "Check if tool schemas are valid"
-
-	if s.Url == "" {
-		return SkippedCheck(name, desc, "Skipped: server URL is empty")
-	}
-
-	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
-	if err != nil {
-		return SkippedCheck(name, desc, "Skipped: cannot fetch tool list")
-	}
-
-	if len(tools) == 0 {
-		return SkippedCheck(name, desc, "Skipped: no tools available")
-	}
-
-	validSchemas := 0
-	for _, t := range tools {
-		if t.InputSchema.Type != "" || len(t.InputSchema.Properties) > 0 {
-			validSchemas++
-		}
-	}
-
-	if validSchemas == 0 {
-		return WarningCheck(name, desc,
-			"No tools have input schemas defined",
-			"Tools may work without schemas, but schema validation is recommended",
-		)
-	}
-
-	return PassedCheck(name, desc, fmt.Sprintf("%d/%d tools have valid schemas", validSchemas, len(tools)))
-}
-
-func checkMcpDryRun(s *Server) *CapabilityCheckItem {
-	name := "dry_run"
-	desc := "Check if a dry-run tool call succeeds"
-
-	if s.Url == "" {
-		return SkippedCheck(name, desc, "Skipped: server URL is empty")
-	}
-
-	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
-	if err != nil {
-		return SkippedCheck(name, desc, "Skipped: cannot fetch tool list")
-	}
-
-	if len(tools) == 0 {
-		return SkippedCheck(name, desc, "Skipped: no tools available")
-	}
-
-	testTool := findNoArgTool(tools)
-	if testTool == nil {
-		return WarningCheck(name, desc,
-			"No zero-argument tool found for dry-run test",
-			"Add testContent configuration to test a specific tool",
-		)
-	}
-
-	_, err = mcp.CallTool(s.Url, s.Token, testTool.Name, map[string]interface{}{})
-	if err != nil {
-		return FailedCheck(name, desc,
-			fmt.Sprintf("Dry-run call to '%s' failed: %v", testTool.Name, err),
-			"Check tool permissions and server configuration",
-		)
-	}
-
-	return PassedCheck(name, desc, fmt.Sprintf("Dry-run call to '%s' succeeded", testTool.Name))
-}
-
-func findNoArgTool(tools []*protocol.Tool) *protocol.Tool {
-	for _, t := range tools {
-		schema := t.InputSchema
-		if len(schema.Required) == 0 && len(schema.Properties) == 0 {
-			return t
-		}
-		if len(schema.Required) == 0 {
-			return t
-		}
-	}
-	return nil
 }

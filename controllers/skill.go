@@ -203,7 +203,7 @@ func (c *ApiController) LoadSkill() {
 // CheckSkillCapability
 // @Title CheckSkillCapability
 // @Tag Skill API
-// @Description run capability checks on a skill and return structured results with fix suggestions
+// @Description run capability checks on a skill configuration
 // @Param body body object.Skill true "The skill configuration to check"
 // @Success 200 {object} object.CapabilityCheckResult The capability check result
 // @router /check-skill-capability [post]
@@ -214,6 +214,7 @@ func (c *ApiController) CheckSkillCapability() {
 		return
 	}
 
-	result := object.CheckSkillCapability(&skill, c.GetAcceptLanguage())
+	checker := object.NewSkillCapabilityChecker(&skill)
+	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
 	c.ResponseOk(result)
 }

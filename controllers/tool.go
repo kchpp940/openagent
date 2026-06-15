@@ -207,17 +207,19 @@ func (c *ApiController) TestTool() {
 // CheckToolCapability
 // @Title CheckToolCapability
 // @Tag Tool API
-// @Description run capability checks on a tool and return structured results with fix suggestions
+// @Description run capability checks on a tool configuration
 // @Param body body object.Tool true "The tool configuration to check"
 // @Success 200 {object} object.CapabilityCheckResult The capability check result
 // @router /check-tool-capability [post]
 func (c *ApiController) CheckToolCapability() {
 	var t object.Tool
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &t); err != nil {
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
+	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	result := object.CheckToolCapability(&t, c.GetAcceptLanguage())
+	checker := object.NewToolCapabilityChecker(&t)
+	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
 	c.ResponseOk(result)
 }

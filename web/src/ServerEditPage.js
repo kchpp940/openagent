@@ -14,6 +14,7 @@
 
 import React from "react";
 import Loading from "./common/Loading";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Button, Card, Col, Input, Row, Space} from "antd";
 import {LinkOutlined} from "@ant-design/icons";
 import * as ServerBackend from "./backend/ServerBackend";
@@ -21,7 +22,6 @@ import * as Setting from "./Setting";
 import i18next from "i18next";
 import ToolTable from "./table/ToolTable";
 import TestMcpWidget from "./common/TestMcpWidget";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 class ServerEditPage extends React.Component {
   constructor(props) {
@@ -33,6 +33,7 @@ class ServerEditPage extends React.Component {
       originalServer: null,
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
+      capabilityCheckKey: 0,
     };
   }
 
@@ -68,7 +69,7 @@ class ServerEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             originalServer: Setting.deepCopy(this.state.server),
-            capabilityCheckTrigger: (this.state.capabilityCheckTrigger || 0) + 1,
+            capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
           if (willExist) {
             this.props.history.push("/servers");
@@ -80,16 +81,6 @@ class ServerEditPage extends React.Component {
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
-  }
-
-  async checkServerCapability() {
-    const server = Setting.deepCopy(this.state.server);
-    const res = await ServerBackend.checkServerCapability(server);
-    if (res.status === "ok") {
-      return res.data;
-    } else {
-      throw new Error(res.msg || "Failed to check capability");
-    }
   }
 
   cancelServerEdit() {
@@ -199,17 +190,6 @@ class ServerEditPage extends React.Component {
           />
         </Card>
 
-        <Card size="small" title={this.renderCardTitle(i18next.t("capability:Availability Check"), i18next.t("capability:Verify server desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityCheckPanel
-            ref={(panel) => this.capabilityPanel = panel}
-            title={i18next.t("capability:Server Capability Check")}
-            description={i18next.t("capability:Check if the MCP server is properly configured and accessible")}
-            autoCheck={false}
-            checkTrigger={this.state.capabilityCheckTrigger}
-            onCheck={() => this.checkServerCapability()}
-          />
-        </Card>
-
         <Card size="small" title={this.renderCardTitle(i18next.t("general:Test"), i18next.t("general:Test desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <TestMcpWidget server={server} />
           <Row gutter={rowGutter}>
@@ -220,6 +200,15 @@ class ServerEditPage extends React.Component {
             )}
           </Row>
         </Card>
+
+        <CapabilityCheckPanel
+          config={server}
+          checkFn={ServerBackend.checkServerCapability}
+          title={i18next.t("capability:Check availability")}
+          description={i18next.t("capability:Check availability desc")}
+          triggerKey={this.state.capabilityCheckKey}
+          autoRun={false}
+        />
       </div>
     );
   }

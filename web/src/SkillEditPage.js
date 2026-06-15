@@ -14,12 +14,12 @@
 
 import React from "react";
 import Loading from "./common/Loading";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Button, Card, Col, Collapse, Input, Row, Select, Space, Tag, Typography} from "antd";
 import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -37,6 +37,7 @@ class SkillEditPage extends React.Component {
       skill: null,
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
+      capabilityCheckKey: 0,
     };
   }
 
@@ -247,16 +248,14 @@ class SkillEditPage extends React.Component {
           </Row>
         </Card>
 
-        <Card size="small" title={renderCardTitle(i18next.t("capability:Availability Check"), i18next.t("capability:Verify skill desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityCheckPanel
-            ref={(panel) => this.capabilityPanel = panel}
-            title={i18next.t("capability:Skill Capability Check")}
-            description={i18next.t("capability:Check if the skill is properly configured and ready to use")}
-            autoCheck={false}
-            checkTrigger={this.state.capabilityCheckTrigger}
-            onCheck={() => this.checkSkillCapability()}
-          />
-        </Card>
+        <CapabilityCheckPanel
+          config={skill}
+          checkFn={SkillBackend.checkSkillCapability}
+          title={i18next.t("capability:Check availability")}
+          description={i18next.t("capability:Check availability desc")}
+          triggerKey={this.state.capabilityCheckKey}
+          autoRun={false}
+        />
       </div>
     );
   }
@@ -269,14 +268,13 @@ class SkillEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             skillName: this.state.skill.name,
+            originalSkill: Setting.deepCopy(this.state.skill),
             isNewSkill: false,
-            capabilityCheckTrigger: (this.state.capabilityCheckTrigger || 0) + 1,
+            capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
 
           if (exitAfterSave) {
             this.props.history.push("/skills");
-          } else {
-            this.props.history.push(`/skills/${this.state.skill.name}`);
           }
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
@@ -285,16 +283,6 @@ class SkillEditPage extends React.Component {
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
-  }
-
-  async checkSkillCapability() {
-    const skill = Setting.deepCopy(this.state.skill);
-    const res = await SkillBackend.checkSkillCapability(skill);
-    if (res.status === "ok") {
-      return res.data;
-    } else {
-      throw new Error(res.msg || "Failed to check capability");
-    }
   }
 
   cancelSkillEdit() {

@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/conf"
@@ -230,11 +229,7 @@ func (c *ApiController) UpdateStore() {
 
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		if validationErr, ok := err.(*object.StoreValidationError); ok {
-			c.ResponseError(validationErr.Message, validationErr)
-		} else {
-			c.ResponseError(err.Error())
-		}
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -309,11 +304,7 @@ func (c *ApiController) AddStore() {
 
 	success, err := object.AddStore(&store)
 	if err != nil {
-		if validationErr, ok := err.(*object.StoreValidationError); ok {
-			c.ResponseError(validationErr.Message, validationErr)
-		} else {
-			c.ResponseError(err.Error())
-		}
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -507,78 +498,4 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
-}
-
-// ValidateStoreTools
-// @Title ValidateStoreTools
-// @Tag Store API
-// @Description validate store tools capability and return warnings
-// @Param body body object.Store true "The store to validate"
-// @Success 200 {object} controllers.Response The Response object
-// @router /validate-store-tools [post]
-func (c *ApiController) ValidateStoreTools() {
-	var store object.Store
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	if store.Owner == "" {
-		store.Owner = c.GetSessionUsername()
-	}
-
-	if store.Owner == "" {
-		c.ResponseError("owner is required")
-		return
-	}
-
-	warnings, err := object.ValidateStoreTools(&store)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	c.ResponseOk(warnings)
-}
-
-// GetCapabilityCheckRecords
-// @Title GetCapabilityCheckRecords
-// @Tag Capability API
-// @Description get capability check records for an entity
-// @Param   entityType      query    string  true  "entity type: server/skill/tool"
-// @Param   entityId        query    string  true  "entity id"
-// @Param   limit           query    int     false "max records to return, default 20"
-// @Success 200 {object} []object.CapabilityCheckRecord
-// @router /get-capability-check-records [get]
-func (c *ApiController) GetCapabilityCheckRecords() {
-	owner := c.GetSessionUsername()
-	if owner == "" {
-		c.ResponseError("unauthorized")
-		return
-	}
-
-	entityType := c.Input().Get("entityType")
-	entityId := c.Input().Get("entityId")
-	limitStr := c.Input().Get("limit")
-
-	if entityType == "" || entityId == "" {
-		c.ResponseError("entityType and entityId are required")
-		return
-	}
-
-	limit := 20
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
-	}
-
-	records, err := object.GetCapabilityCheckRecords(owner, entityType, entityId, limit)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	c.ResponseOk(records)
 }

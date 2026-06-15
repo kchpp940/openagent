@@ -61,8 +61,6 @@ func initAPI() {
 	beego.Router("/api/get-store", &controllers.ApiController{}, "GET:GetStore")
 	beego.Router("/api/update-store", &controllers.ApiController{}, "POST:UpdateStore")
 	beego.Router("/api/add-store", &controllers.ApiController{}, "POST:AddStore")
-	beego.Router("/api/validate-store-tools", &controllers.ApiController{}, "POST:ValidateStoreTools")
-	beego.Router("/api/get-capability-check-records", &controllers.ApiController{}, "GET:GetCapabilityCheckRecords")
 	beego.Router("/api/delete-store", &controllers.ApiController{}, "POST:DeleteStore")
 	beego.Router("/api/refresh-store-vectors", &controllers.ApiController{}, "POST:RefreshStoreVectors")
 	beego.Router("/api/get-storage-providers", &controllers.ApiController{}, "GET:GetStorageProviders")

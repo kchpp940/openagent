@@ -14,12 +14,12 @@
 
 import React from "react";
 import Loading from "./common/Loading";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Alert, Button, Card, Col, Input, Row, Select, Space, Switch, Table, Tag} from "antd";
 import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 const {Option} = Select;
 
@@ -32,6 +32,7 @@ class ToolEditPage extends React.Component {
       tool: null,
       originalTool: null,
       isNewTool: props.location?.state?.isNewTool || false,
+      capabilityCheckKey: 0,
     };
   }
 
@@ -309,17 +310,6 @@ class ToolEditPage extends React.Component {
           </Card>
         )}
 
-        <Card size="small" title={renderCardTitle(i18next.t("capability:Availability Check"), i18next.t("capability:Verify tool desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityCheckPanel
-            ref={(panel) => this.capabilityPanel = panel}
-            title={i18next.t("capability:Tool Capability Check")}
-            description={i18next.t("capability:Check if the tool is properly configured and functional")}
-            autoCheck={false}
-            checkTrigger={this.state.capabilityCheckTrigger}
-            onCheck={() => this.checkToolCapability()}
-          />
-        </Card>
-
         <Card size="small" title={renderCardTitle(i18next.t("general:Test"), i18next.t("general:Test desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <TestToolWidget
             tool={tool}
@@ -328,6 +318,15 @@ class ToolEditPage extends React.Component {
             account={this.props.account}
           />
         </Card>
+
+        <CapabilityCheckPanel
+          config={tool}
+          checkFn={ToolBackend.checkToolCapability}
+          title={i18next.t("capability:Check availability")}
+          description={i18next.t("capability:Check availability desc")}
+          triggerKey={this.state.capabilityCheckKey}
+          autoRun={false}
+        />
       </div>
     );
   }
@@ -340,14 +339,13 @@ class ToolEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             toolName: this.state.tool.name,
+            originalTool: Setting.deepCopy(this.state.tool),
             isNewTool: false,
-            capabilityCheckTrigger: (this.state.capabilityCheckTrigger || 0) + 1,
+            capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
 
           if (exitAfterSave) {
             this.props.history.push("/tools");
-          } else {
-            this.props.history.push(`/tools/${this.state.tool.name}`);
           }
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
@@ -356,16 +354,6 @@ class ToolEditPage extends React.Component {
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
-  }
-
-  async checkToolCapability() {
-    const tool = Setting.deepCopy(this.state.tool);
-    const res = await ToolBackend.checkToolCapability(tool);
-    if (res.status === "ok") {
-      return res.data;
-    } else {
-      throw new Error(res.msg || "Failed to check capability");
-    }
   }
 
   cancelToolEdit() {
