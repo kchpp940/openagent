@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
+import {normalizeTaskAnalysisReport} from "../TaskAnalysisTypes";
 
 export function getGlobalTasks() {
   return fetch(`${Setting.ServerUrl}/api/get-global-tasks`, {
@@ -41,7 +42,12 @@ export function getTask(owner, name) {
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => Setting.handleFetchResponse(res));
+  }).then(res => Setting.handleFetchResponse(res)).then(res => {
+    if (res.status === "ok" && res.data?.result) {
+      res.data.result = normalizeTaskAnalysisReport(res.data.result);
+    }
+    return res;
+  });
 }
 
 export function updateTask(owner, name, task) {
@@ -102,116 +108,10 @@ export function analyzeTask(owner, name) {
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function getTaskResultAnchors(taskId) {
-  return fetch(`${Setting.ServerUrl}/api/get-task-result-anchors?id=${encodeURIComponent(taskId)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function addReportComment(taskOwner, taskName, anchorId, content) {
-  return fetch(`${Setting.ServerUrl}/api/add-report-comment`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      taskOwner,
-      taskName,
-      anchorId,
-      content,
-    }),
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function getReportComments(taskId) {
-  return fetch(`${Setting.ServerUrl}/api/get-report-comments?id=${encodeURIComponent(taskId)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function getReportCommentCount(taskId) {
-  return fetch(`${Setting.ServerUrl}/api/get-report-comment-count?id=${encodeURIComponent(taskId)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function updateReportComment(commentId, payload) {
-  return fetch(`${Setting.ServerUrl}/api/update-report-comment?id=${commentId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function resolveReportComment(commentId) {
-  return fetch(`${Setting.ServerUrl}/api/resolve-report-comment?id=${commentId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function reopenReportComment(commentId) {
-  return fetch(`${Setting.ServerUrl}/api/reopen-report-comment?id=${commentId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function disputeReportComment(commentId) {
-  return fetch(`${Setting.ServerUrl}/api/dispute-report-comment?id=${commentId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function deleteReportComment(commentId) {
-  return fetch(`${Setting.ServerUrl}/api/delete-report-comment?id=${commentId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function rebindReportComment(payload) {
-  return fetch(`${Setting.ServerUrl}/api/rebind-report-comment`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  }).then(res => Setting.handleFetchResponse(res));
+  }).then(res => Setting.handleFetchResponse(res)).then(res => {
+    if (res.status === "ok" && res.data) {
+      res.data = normalizeTaskAnalysisReport(res.data);
+    }
+    return res;
+  });
 }

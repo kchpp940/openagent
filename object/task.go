@@ -30,7 +30,7 @@ const (
 	DocumentParseStatusUnsupported = "unsupported"
 )
 
-type TaskResultItem struct {
+type TaskAnalysisItem struct {
 	Name         string  `json:"name"`
 	Score        float64 `json:"score"`
 	Advantage    string  `json:"advantage"`
@@ -38,26 +38,31 @@ type TaskResultItem struct {
 	Suggestion   string  `json:"suggestion"`
 }
 
-type TaskResultCategory struct {
-	Name  string            `json:"name"`
-	Score float64           `json:"score"`
-	Items []*TaskResultItem `json:"items"`
+type TaskAnalysisCategory struct {
+	Name  string                `json:"name"`
+	Score float64               `json:"score"`
+	Items []*TaskAnalysisItem `json:"items"`
 }
 
-type TaskResult struct {
-	Title         string                `json:"title"`
-	Designer      string                `json:"designer"`
-	Stage         string                `json:"stage"`
-	Participants  string                `json:"participants"`
-	Grade         string                `json:"grade"`
-	Instructor    string                `json:"instructor"`
-	Subject       string                `json:"subject"`
-	School        string                `json:"school"`
-	OtherSubjects string                `json:"otherSubjects"`
-	Textbook      string                `json:"textbook"`
-	Score         float64               `json:"score"`
-	Categories    []*TaskResultCategory `json:"categories"`
+type TaskAnalysisReport struct {
+	Title         string                    `json:"title"`
+	Designer      string                    `json:"designer"`
+	Stage         string                    `json:"stage"`
+	Participants  string                    `json:"participants"`
+	Grade         string                    `json:"grade"`
+	Instructor    string                    `json:"instructor"`
+	Subject       string                    `json:"subject"`
+	School        string                    `json:"school"`
+	OtherSubjects string                    `json:"otherSubjects"`
+	Textbook      string                    `json:"textbook"`
+	Score         float64                   `json:"score"`
+	Summary       string                    `json:"summary"`
+	Categories    []*TaskAnalysisCategory   `json:"categories"`
 }
+
+type TaskResultItem = TaskAnalysisItem
+type TaskResultCategory = TaskAnalysisCategory
+type TaskResult = TaskAnalysisReport
 
 type Task struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`

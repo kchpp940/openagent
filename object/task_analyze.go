@@ -49,6 +49,7 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
   "otherSubjects": "从文档中提取的其他相关领域或学科（逗号分隔）",
   "textbook": "从文档中提取的主要教材信息",
   "score": 所有二级评价项得分的平均值（保留一位小数的数字，不是字符串）,
+  "summary": "整体分析摘要（对整个教学设计的综合性评价，包括整体水平、主要亮点、核心问题和总体改进方向，200-300字）",
   "categories": [
     {
       "name": "一级评价项名称",
@@ -57,8 +58,8 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
         {
           "name": "二级评价项名称",
           "score": 该项得分（0-100的整数）,
-          "advantage": "优点分析（详细说明教学设计在该项的优势和亮点）",
-          "disadvantage": "不足分析（详细说明教学设计在该项存在的问题和不足）",
+          "advantage": "优点分析（详细说明教学设计在该项的优势和亮点）,
+          "disadvantage": "不足分析（详细说明教学设计在该项存在的问题和不足）,
           "suggestion": "改进建议（提供具体可操作的改进措施和建议）"
         }
       ]
@@ -195,7 +196,7 @@ func parseString(v interface{}) string {
 	}
 }
 
-func normalizeTaskResult(result *TaskResult) {
+func normalizeTaskResult(result *TaskAnalysisReport) {
 	if result == nil {
 		return
 	}
@@ -246,8 +247,8 @@ func normalizeTaskResult(result *TaskResult) {
 	}
 }
 
-func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
-	result := &TaskResult{
+func normalizeTaskResultFromMap(data map[string]interface{}) *TaskAnalysisReport {
+	result := &TaskAnalysisReport{
 		Title:         parseString(data["title"]),
 		Designer:      parseString(data["designer"]),
 		Stage:         parseString(data["stage"]),
@@ -259,12 +260,13 @@ func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
 		OtherSubjects: parseString(data["otherSubjects"]),
 		Textbook:      parseString(data["textbook"]),
 		Score:         parseFloat(data["score"]),
+		Summary:       parseString(data["summary"]),
 	}
 
 	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
 		for _, catRaw := range categoriesRaw {
 			if catMap, ok := catRaw.(map[string]interface{}); ok {
-				cat := &TaskResultCategory{
+				cat := &TaskAnalysisCategory{
 					Name:  parseString(catMap["name"]),
 					Score: parseFloat(catMap["score"]),
 				}
@@ -272,7 +274,7 @@ func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
 				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
 					for _, itemRaw := range itemsRaw {
 						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
-							item := &TaskResultItem{
+							item := &TaskAnalysisItem{
 								Name:         parseString(itemMap["name"]),
 								Score:        parseFloat(itemMap["score"]),
 								Advantage:    parseString(itemMap["advantage"]),
@@ -293,7 +295,7 @@ func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
 	return result
 }
 
-func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
+func AnalyzeTask(task *Task, lang string) (*TaskAnalysisReport, error) {
 	taskID := task.GetId()
 	logs.Info("[analyze-task] start task=%s provider=%s lang=%s", taskID, task.Provider, lang)
 
@@ -379,25 +381,4 @@ func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	task.AnalyzeError = ""
 	logs.Info("[analyze-task] done task=%s score=%.2f categories=%d", taskID, result.Score, len(result.Categories))
 	return result, nil
-}
-
-func GetLatestTaskResult(taskOwner string, taskName string) (*TaskResult, float64, error) {
-	id := fmt.Sprintf("%s/%s", taskOwner, taskName)
-	task, err := GetTask(id)
-	if err != nil {
-		return nil, 0, err
-	}
-	if task == nil {
-		return nil, 0, fmt.Errorf("task not found: %s", id)
-	}
-	score := task.Score
-	if strings.TrimSpace(task.Result) == "" {
-		return nil, score, nil
-	}
-	var result TaskResult
-	if err := json.Unmarshal([]byte(task.Result), &result); err != nil {
-		return nil, score, fmt.Errorf("parse task result JSON failed: %v", err)
-	}
-	normalizeTaskResult(&result)
-	return &result, score, nil
 }

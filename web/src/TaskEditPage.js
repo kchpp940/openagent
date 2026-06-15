@@ -14,13 +14,13 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Badge, Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Tooltip, Typography, Upload} from "antd";
+import {Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Typography, Upload} from "antd";
 
 const ANALYZE_PROGRESS_DURATION_SEC = 300;
 const ANALYZE_PROGRESS_TICK_MS = 500;
 const ANALYZE_PROGRESS_MAX_PERCENT = 99;
 
-import {BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, CommentOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
+import {BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
 import * as TaskBackend from "./backend/TaskBackend";
 import * as ScaleBackend from "./backend/ScaleBackend";
 import * as Setting from "./Setting";
@@ -50,7 +50,6 @@ class TaskEditPage extends React.Component {
       analyzeError: "",
       loading: false,
       uploadingDocument: false,
-      commentCounts: {total: 0, open: 0, resolved: 0, disputed: 0, unresolved: 0},
     };
     this.analyzeProgressIntervalId = null;
     this.analyzeStartTime = null;
@@ -80,16 +79,6 @@ class TaskEditPage extends React.Component {
     t = t.scale === undefined || t.scale === null ? {...t, scale: ""} : t;
     t = t.documentError === undefined || t.documentError === null ? {...t, documentError: ""} : t;
     t = t.documentFileType === undefined || t.documentFileType === null ? {...t, documentFileType: ""} : t;
-    if (!t.result) {
-      return t;
-    }
-    if (typeof t.result === "string") {
-      try {
-        t = {...t, result: JSON.parse(t.result)};
-      } catch {
-        t = {...t, result: null};
-      }
-    }
     return t;
   }
 
@@ -99,50 +88,12 @@ class TaskEditPage extends React.Component {
         if (res.status === "ok") {
           this.setState({
             task: this.normalizeTaskResult(res.data),
-          }, () => {
-            this.loadCommentCounts();
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       });
   }
-
-  loadCommentCounts() {
-    const taskId = `${this.state.owner}/${this.state.taskName}`;
-    TaskBackend.getReportCommentCount(taskId)
-      .then((res) => {
-        if (res.status === "ok" && res.data) {
-          const c = res.data || {};
-          if (c.unresolved === null) {
-            c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
-          }
-          this.setState({commentCounts: c});
-        }
-      })
-      .catch(() => {});
-  }
-
-  handleReportCommentChange = (payload) => {
-    const data = payload || {};
-    if (data.counts) {
-      const c = {...data.counts};
-      if (c.unresolved === null) {
-        c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
-      }
-      this.setState({commentCounts: c});
-    } else if (Array.isArray(data)) {
-      const comments = data;
-      const counts = {total: comments.length, open: 0, resolved: 0, disputed: 0, unresolved: 0};
-      comments.forEach((c) => {
-        if (counts[c.status] !== undefined) {
-          counts[c.status]++;
-        }
-      });
-      counts.unresolved = counts.open + counts.disputed;
-      this.setState({commentCounts: counts});
-    }
-  };
 
   getEffectiveScale() {
     const task = this.state.task;
@@ -364,18 +315,7 @@ class TaskEditPage extends React.Component {
     return (
       <div>
         <div style={{marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-          <div style={{display: "flex", alignItems: "center", gap: "12px"}}>
-            <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("task:Edit Task")}</span>
-            {this.state.commentCounts && Number(this.state.commentCounts.unresolved) > 0 && (
-              <Space>
-                <Tooltip title={`${Number(this.state.commentCounts.unresolved) || 0} ${i18next.t("task:unresolved comments")} (${Number(this.state.commentCounts.open) || 0} ${i18next.t("task:Open")}, ${Number(this.state.commentCounts.disputed) || 0} ${i18next.t("task:Disputed")})`}>
-                  <Badge count={Number(this.state.commentCounts.unresolved) || 0} offset={[4, 0]} color="#1677ff">
-                    <Button type="text" size="small" icon={<CommentOutlined style={{color: "#1677ff"}} />} style={{padding: "0 4px"}} />
-                  </Badge>
-                </Tooltip>
-              </Space>
-            )}
-          </div>
+          <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("task:Edit Task")}</span>
           <div style={{display: "flex", gap: "8px", marginRight: "4px"}}>
             {this.renderTaskActions()}
           </div>
@@ -559,8 +499,6 @@ class TaskEditPage extends React.Component {
                   <TaskAnalysisReport
                     result={task.result}
                     downloadFileName={`${task.owner}_${task.name}_report.docx`}
-                    taskId={`${task.owner}/${task.name}`}
-                    onCommentChange={this.handleReportCommentChange}
                   />
                 )}
               </div>,

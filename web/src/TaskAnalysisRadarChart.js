@@ -28,31 +28,31 @@ const AXIS_ID_SEP = "\uE000";
  */
 function buildFlatRows(categories, useItems) {
   const rows = [];
-  (categories || []).forEach((cat, gIdx) => {
-    const gName = (cat?.name ?? "").trim() || `—${gIdx + 1}—`;
+  categories.forEach((cat, gIdx) => {
+    const gName = cat.name.trim() || `—${gIdx + 1}—`;
     if (useItems) {
-      const its = cat.items || [];
+      const its = cat.items;
       if (its.length > 0) {
         its.forEach((item) => {
           rows.push({
-            name: (item.name ?? "").trim() || gName,
-            score: Number(item.score) || 0,
+            name: item.name.trim() || gName,
+            score: item.score,
             groupIndex: gIdx,
             groupName: gName,
           });
         });
       } else {
         rows.push({
-          name: (cat.name ?? "").trim() || gName,
-          score: Number(cat.score) || 0,
+          name: cat.name.trim() || gName,
+          score: cat.score,
           groupIndex: gIdx,
           groupName: gName,
         });
       }
     } else {
       rows.push({
-        name: (cat.name ?? "").trim() || gName,
-        score: Number(cat.score) || 0,
+        name: cat.name.trim() || gName,
+        score: cat.score,
         groupIndex: gIdx,
         groupName: gName,
       });
@@ -112,9 +112,9 @@ export default function TaskAnalysisRadarChart({categories, radarMin = 0, radarM
     if (!categories || categories.length === 0) {
       return {flat: [], groupNames: [], showGroupLegend: false};
     }
-    const hasItems = (categories || []).some((c) => (c.items || []).length > 0);
+    const hasItems = categories.some((c) => c.items.length > 0);
     const f = buildFlatRows(categories, hasItems);
-    const g = (categories || []).map((c, gIdx) => (c?.name ?? "").trim() || `—${gIdx + 1}—`);
+    const g = categories.map((c, gIdx) => c.name.trim() || `—${gIdx + 1}—`);
     return {flat: f, groupNames: g, showGroupLegend: g.length > 0};
   }, [categories]);
 
@@ -168,7 +168,7 @@ export default function TaskAnalysisRadarChart({categories, radarMin = 0, radarM
   }
 
   const rich = {};
-  (categories || []).forEach((_, gIdx) => {
+  categories.forEach((_, gIdx) => {
     rich[`g${gIdx}`] = {
       color: GROUP_LINE_COLORS[gIdx % GROUP_LINE_COLORS.length],
       fontSize: 9,

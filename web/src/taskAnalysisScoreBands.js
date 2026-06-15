@@ -19,10 +19,9 @@ const NUM_BANDS = 5;
 
 export function collectScoresFromCategories(categories) {
   const scores = [];
-  (categories || []).forEach((cat) => {
-    (cat.items || []).forEach((item) => {
-      const s = Number(item.score) || 0;
-      scores.push(s);
+  categories.forEach((cat) => {
+    cat.items.forEach((item) => {
+      scores.push(item.score);
     });
   });
   return scores;
@@ -60,7 +59,7 @@ export function getScoreBandColor(score, categories) {
   if (bands.length === 0) {
     return null;
   }
-  const s = Number(score) || 0;
+  const s = score;
   const idx = bands.findIndex((b, i) => (i < bands.length - 1 ? s >= b.min && s < b.max : s >= b.min && s <= b.max));
   if (idx < 0) {
     return TASK_SCORE_BAND_COLORS[TASK_SCORE_BAND_COLORS.length - 1];

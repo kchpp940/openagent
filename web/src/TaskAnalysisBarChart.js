@@ -20,11 +20,11 @@ const ITEM_NAME_MAX_LEN = 18;
 
 function flattenItems(categories) {
   const list = [];
-  (categories || []).forEach((cat) => {
-    (cat.items || []).forEach((item) => {
+  categories.forEach((cat) => {
+    cat.items.forEach((item) => {
       list.push({
         name: item.name,
-        score: Number(item.score) || 0,
+        score: item.score,
         categoryName: cat.name,
       });
     });
@@ -35,9 +35,9 @@ function flattenItems(categories) {
 function getScoreRange(categories) {
   let min = 100;
   let max = 0;
-  (categories || []).forEach((cat) => {
-    (cat.items || []).forEach((item) => {
-      const s = Number(item.score) || 0;
+  categories.forEach((cat) => {
+    cat.items.forEach((item) => {
+      const s = item.score;
       if (s < min) {
         min = s;
       }

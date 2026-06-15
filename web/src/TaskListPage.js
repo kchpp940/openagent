@@ -27,6 +27,7 @@ import i18next from "i18next";
 import * as ConfTask from "./ConfTask";
 import * as Conf from "./Conf";
 import TaskAnalysisReport from "./TaskAnalysisReport";
+import {normalizeTaskAnalysisReport} from "./TaskAnalysisTypes";
 
 const {TextArea} = Input;
 
@@ -190,14 +191,7 @@ class TaskListPage extends BaseListPage {
     if (!result) {
       return null;
     }
-    if (typeof result === "object") {
-      return result;
-    }
-    try {
-      return JSON.parse(result);
-    } catch {
-      return null;
-    }
+    return normalizeTaskAnalysisReport(result);
   }
 
   renderTable(tasks) {
