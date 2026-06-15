@@ -14,13 +14,13 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Tooltip, Typography, Upload} from "antd";
+import {Badge, Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Tooltip, Typography, Upload} from "antd";
 
 const ANALYZE_PROGRESS_DURATION_SEC = 300;
 const ANALYZE_PROGRESS_TICK_MS = 500;
 const ANALYZE_PROGRESS_MAX_PERCENT = 99;
 
-import {Badge, BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, CommentOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
+import {BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, CommentOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
 import * as TaskBackend from "./backend/TaskBackend";
 import * as ScaleBackend from "./backend/ScaleBackend";
 import * as Setting from "./Setting";

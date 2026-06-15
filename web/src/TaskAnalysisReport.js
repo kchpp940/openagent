@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React, {useEffect, useMemo, useRef, useState} from "react";
-import {Avatar, Badge, Button, Drawer, Dropdown, Input, List, Modal, Space, Table, Tag, Tooltip, Typography} from "antd";
+import {Avatar, Badge, Button, Drawer, Dropdown, Input, List, Modal, Select, Space, Table, Tag, Tooltip, Typography} from "antd";
 import {
   CheckCircleOutlined,
   CommentOutlined,
@@ -104,6 +104,15 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   const [editingComment, setEditingComment] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [snapshotInfo, setSnapshotInfo] = useState({snapshotId: "", reportVersion: 0, oldSnapId: "", orphanCount: 0});
+  const [orphanComments, setOrphanComments] = useState([]);
+  const [ambiguousInfo, setAmbiguousInfo] = useState([]);
+  const [orphanPanelOpen, setOrphanPanelOpen] = useState(false);
+  const [rebindModalOpen, setRebindModalOpen] = useState(false);
+  const [rebindComment, setRebindComment] = useState(null);
+  const [rebindSearch, setRebindSearch] = useState("");
+  const [rebindFilterType, setRebindFilterType] = useState("all");
+  const [rebindSubmitting, setRebindSubmitting] = useState(false);
   const commentsLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -121,8 +130,11 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
         const data = res.data || {};
         const comments = data.comments || [];
         const grouped = data.grouped || {};
-        const anchors = (data.anchors && data.anchors.anchors) ? data.anchors.anchors : [];
+        const anchors = Array.isArray(data.anchors) ? data.anchors : ((data.anchors && data.anchors.anchors) ? data.anchors.anchors : []);
         const counts = data.counts || {total: comments.length, open: 0, resolved: 0, disputed: 0, unresolved: 0};
+        setSnapshotInfo({snapshotId: data.snapshotId || "", reportVersion: Number(data.reportVersion) || 0, oldSnapId: data.oldSnapId || "", orphanCount: Number(data.orphanCount) || 0});
+        setOrphanComments(data.orphans || []);
+        setAmbiguousInfo(data.ambiguousInfo || []);
         setAllComments(comments);
         setGroupedComments(grouped);
         setBackendAnchors(anchors);
@@ -194,6 +206,98 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
     });
     return m;
   }, [backendAnchors]);
+
+  const totalAmbigCount = useMemo(() => {
+    return (ambiguousInfo || []).reduce((sum, a) => {
+      if (a && Array.isArray(a.commentIds)) {
+        return sum + a.commentIds.length;
+      }
+      return sum;
+    }, 0);
+  }, [ambiguousInfo]);
+
+  const rebindableOrphans = useMemo(() => {
+    const map = new Map();
+    (orphanComments || []).forEach((c) => {
+      if (c && c.id) {
+        map.set(c.id, {...c, __rebindType: "orphan"});
+      }
+    });
+    (ambiguousInfo || []).forEach((a) => {
+      if (a && Array.isArray(a.commentIds)) {
+        a.commentIds.forEach((cid) => {
+          const c = allComments.find((x) => x.id === cid);
+          if (c && !map.has(c.id)) {
+            map.set(c.id, {...c, __rebindType: "ambiguous", __ambiguousEntry: a});
+          } else if (c && map.has(c.id)) {
+            map.set(c.id, {...map.get(c.id), __rebindType: "ambiguous", __ambiguousEntry: a});
+          }
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [orphanComments, ambiguousInfo, allComments]);
+
+  const openRebindModal = (comment) => {
+    setRebindComment(comment);
+    setRebindSearch("");
+    setRebindFilterType("all");
+    setRebindModalOpen(true);
+  };
+
+  const closeRebindModal = () => {
+    setRebindModalOpen(false);
+    setRebindComment(null);
+    setRebindSubmitting(false);
+  };
+
+  const handleConfirmRebind = async(targetAnchorId) => {
+    if (!rebindComment || !targetAnchorId || !taskId) {return;}
+    setRebindSubmitting(true);
+    try {
+      const [taskOwner, ...rest] = taskId.split("/");
+      const taskName = rest.join("/");
+      const payload = {
+        commentId: rebindComment.id,
+        anchorId: targetAnchorId,
+        taskOwner,
+        taskName,
+        forceApply: true,
+      };
+      const res = await TaskBackend.rebindReportComment(payload);
+      if (res.status === "ok") {
+        Setting.showMessage("success", i18next.t("general:Successfully saved"));
+        closeRebindModal();
+        commentsLoadedRef.current = false;
+        await loadAllComments();
+      } else {
+        Setting.showMessage("error", res.msg || i18next.t("general:Failed to save"));
+      }
+    } catch (err) {
+      Setting.showMessage("error", err?.message || String(err));
+    } finally {
+      setRebindSubmitting(false);
+    }
+  };
+
+  const candidateOptionsForRebind = () => {
+    const list = (backendAnchors || []).slice();
+    const search = rebindSearch.trim().toLowerCase();
+    const type = rebindFilterType;
+    return list.filter((a) => {
+      if (!a) {return false;}
+      if (type !== "all" && a.anchorType !== type) {return false;}
+      if (!search) {return true;}
+      const fields = [
+        a.categoryName || "",
+        a.itemName || "",
+        a.referencedField || "",
+        a.referencedContent || "",
+        a.anchorId || "",
+      ];
+      return fields.some((f) => f.toLowerCase().includes(search));
+    });
+  };
 
   if (!result) {
     return null;
@@ -732,8 +836,13 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
         ))}
       </div>
       <div style={{marginBottom: "12px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap"}}>
-        <div style={{fontSize: "16px", fontWeight: 600}}>
-          {i18next.t("task:Overall Score")}：<span style={{color: "#1677ff", fontSize: "20px"}}>{result.score}</span>
+        <div style={{fontSize: "16px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px"}}>
+          <span>{i18next.t("task:Overall Score")}：<span style={{color: "#1677ff", fontSize: "20px"}}>{result.score}</span></span>
+          {snapshotInfo.snapshotId && (
+            <Tooltip title={`Snapshot ID: ${snapshotInfo.snapshotId}, Version: v${snapshotInfo.reportVersion}`}>
+              <Tag color="blue">v{snapshotInfo.reportVersion}</Tag>
+            </Tooltip>
+          )}
         </div>
         {taskId && totalUnresolved > 0 && (
           <Tooltip title={`${totalUnresolved} ${i18next.t("task:unresolved comments")} (${Number(commentCounts.open) || 0} ${i18next.t("task:Open")}, ${Number(commentCounts.disputed) || 0} ${i18next.t("task:Disputed")})`}>
@@ -741,7 +850,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
               <Button type="text" icon={<CommentOutlined />} onClick={() => {
                 const firstGroupKey = Object.keys(groupedComments || {}).find((k) => {
                   const arr = groupedComments[k] || [];
-                  return arr.some((c) => c.status !== "resolved");
+                  return k !== "__orphan__" && arr.some((c) => c.status !== "resolved");
                 });
                 if (firstGroupKey) {
                   const arr = groupedComments[firstGroupKey] || [];
@@ -765,6 +874,13 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
               </Button>
             </Badge>
           </Tooltip>
+        )}
+        {orphanComments.length + totalAmbigCount > 0 && (
+          <Badge count={orphanComments.length + totalAmbigCount} color="#fa8c16" offset={[4, 0]}>
+            <Button dashed icon={<ExclamationCircleOutlined style={{color: "#fa8c16"}} />} onClick={() => setOrphanPanelOpen(true)}>
+              {i18next.t("task:Comments need binding")}
+            </Button>
+          </Badge>
         )}
         <Button type="primary" icon={<DownloadOutlined />} loading={downloading} onClick={handleDownloadReport}>
           {i18next.t("task:Download report")}
@@ -1013,6 +1129,212 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
           }}
         />
       </Drawer>
+
+      <Drawer
+        title={
+          <div>
+            <div style={{fontWeight: 600}}>{i18next.t("task:Comments need manual binding")}</div>
+            <div style={{fontSize: "12px", color: "#8c8c8c", marginTop: "2px"}}>
+              {i18next.t("task:Orphan")}: {orphanComments.length} · {i18next.t("task:Ambiguous")}: {totalAmbigCount}
+            </div>
+          </div>
+        }
+        placement="right"
+        width={520}
+        open={orphanPanelOpen}
+        onClose={() => setOrphanPanelOpen(false)}
+        extra={
+          <Space>
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => {commentsLoadedRef.current = false; loadAllComments();}}>
+              {i18next.t("general:Refresh")}
+            </Button>
+          </Space>
+        }
+      >
+        <List
+          dataSource={rebindableOrphans}
+          locale={{emptyText: i18next.t("task:No comments need binding.")}}
+          renderItem={(comment) => {
+            const isAmbiguous = comment.__rebindType === "ambiguous";
+            const cfg = STATUS_CONFIG[comment.status] || STATUS_CONFIG.open;
+            const candidates = isAmbiguous && comment.__ambiguousEntry && comment.__ambiguousEntry.candidates
+              ? comment.__ambiguousEntry.candidates
+              : [];
+            return (
+              <List.Item
+                key={comment.id}
+                style={{
+                  alignItems: "flex-start",
+                  padding: "12px",
+                  marginBottom: "8px",
+                  borderRadius: "8px",
+                  background: isAmbiguous ? "#fffbe6" : "#fff1f0",
+                  border: `1px solid ${isAmbiguous ? "#ffe58f" : "#ffccc7"}`,
+                }}
+              >
+                <List.Item.Meta
+                  avatar={<Avatar style={{backgroundColor: "#1677ff", verticalAlign: "middle"}} size="small">
+                    {(comment.author || "U").charAt(0).toUpperCase()}
+                  </Avatar>}
+                  title={
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px"}}>
+                      <Space size="small">
+                        <Text strong>{comment.author}</Text>
+                        <Tag color={isAmbiguous ? "orange" : "red"} style={{margin: 0}}>
+                          {isAmbiguous ? i18next.t("task:Ambiguous") : i18next.t("task:Orphan")}
+                        </Tag>
+                        <Tag color={cfg.color} icon={cfg.icon} style={{margin: 0}}>
+                          {cfg.label}
+                        </Tag>
+                      </Space>
+                      <Button type="primary" size="small" onClick={() => openRebindModal(comment)} disabled={rebindSubmitting}>
+                        {i18next.t("task:Rebind")}
+                      </Button>
+                    </div>
+                  }
+                  description={
+                    <div style={{fontSize: "12px", color: "#8c8c8c", marginBottom: "4px"}}>
+                      {comment.createdTime}
+                      {(comment.categoryName || comment.itemName) && (
+                        <Tag style={{marginLeft: "8px"}} color="default">
+                          {comment.categoryName || "-"} → {comment.itemName || "-"}
+                          {comment.referencedField ? ` · ${comment.referencedField}` : ""}
+                        </Tag>
+                      )}
+                    </div>
+                  }
+                />
+                <div style={{
+                  paddingLeft: "44px",
+                  width: "100%",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  lineHeight: 1.6,
+                  marginBottom: "8px",
+                }}>
+                  {comment.content}
+                </div>
+                {isAmbiguous && candidates && candidates.length > 0 && (
+                  <div style={{paddingLeft: "44px"}}>
+                    <div style={{fontSize: "12px", color: "#8c8c8c", marginBottom: "4px"}}>
+                      {i18next.t("task:Suggested anchors")}:
+                    </div>
+                    <Space wrap>
+                      {candidates.slice(0, 3).map((a, idx) => (
+                        <Button key={idx} size="small" onClick={() => handleConfirmRebind(a.anchorId)} disabled={rebindSubmitting}>
+                          {a.categoryName || "-"} → {a.itemName || "-"}{a.referencedField ? ` · ${a.referencedField}` : ""}
+                        </Button>
+                      ))}
+                    </Space>
+                  </div>
+                )}
+              </List.Item>
+            );
+          }}
+        />
+      </Drawer>
+
+      <Modal
+        open={rebindModalOpen}
+        onCancel={closeRebindModal}
+        width={720}
+        destroyOnClose
+        footer={null}
+      >
+        {rebindComment && (
+          <div>
+            <div style={{
+              padding: "12px",
+              background: "#fafafa",
+              border: "1px solid #f0f0f0",
+              borderRadius: "6px",
+              marginBottom: "16px",
+            }}>
+              <div style={{display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px"}}>
+                <Avatar style={{backgroundColor: "#1677ff", verticalAlign: "middle"}} size="small">
+                  {(rebindComment.author || "U").charAt(0).toUpperCase()}
+                </Avatar>
+                <Text strong>{rebindComment.author}</Text>
+                <span style={{fontSize: "12px", color: "#8c8c8c"}}>{rebindComment.createdTime}</span>
+              </div>
+              {(rebindComment.categoryName || rebindComment.itemName) && (
+                <div style={{fontSize: "12px", color: "#8c8c8c", marginBottom: "6px"}}>
+                  {rebindComment.categoryName || "-"} → {rebindComment.itemName || "-"}
+                  {rebindComment.referencedField ? ` · ${rebindComment.referencedField}` : ""}
+                </div>
+              )}
+              <div style={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                lineHeight: 1.6,
+              }}>
+                {rebindComment.content}
+              </div>
+            </div>
+
+            <Space.Compact style={{width: "100%", marginBottom: "12px"}}>
+              <Select
+                value={rebindFilterType}
+                onChange={(v) => setRebindFilterType(v)}
+                style={{width: 120}}
+              >
+                <Select.Option value="all">{i18next.t("general:All")}</Select.Option>
+                <Select.Option value="category">{i18next.t("task:Category")}</Select.Option>
+                <Select.Option value="item">{i18next.t("task:Item")}</Select.Option>
+                <Select.Option value="field">{i18next.t("task:Field")}</Select.Option>
+              </Select>
+              <Input.Search
+                placeholder={i18next.t("task:Search by category, item, field, content, or anchor ID...")}
+                value={rebindSearch}
+                onChange={(e) => setRebindSearch(e.target.value)}
+                onSearch={(v) => setRebindSearch(v)}
+                allowClear
+              />
+            </Space.Compact>
+
+            <List
+              dataSource={candidateOptionsForRebind()}
+              locale={{emptyText: i18next.t("task:No anchor candidates.")}}
+              style={{maxHeight: "400px", overflow: "auto"}}
+              renderItem={(a) => (
+                <List.Item
+                  key={a.anchorId}
+                  actions={[
+                    <Button
+                      key="select"
+                      type="primary"
+                      size="small"
+                      disabled={rebindSubmitting}
+                      onClick={() => handleConfirmRebind(a.anchorId)}
+                    >
+                      {i18next.t("general:Select")}
+                    </Button>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={
+                      <div style={{display: "flex", alignItems: "center", gap: "6px"}}>
+                        <span>{a.categoryName || "-"} → {a.itemName || "-"}{a.referencedField ? ` · ${a.referencedField}` : ""}</span>
+                        <Tag color={a.anchorType === "category" ? "purple" : (a.anchorType === "item" ? "blue" : "cyan")} style={{margin: 0}}>
+                          {a.anchorType || "-"}
+                        </Tag>
+                        <Typography.Text code copyable style={{fontSize: "11px", maxWidth: 160}}>
+                          {a.anchorId}
+                        </Typography.Text>
+                      </div>
+                    }
+                    description={
+                      a.referencedContent
+                        ? a.referencedContent.slice(0, 160) + (a.referencedContent.length > 160 ? "..." : "")
+                        : "-"
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -412,4 +412,19 @@ func (a *Adapter) createTable() {
 	if err != nil {
 		panic(err)
 	}
+
+	err = a.engine.Sync2(new(TaskAnchorSnapshot))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(TaskAnchorRecord))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(TaskAnchorMigration))
+	if err != nil {
+		panic(err)
+	}
 }

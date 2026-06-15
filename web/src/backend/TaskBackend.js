@@ -203,3 +203,15 @@ export function deleteReportComment(commentId) {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function rebindReportComment(payload) {
+  return fetch(`${Setting.ServerUrl}/api/rebind-report-comment`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  }).then(res => Setting.handleFetchResponse(res));
+}

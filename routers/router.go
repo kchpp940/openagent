@@ -183,6 +183,7 @@ func initAPI() {
 	beego.Router("/api/reopen-report-comment", &controllers.ApiController{}, "POST:ReopenReportComment")
 	beego.Router("/api/dispute-report-comment", &controllers.ApiController{}, "POST:DisputeReportComment")
 	beego.Router("/api/delete-report-comment", &controllers.ApiController{}, "POST:DeleteReportComment")
+	beego.Router("/api/rebind-report-comment", &controllers.ApiController{}, "POST:RebindReportComment")
 
 	beego.Router("/api/get-global-scales", &controllers.ApiController{}, "GET:GetGlobalScales")
 	beego.Router("/api/get-scales", &controllers.ApiController{}, "GET:GetScales")

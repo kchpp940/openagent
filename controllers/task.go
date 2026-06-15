@@ -308,6 +308,37 @@ func (c *ApiController) AnalyzeTask() {
 		return
 	}
 
+	owner, name, errId := util.GetOwnerAndNameFromIdWithError(id)
+	if errId == nil {
+		logs.Info("[analyze-task] building anchor snapshot id=%s", id)
+		buildRes, errB := object.BuildTaskResultAnchorsV2(owner, name, result)
+		if errB != nil {
+			logs.Warn("[analyze-task] BuildTaskResultAnchorsV2 failed id=%s: %v", id, errB)
+		} else if buildRes != nil && buildRes.IsNewSnapshot && buildRes.OldSnapshotId != "" {
+			logs.Info("[analyze-task] new snapshot id=%s snap=%s version=%d old=%s", id, buildRes.SnapshotId, buildRes.ReportVersion, buildRes.OldSnapshotId)
+			fromRecs, errR1 := object.GetAnchorRecordsBySnapshot(buildRes.OldSnapshotId)
+			toRecs, errR2 := object.GetAnchorRecordsBySnapshot(buildRes.SnapshotId)
+			if errR1 == nil && errR2 == nil && len(fromRecs) > 0 {
+				migResult, errM := object.ComputeAnchorMigration(owner, name, buildRes.OldSnapshotId, buildRes.SnapshotId, fromRecs, toRecs)
+				if errM == nil && migResult != nil {
+					if errP := object.PersistAnchorMigration(migResult.Migration); errP != nil {
+						logs.Warn("[analyze-task] PersistAnchorMigration failed id=%s: %v", id, errP)
+					}
+					operator := c.GetSessionUsername()
+					applyRes, errA := object.ApplyCommentMigration(owner, name, buildRes.SnapshotId, migResult, false, operator)
+					if errA != nil {
+						logs.Warn("[analyze-task] ApplyCommentMigration failed id=%s: %v", id, errA)
+					} else if applyRes != nil {
+						logs.Info("[analyze-task] ApplyCommentMigration ok id=%s updated=%d orphan_skipped=%d ambiguous_skipped=%d",
+							id, applyRes.UpdatedCount, applyRes.SkippedOrphan, applyRes.SkippedAmbiguous)
+					}
+				} else if errM != nil {
+					logs.Warn("[analyze-task] ComputeAnchorMigration failed id=%s: %v", id, errM)
+				}
+			}
+		}
+	}
+
 	logs.Info("[analyze-task] HTTP OK id=%s", id)
 	c.ResponseOk(result)
 }
@@ -348,12 +379,57 @@ func (c *ApiController) checkTaskOwnership(taskOwner string, taskName string) (*
 	return task, nil
 }
 
+type reportSnapshotContext struct {
+	LatestSnapshot *object.TaskAnchorSnapshot
+	LatestRecords  []*object.TaskAnchorRecord
+	Anchors        []*object.TaskAnchor
+	PrevSnapshotId string
+	Migration      map[string]*object.TaskAnchorMigration
+}
+
+func (c *ApiController) loadLatestSnapshotContext(taskOwner string, taskName string) (*reportSnapshotContext, error) {
+	ctx := &reportSnapshotContext{}
+	snap, err := object.GetLatestAnchorSnapshot(taskOwner, taskName)
+	if err != nil {
+		return nil, err
+	}
+	if snap == nil {
+		return ctx, nil
+	}
+	ctx.LatestSnapshot = snap
+	recs, err := object.GetAnchorRecordsBySnapshot(snap.SnapshotId)
+	if err != nil {
+		return nil, err
+	}
+	ctx.LatestRecords = recs
+	ctx.Anchors = object.GetAnchorRecordsAsTaskAnchors(recs)
+	if snap.ReportVersion > 1 {
+		prevSnap, errP := object.GetPreviousSnapshot(taskOwner, taskName, snap.ReportVersion-1)
+		if errP == nil && prevSnap != nil {
+			ctx.PrevSnapshotId = prevSnap.SnapshotId
+			migs, errM := object.LoadPersistedMigration(prevSnap.SnapshotId, snap.SnapshotId)
+			if errM == nil {
+				ctx.Migration = migs
+			}
+		}
+	}
+	return ctx, nil
+}
+
 func (c *ApiController) loadTaskResultForAnchors(taskOwner string, taskName string) *object.TaskResult {
 	result, _, err := object.GetLatestTaskResult(taskOwner, taskName)
 	if err != nil || result == nil {
 		return nil
 	}
 	return result
+}
+
+type getTaskResultAnchorsResponse struct {
+	Anchors       []*object.TaskAnchor `json:"anchors"`
+	SnapshotId    string               `json:"snapshotId"`
+	ReportVersion int                  `json:"reportVersion"`
+	ResultHash    string               `json:"resultHash"`
+	OldSnapId     string               `json:"oldSnapId,omitempty"`
 }
 
 // GetTaskResultAnchors
@@ -377,9 +453,49 @@ func (c *ApiController) GetTaskResultAnchors() {
 		return
 	}
 
+	ctxSnap, errS := c.loadLatestSnapshotContext(owner, name)
+	if errS != nil {
+		c.ResponseError(errS.Error())
+		return
+	}
+	if ctxSnap != nil && ctxSnap.LatestSnapshot != nil && len(ctxSnap.Anchors) > 0 {
+		out := &getTaskResultAnchorsResponse{
+			Anchors:       ctxSnap.Anchors,
+			SnapshotId:    ctxSnap.LatestSnapshot.SnapshotId,
+			ReportVersion: ctxSnap.LatestSnapshot.ReportVersion,
+			ResultHash:    ctxSnap.LatestSnapshot.ResultHash,
+			OldSnapId:     ctxSnap.PrevSnapshotId,
+		}
+		c.ResponseOk(out)
+		return
+	}
+
 	result := c.loadTaskResultForAnchors(owner, name)
-	anchors := object.BuildTaskResultAnchors(result)
-	c.ResponseOk(anchors)
+	buildRes, errB := object.BuildTaskResultAnchorsV2(owner, name, result)
+	if errB != nil {
+		c.ResponseError(errB.Error())
+		return
+	}
+	if buildRes != nil && buildRes.IsNewSnapshot && buildRes.OldSnapshotId != "" {
+		fromRecs, errR1 := object.GetAnchorRecordsBySnapshot(buildRes.OldSnapshotId)
+		toRecs, errR2 := object.GetAnchorRecordsBySnapshot(buildRes.SnapshotId)
+		if errR1 == nil && errR2 == nil && len(fromRecs) > 0 {
+			migResult, errM := object.ComputeAnchorMigration(owner, name, buildRes.OldSnapshotId, buildRes.SnapshotId, fromRecs, toRecs)
+			if errM == nil && migResult != nil {
+				_ = object.PersistAnchorMigration(migResult.Migration)
+				operator := c.GetSessionUsername()
+				_, _ = object.ApplyCommentMigration(owner, name, buildRes.SnapshotId, migResult, false, operator)
+			}
+		}
+	}
+	out := &getTaskResultAnchorsResponse{
+		Anchors:       buildRes.Anchors,
+		SnapshotId:    buildRes.SnapshotId,
+		ReportVersion: buildRes.ReportVersion,
+		ResultHash:    buildRes.ResultHash,
+		OldSnapId:     buildRes.OldSnapshotId,
+	}
+	c.ResponseOk(out)
 }
 
 // AddReportComment
@@ -425,8 +541,52 @@ func (c *ApiController) AddReportComment() {
 		return
 	}
 
-	anchors := object.BuildTaskResultAnchors(result)
-	matched := object.FindAnchorById(anchors.Anchors, req.AnchorId)
+	ctxSnap, errS := c.loadLatestSnapshotContext(req.TaskOwner, req.TaskName)
+	if errS != nil {
+		c.ResponseError(errS.Error())
+		return
+	}
+	var anchors []*object.TaskAnchor
+	var latestSnap *object.TaskAnchorSnapshot
+	var latestRecords []*object.TaskAnchorRecord
+	if ctxSnap != nil && ctxSnap.LatestSnapshot != nil && len(ctxSnap.Anchors) > 0 {
+		anchors = ctxSnap.Anchors
+		latestSnap = ctxSnap.LatestSnapshot
+		latestRecords = ctxSnap.LatestRecords
+	} else {
+		buildRes, errB := object.BuildTaskResultAnchorsV2(req.TaskOwner, req.TaskName, result)
+		if errB != nil {
+			c.ResponseError(errB.Error())
+			return
+		}
+		if buildRes != nil {
+			anchors = buildRes.Anchors
+			latestRecords = buildRes.Records
+			if buildRes.IsNewSnapshot && buildRes.OldSnapshotId != "" {
+				fromRecs, errR1 := object.GetAnchorRecordsBySnapshot(buildRes.OldSnapshotId)
+				toRecs, errR2 := object.GetAnchorRecordsBySnapshot(buildRes.SnapshotId)
+				if errR1 == nil && errR2 == nil && len(fromRecs) > 0 {
+					migResult, errM := object.ComputeAnchorMigration(req.TaskOwner, req.TaskName, buildRes.OldSnapshotId, buildRes.SnapshotId, fromRecs, toRecs)
+					if errM == nil && migResult != nil {
+						_ = object.PersistAnchorMigration(migResult.Migration)
+						operator := c.GetSessionUsername()
+						_, _ = object.ApplyCommentMigration(req.TaskOwner, req.TaskName, buildRes.SnapshotId, migResult, false, operator)
+					}
+				}
+			}
+			_ = latestSnap
+			_ = latestRecords
+			if snapObj, errG := object.GetAnchorSnapshot(buildRes.SnapshotId); errG == nil {
+				latestSnap = snapObj
+			}
+		}
+	}
+	if len(anchors) == 0 {
+		c.ResponseError(c.T("task:No task analysis result available to bind comment"))
+		return
+	}
+
+	matched := object.FindAnchorById(anchors, req.AnchorId)
 	if matched == nil {
 		c.ResponseError(c.T("task:The specified anchor does not exist in the latest analysis"))
 		return
@@ -435,7 +595,7 @@ func (c *ApiController) AddReportComment() {
 	var itemAnchor *object.TaskAnchor
 	if matched.AnchorType == object.AnchorTypeField || matched.AnchorType == object.AnchorTypeItem {
 		if matched.ItemAnchorId != "" && matched.AnchorId != matched.ItemAnchorId {
-			itemAnchor = object.FindAnchorById(anchors.Anchors, matched.ItemAnchorId)
+			itemAnchor = object.FindAnchorById(anchors, matched.ItemAnchorId)
 		} else if matched.AnchorType == object.AnchorTypeItem {
 			itemAnchor = matched
 		} else {
@@ -490,12 +650,34 @@ func (c *ApiController) AddReportComment() {
 	c.ResponseOk(affected)
 }
 
+type ReportCommentsPayloadV2 struct {
+	Comments      []*object.ReportComment            `json:"comments"`
+	Grouped       map[string][]*object.ReportComment `json:"grouped"`
+	Anchors       []*object.TaskAnchor               `json:"anchors"`
+	Counts        map[string]int64                   `json:"counts"`
+	OrphanCount   int                                `json:"orphanCount"`
+	Orphans       []*object.ReportComment            `json:"orphans"`
+	AmbiguousInfo []*object.AmbiguousAnchorInfo      `json:"ambiguousInfo"`
+	SnapshotId    string                             `json:"snapshotId"`
+	ReportVersion int                                `json:"reportVersion"`
+	OldSnapId     string                             `json:"oldSnapId,omitempty"`
+	Migration     map[string]string                  `json:"migration,omitempty"`
+}
+
+type rebindReportCommentRequest struct {
+	CommentId  int64  `json:"commentId"`
+	AnchorId   string `json:"anchorId"`
+	TaskOwner  string `json:"taskOwner"`
+	TaskName   string `json:"taskName"`
+	ForceApply bool   `json:"forceApply"`
+}
+
 // GetReportComments
 // @Title GetReportComments
 // @Tag Task API
 // @Description get report comments grouped by stable item keys, together with anchors and counts
 // @Param id query string true "The task id (owner/name)"
-// @Success 200 {object} ReportCommentsPayload The Response object
+// @Success 200 {object} ReportCommentsPayloadV2 The Response object
 // @router /get-report-comments [get]
 func (c *ApiController) GetReportComments() {
 	id := c.Input().Get("id")
@@ -517,9 +699,62 @@ func (c *ApiController) GetReportComments() {
 		return
 	}
 
-	result := c.loadTaskResultForAnchors(owner, name)
-	anchors := object.BuildTaskResultAnchors(result)
-	grouped := object.GroupCommentsWithAnchors(comments, anchors.Anchors)
+	ctxSnap, errS := c.loadLatestSnapshotContext(owner, name)
+	if errS != nil {
+		c.ResponseError(errS.Error())
+		return
+	}
+	var anchors []*object.TaskAnchor
+	var snap *object.TaskAnchorSnapshot
+	var prevSnapId string
+	var mig map[string]*object.TaskAnchorMigration
+	var latestRecords []*object.TaskAnchorRecord
+	if ctxSnap != nil && ctxSnap.LatestSnapshot != nil && len(ctxSnap.Anchors) > 0 {
+		anchors = ctxSnap.Anchors
+		snap = ctxSnap.LatestSnapshot
+		prevSnapId = ctxSnap.PrevSnapshotId
+		mig = ctxSnap.Migration
+		latestRecords = ctxSnap.LatestRecords
+	} else {
+		result := c.loadTaskResultForAnchors(owner, name)
+		buildRes, errB := object.BuildTaskResultAnchorsV2(owner, name, result)
+		if errB == nil && buildRes != nil {
+			anchors = buildRes.Anchors
+			latestRecords = buildRes.Records
+			if snapObj, errG := object.GetAnchorSnapshot(buildRes.SnapshotId); errG == nil {
+				snap = snapObj
+			}
+			prevSnapId = buildRes.OldSnapshotId
+			if buildRes.IsNewSnapshot && buildRes.OldSnapshotId != "" {
+				fromRecs, errR1 := object.GetAnchorRecordsBySnapshot(buildRes.OldSnapshotId)
+				toRecs, errR2 := object.GetAnchorRecordsBySnapshot(buildRes.SnapshotId)
+				if errR1 == nil && errR2 == nil && len(fromRecs) > 0 {
+					migResult, errM := object.ComputeAnchorMigration(owner, name, buildRes.OldSnapshotId, buildRes.SnapshotId, fromRecs, toRecs)
+					if errM == nil && migResult != nil {
+						_ = object.PersistAnchorMigration(migResult.Migration)
+						operator := c.GetSessionUsername()
+						_, _ = object.ApplyCommentMigration(owner, name, buildRes.SnapshotId, migResult, false, operator)
+						mig = migResult.Migration
+						_ = latestRecords
+					}
+				}
+			} else if buildRes.OldSnapshotId != "" {
+				migs, errM := object.LoadPersistedMigration(buildRes.OldSnapshotId, buildRes.SnapshotId)
+				if errM == nil {
+					mig = migs
+				}
+			}
+		}
+	}
+
+	snapId := ""
+	repVer := 0
+	if snap != nil {
+		snapId = snap.SnapshotId
+		repVer = snap.ReportVersion
+	}
+
+	groupedResult := object.GroupCommentsWithAnchorsV2(comments, anchors, snapId, repVer, mig)
 	counts, err := object.GetReportCommentCountByTask(owner, name)
 	if err != nil {
 		counts = map[string]int64{"total": int64(len(comments)), "open": 0, "resolved": 0, "disputed": 0, "unresolved": 0}
@@ -537,13 +772,19 @@ func (c *ApiController) GetReportComments() {
 		}
 	}
 
-	payload := &ReportCommentsPayload{
-		Comments: comments,
-		Grouped:  grouped,
-		Anchors:  anchors,
-		Counts:   counts,
+	payload := &ReportCommentsPayloadV2{
+		Comments:      comments,
+		Grouped:       groupedResult.Grouped,
+		Anchors:       anchors,
+		Counts:        counts,
+		OrphanCount:   groupedResult.OrphanCount,
+		Orphans:       groupedResult.Orphans,
+		AmbiguousInfo: groupedResult.AmbiguousInfo,
+		SnapshotId:    snapId,
+		ReportVersion: repVer,
+		OldSnapId:     prevSnapId,
+		Migration:     groupedResult.Migration,
 	}
-
 	c.ResponseOk(payload)
 }
 
@@ -812,4 +1053,104 @@ func (c *ApiController) DeleteReportComment() {
 	}
 
 	c.ResponseOk(success)
+}
+
+// RebindReportComment
+// @Title RebindReportComment
+// @Tag Task API
+// @Description manually rebind an orphan or ambiguous comment to a new anchor from the latest snapshot
+// @Param body body rebindReportCommentRequest true "comment id + target anchorId from latest snapshot"
+// @Success 200 {object} controllers.Response The Response object
+// @router /rebind-report-comment [post]
+func (c *ApiController) RebindReportComment() {
+	var req rebindReportCommentRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if req.CommentId == 0 {
+		c.ResponseError(c.T("general:Invalid id"))
+		return
+	}
+	req.AnchorId = strings.TrimSpace(req.AnchorId)
+	if req.AnchorId == "" {
+		c.ResponseError(c.T("task:Anchor ID is required"))
+		return
+	}
+	if req.TaskOwner == "" || req.TaskName == "" {
+		c.ResponseError(c.T("general:Invalid id"))
+		return
+	}
+
+	existing, err := object.GetReportComment(req.CommentId)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(req.TaskOwner, req.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	ctxSnap, errS := c.loadLatestSnapshotContext(req.TaskOwner, req.TaskName)
+	if errS != nil {
+		c.ResponseError(errS.Error())
+		return
+	}
+	var latestSnapId string
+	var latestRecords []*object.TaskAnchorRecord
+	var latestAnchors []*object.TaskAnchor
+	if ctxSnap != nil && ctxSnap.LatestSnapshot != nil {
+		latestSnapId = ctxSnap.LatestSnapshot.SnapshotId
+		latestRecords = ctxSnap.LatestRecords
+		latestAnchors = ctxSnap.Anchors
+	} else {
+		result := c.loadTaskResultForAnchors(req.TaskOwner, req.TaskName)
+		buildRes, errB := object.BuildTaskResultAnchorsV2(req.TaskOwner, req.TaskName, result)
+		if errB != nil {
+			c.ResponseError(errB.Error())
+			return
+		}
+		if buildRes != nil {
+			latestSnapId = buildRes.SnapshotId
+			latestRecords = buildRes.Records
+			latestAnchors = buildRes.Anchors
+			if buildRes.IsNewSnapshot && buildRes.OldSnapshotId != "" {
+				fromRecs, errR1 := object.GetAnchorRecordsBySnapshot(buildRes.OldSnapshotId)
+				toRecs, errR2 := object.GetAnchorRecordsBySnapshot(buildRes.SnapshotId)
+				if errR1 == nil && errR2 == nil && len(fromRecs) > 0 {
+					migResult, errM := object.ComputeAnchorMigration(req.TaskOwner, req.TaskName, buildRes.OldSnapshotId, buildRes.SnapshotId, fromRecs, toRecs)
+					if errM == nil && migResult != nil {
+						_ = object.PersistAnchorMigration(migResult.Migration)
+						operator := c.GetSessionUsername()
+						_, _ = object.ApplyCommentMigration(req.TaskOwner, req.TaskName, buildRes.SnapshotId, migResult, false, operator)
+					}
+				}
+			}
+		}
+	}
+
+	if len(latestRecords) == 0 {
+		c.ResponseError(c.T("task:No task analysis result available to bind comment"))
+		return
+	}
+	matched := object.FindAnchorById(latestAnchors, req.AnchorId)
+	if matched == nil {
+		c.ResponseError(c.T("task:The specified anchor does not exist in the latest analysis"))
+		return
+	}
+
+	username := c.GetSessionUsername()
+	if errR := object.SetReportCommentAnchorManually(req.CommentId, req.AnchorId, req.TaskOwner, req.TaskName, latestSnapId, latestRecords, username); errR != nil {
+		c.ResponseError(errR.Error())
+		return
+	}
+	c.ResponseOk(true)
 }
