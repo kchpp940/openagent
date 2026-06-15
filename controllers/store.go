@@ -267,7 +267,10 @@ func (c *ApiController) UpdateStore() {
 		c.Data["json"] = Response{
 			Status: "ok",
 			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
-			Data:   success,
+			Data: map[string]interface{}{
+				"success":  success,
+				"warnings": warnings,
+			},
 		}
 		c.ServeJSON()
 		return
@@ -381,7 +384,10 @@ func (c *ApiController) AddStore() {
 		c.Data["json"] = Response{
 			Status: "ok",
 			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
-			Data:   success,
+			Data: map[string]interface{}{
+				"success":  success,
+				"warnings": warnings,
+			},
 		}
 		c.ServeJSON()
 		return

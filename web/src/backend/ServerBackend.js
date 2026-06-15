@@ -126,3 +126,23 @@ export function checkServerCapability(server) {
     body: JSON.stringify(newServer),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getServerCapabilityRecord(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/get-server-capability-record?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function runServerCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-server-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

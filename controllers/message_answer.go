@@ -331,10 +331,16 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		webSearchEnabled = questionMessage.WebSearchEnabled
 	}
 	origin := getOriginFromHost(host)
-	mcpToolSet, _, err = object.MergeMcpTools(mcpToolSet, store, webSearchEnabled, message.User, origin, lang)
+	mcpToolSet, capabilityWarnings, err := object.MergeMcpTools(mcpToolSet, store, webSearchEnabled, message.User, origin, lang)
 	if err != nil {
 		responseErrorStream(message, err.Error())
 		return
+	}
+	if len(capabilityWarnings) > 0 {
+		if err2 := writeCapabilityWarningStream(responseWriter, capabilityWarnings); err2 != nil {
+			responseErrorStream(message, err2.Error())
+			return
+		}
 	}
 
 	var knowledge []*model.RawMessage

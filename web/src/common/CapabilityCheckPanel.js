@@ -269,6 +269,39 @@ class CapabilityCheckPanel extends React.Component {
       });
   };
 
+  runCheckAndLoad = () => {
+    const {runCheckFn, runCheckParams, recordFn} = this.props;
+    if (!runCheckFn) {
+      this.loadRecord();
+      return;
+    }
+
+    this.setState({checking: true});
+
+    const args = runCheckParams || [];
+    runCheckFn(...args)
+      .then((res) => {
+        if (res.status === "ok") {
+          const avail = res.data;
+          this.setState({
+            availability: avail,
+            result: avail && avail.record ? avail.record.result : null,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to run")}: ${res.msg}`);
+          if (recordFn) {
+            this.loadRecord();
+          }
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState({checking: false});
+      });
+  };
+
   runChecks = () => {
     const {config, checkFn} = this.props;
     if (!config || !checkFn) return;
@@ -335,9 +368,9 @@ class CapabilityCheckPanel extends React.Component {
               type="primary"
               icon={checking ? null : <ReloadOutlined />}
               loading={checking}
-              onClick={this.loadRecord}
+              onClick={this.props.runCheckFn ? this.runCheckAndLoad : this.loadRecord}
             >
-              {hasRecord ? i18next.t("capability:Refresh") : i18next.t("capability:Run checks")}
+              {hasRecord ? i18next.t("capability:Re-check") : i18next.t("capability:Run checks")}
             </Button>
           ) : (
             <Button

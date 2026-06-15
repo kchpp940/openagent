@@ -320,8 +320,10 @@ class ToolEditPage extends React.Component {
         </Card>
 
         <CapabilityCheckPanel
-          config={tool}
-          checkFn={ToolBackend.checkToolCapability}
+          recordFn={ToolBackend.getToolCapabilityRecord}
+          recordParams={[tool.owner || "admin", tool.name]}
+          runCheckFn={ToolBackend.runToolCapabilityCheck}
+          runCheckParams={[tool.owner || "admin", tool.name]}
           title={i18next.t("capability:Check availability")}
           description={i18next.t("capability:Check availability desc")}
           triggerKey={this.state.capabilityCheckKey}
@@ -343,6 +345,22 @@ class ToolEditPage extends React.Component {
             isNewTool: false,
             capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
+
+          const owner = this.state.tool.owner || "admin";
+          const name = this.state.tool.name;
+          ToolBackend.runToolCapabilityCheck(owner, name)
+            .then((checkRes) => {
+              if (checkRes.status === "ok") {
+                this.setState((prevState) => ({
+                  tool: {
+                    ...prevState.tool,
+                    latestCapabilityStatus: checkRes.data?.status,
+                    latestCheckedAt: checkRes.data?.checkedAt,
+                  },
+                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
+                }));
+              }
+            });
 
           if (exitAfterSave) {
             this.props.history.push("/tools");

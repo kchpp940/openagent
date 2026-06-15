@@ -71,6 +71,23 @@ class ServerEditPage extends React.Component {
             originalServer: Setting.deepCopy(this.state.server),
             capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
+
+          const owner = this.state.server.owner || "admin";
+          const name = this.state.server.name;
+          ServerBackend.runServerCapabilityCheck(owner, name)
+            .then((checkRes) => {
+              if (checkRes.status === "ok") {
+                this.setState((prevState) => ({
+                  server: {
+                    ...prevState.server,
+                    latestCapabilityStatus: checkRes.data?.status,
+                    latestCheckedAt: checkRes.data?.checkedAt,
+                  },
+                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
+                }));
+              }
+            });
+
           if (willExist) {
             this.props.history.push("/servers");
           }
@@ -202,8 +219,10 @@ class ServerEditPage extends React.Component {
         </Card>
 
         <CapabilityCheckPanel
-          config={server}
-          checkFn={ServerBackend.checkServerCapability}
+          recordFn={ServerBackend.getServerCapabilityRecord}
+          recordParams={[server.owner || "admin", server.name]}
+          runCheckFn={ServerBackend.runServerCapabilityCheck}
+          runCheckParams={[server.owner || "admin", server.name]}
           title={i18next.t("capability:Check availability")}
           description={i18next.t("capability:Check availability desc")}
           triggerKey={this.state.capabilityCheckKey}

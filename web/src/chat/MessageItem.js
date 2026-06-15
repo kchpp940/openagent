@@ -342,6 +342,21 @@ const MessageItem = ({
                   <span>{message.hintText}</span>
                 </div>
               )}
+              {message.capabilityWarnings && message.capabilityWarnings.length > 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{marginBottom: 8, fontSize: 12}}
+                  message={i18next.t("capability:Some tools skipped due to availability issues")}
+                  description={
+                    <ul style={{margin: 0, paddingLeft: 16}}>
+                      {message.capabilityWarnings.map((w, i) => (
+                        <li key={i}>{w.kind}: {w.name} — {w.reason}</li>
+                      ))}
+                    </ul>
+                  }
+                />
+              )}
               {renderMessageContent()}
             </div>
           }

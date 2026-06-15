@@ -249,8 +249,10 @@ class SkillEditPage extends React.Component {
         </Card>
 
         <CapabilityCheckPanel
-          config={skill}
-          checkFn={SkillBackend.checkSkillCapability}
+          recordFn={SkillBackend.getSkillCapabilityRecord}
+          recordParams={[skill.owner || "admin", skill.name]}
+          runCheckFn={SkillBackend.runSkillCapabilityCheck}
+          runCheckParams={[skill.owner || "admin", skill.name]}
           title={i18next.t("capability:Check availability")}
           description={i18next.t("capability:Check availability desc")}
           triggerKey={this.state.capabilityCheckKey}
@@ -272,6 +274,22 @@ class SkillEditPage extends React.Component {
             isNewSkill: false,
             capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
+
+          const owner = this.state.skill.owner || "admin";
+          const name = this.state.skill.name;
+          SkillBackend.runSkillCapabilityCheck(owner, name)
+            .then((checkRes) => {
+              if (checkRes.status === "ok") {
+                this.setState((prevState) => ({
+                  skill: {
+                    ...prevState.skill,
+                    latestCapabilityStatus: checkRes.data?.status,
+                    latestCheckedAt: checkRes.data?.checkedAt,
+                  },
+                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
+                }));
+              }
+            });
 
           if (exitAfterSave) {
             this.props.history.push("/skills");

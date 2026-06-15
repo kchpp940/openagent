@@ -1005,6 +1005,11 @@
     "Not checked yet": "Never checked",
     "Not checked yet desc": "No availability check has been run yet. Run a check to verify configuration.",
     "Store blocked by failed capabilities": "Store cannot be saved: the following tools have failed availability checks and must be fixed first: %s",
-    "Store capability warnings": "Store saved, but the following tools have warnings: %s"
+    "Store capability warnings": "Store saved, but the following tools have warnings: %s",
+    "Some tools skipped due to availability issues": "Some tools were skipped due to availability issues",
+    "Pass": "Pass",
+    "Warning": "Warning",
+    "Failed": "Failed",
+    "Pending": "Pending"
   }
 }

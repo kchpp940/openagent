@@ -1005,6 +1005,11 @@
     "Not checked yet": "尚未检查",
     "Not checked yet desc": "尚未运行可用性检查，请运行检查以验证配置",
     "Store blocked by failed capabilities": "无法保存 Store：以下工具可用性检查失败，必须先修复：%s",
-    "Store capability warnings": "Store 已保存，但以下工具存在警告：%s"
+    "Store capability warnings": "Store 已保存，但以下工具存在警告：%s",
+    "Some tools skipped due to availability issues": "部分工具因可用性问题被跳过",
+    "Pass": "通过",
+    "Warning": "需关注",
+    "Failed": "不可用",
+    "Pending": "检查中"
   }
 }
