@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/conf"
@@ -531,4 +532,45 @@ func (c *ApiController) ValidateStoreTools() {
 	}
 
 	c.ResponseOk(warnings)
+}
+
+// GetCapabilityCheckRecords
+// @Title GetCapabilityCheckRecords
+// @Tag Capability API
+// @Description get capability check records for an entity
+// @Param   entityType      query    string  true  "entity type: server/skill/tool"
+// @Param   entityId        query    string  true  "entity id"
+// @Param   limit           query    int     false "max records to return, default 20"
+// @Success 200 {object} []object.CapabilityCheckRecord
+// @router /get-capability-check-records [get]
+func (c *ApiController) GetCapabilityCheckRecords() {
+	owner := c.GetSessionUsername()
+	if owner == "" {
+		c.ResponseError("unauthorized")
+		return
+	}
+
+	entityType := c.Input().Get("entityType")
+	entityId := c.Input().Get("entityId")
+	limitStr := c.Input().Get("limit")
+
+	if entityType == "" || entityId == "" {
+		c.ResponseError("entityType and entityId are required")
+		return
+	}
+
+	limit := 20
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	records, err := object.GetCapabilityCheckRecords(owner, entityType, entityId, limit)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(records)
 }

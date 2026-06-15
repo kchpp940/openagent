@@ -318,6 +318,7 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 		return false, nil
 	}
 
+	configHash := CalculateConfigHash(s)
 	s.LatestCapabilityStatus = string(CapabilityStatusPending)
 	s.LatestCheckedAt = time.Now().Format(time.RFC3339)
 
@@ -326,14 +327,15 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 		return false, err
 	}
 
-	go func(skill *Skill) {
-		CheckSkillCapability(skill, "en")
-	}(s)
+	go func(skill *Skill, hash string) {
+		CheckSkillCapability(skill, "en", hash)
+	}(s, configHash)
 
 	return true, nil
 }
 
 func AddSkill(s *Skill) (bool, error) {
+	configHash := CalculateConfigHash(s)
 	s.LatestCapabilityStatus = string(CapabilityStatusPending)
 	s.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(s)
@@ -341,9 +343,9 @@ func AddSkill(s *Skill) (bool, error) {
 		return false, err
 	}
 	if affected > 0 {
-		go func(skill *Skill) {
-			CheckSkillCapability(skill, "en")
-		}(s)
+		go func(skill *Skill, hash string) {
+			CheckSkillCapability(skill, "en", hash)
+		}(s, configHash)
 	}
 	return affected != 0, nil
 }
@@ -553,7 +555,22 @@ func (skillLoader) Load(owner string, allowedSkillNames []string, skillName stri
 	return LoadSkillPromptContent(owner, skillName, referenceName)
 }
 
-func CheckSkillCapability(s *Skill, lang string) *CapabilityCheckResult {
+func CheckSkillCapability(s *Skill, lang string, configHash ...string) *CapabilityCheckResult {
+	hash := ""
+	if len(configHash) > 0 {
+		hash = configHash[0]
+	}
+	if hash == "" {
+		hash = CalculateConfigHash(s)
+	}
+
+	if hash != "" {
+		existing, err := GetLatestCapabilityCheckRecordByHash(s.Owner, "skill", s.Name, hash)
+		if err == nil && existing != nil && existing.Status != string(CapabilityStatusPending) {
+			return existing.CheckResult
+		}
+	}
+
 	result := NewCapabilityCheckResult()
 
 	result.AddCheck(checkSkillBasicConfig(s))
@@ -567,6 +584,7 @@ func CheckSkillCapability(s *Skill, lang string) *CapabilityCheckResult {
 	result.AddCheck(checkSkillState(s))
 
 	if s.Owner != "" && s.Name != "" {
+		_, _ = SaveCapabilityCheckRecord(s.Owner, "skill", s.Name, result, hash)
 		_ = UpdateSkillCapabilityStatus(s, result)
 	}
 
@@ -733,10 +751,10 @@ func checkSkillAgentSchemaIntegration(s *Skill) *CapabilityCheckItem {
 		Skills: []string{s.Name},
 	}
 
-	reg := buildMergedBuiltinRegistry(mockStore, s.Owner, "capability_check", "en")
-	if reg == nil {
+	reg, err := buildMergedBuiltinRegistry(mockStore, s.Owner, "capability_check", "en")
+	if err != nil || reg == nil {
 		return FailedCheck(name, desc,
-			"Failed to build merged builtin registry for agent",
+			fmt.Sprintf("Failed to build merged builtin registry for agent: %v", err),
 			"Check skill configuration and agent integration code",
 		)
 	}

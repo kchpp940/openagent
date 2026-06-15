@@ -241,7 +241,7 @@ class CapabilityCheckPanel extends React.Component {
   }
 
   render() {
-    const {title, description} = this.props;
+    const {title, description, showRefresh = true} = this.props;
     const {expandedKeys} = this.state;
 
     const loading = this.props.loading !== undefined ? this.props.loading : this.state.loading;
@@ -267,14 +267,16 @@ class CapabilityCheckPanel extends React.Component {
               </div>
             )}
           </div>
-          <Button
-            type="primary"
-            icon={<ReloadOutlined />}
-            loading={loading}
-            onClick={() => this.runCheck()}
-          >
-            {i18next.t("capability:Check Availability")}
-          </Button>
+          {showRefresh && (
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => this.runCheck()}
+            >
+              {i18next.t("capability:Check Availability")}
+            </Button>
+          )}
         </div>
 
         {this.renderSummary(result)}

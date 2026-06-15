@@ -15,7 +15,12 @@
 package object
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -169,4 +174,141 @@ func UpdateToolCapabilityStatus(tool *Tool, result *CapabilityCheckResult) error
 	tool.LatestCheckedAt = now
 	_, err := adapter.engine.ID(tool.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(tool)
 	return err
+}
+
+type CapabilityCheckRecord struct {
+	Id           string                   `xorm:"varchar(100) notnull pk" json:"id"`
+	Owner        string                   `xorm:"varchar(100) notnull index" json:"owner"`
+	EntityType   string                   `xorm:"varchar(50) notnull index" json:"entityType"`
+	EntityId     string                   `xorm:"varchar(200) notnull index" json:"entityId"`
+	ConfigHash   string                   `xorm:"varchar(100) notnull index" json:"configHash"`
+	Status       string                   `xorm:"varchar(50) notnull" json:"status"`
+	CheckResult  *CapabilityCheckResult   `xorm:"mediumtext" json:"checkResult"`
+	CheckedAt    string                   `xorm:"varchar(100) notnull" json:"checkedAt"`
+	Error        string                   `xorm:"text" json:"error,omitempty"`
+}
+
+func (r *CapabilityCheckRecord) GetId() string {
+	return r.Id
+}
+
+func CalculateConfigHash(entity interface{}) string {
+	data, err := json.Marshal(entity)
+	if err != nil {
+		return ""
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+
+	delete(raw, "latestCapabilityStatus")
+	delete(raw, "latestCheckedAt")
+	delete(raw, "createdTime")
+	delete(raw, "updatedTime")
+
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var buf strings.Builder
+	for _, k := range keys {
+		buf.WriteString(k)
+		buf.WriteString(":")
+		v, _ := json.Marshal(raw[k])
+		buf.Write(v)
+		buf.WriteString(";")
+	}
+
+	hash := sha256.Sum256([]byte(buf.String()))
+	return hex.EncodeToString(hash[:])
+}
+
+func SaveCapabilityCheckRecord(owner, entityType, entityId string, result *CapabilityCheckResult, configHash string, checkErr ...error) (*CapabilityCheckRecord, error) {
+	now := time.Now().Format(time.RFC3339)
+	id := fmt.Sprintf("%s/%s/%s/%d", owner, entityType, entityId, time.Now().UnixNano())
+
+	record := &CapabilityCheckRecord{
+		Id:          id,
+		Owner:       owner,
+		EntityType:  entityType,
+		EntityId:    entityId,
+		ConfigHash:  configHash,
+		Status:      string(result.OverallStatus),
+		CheckResult: result,
+		CheckedAt:   now,
+	}
+
+	if len(checkErr) > 0 && checkErr[0] != nil {
+		record.Error = checkErr[0].Error()
+	}
+
+	_, err := adapter.engine.Insert(record)
+	if err != nil {
+		return nil, err
+	}
+
+	return record, nil
+}
+
+func GetLatestCapabilityCheckRecord(owner, entityType, entityId string) (*CapabilityCheckRecord, error) {
+	var records []*CapabilityCheckRecord
+	err := adapter.engine.Where("owner = ? AND entity_type = ? AND entity_id = ?", owner, entityType, entityId).
+		Desc("checked_at").
+		Limit(1).
+		Find(&records)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, nil
+	}
+	return records[0], nil
+}
+
+func GetLatestCapabilityCheckRecordByHash(owner, entityType, entityId, configHash string) (*CapabilityCheckRecord, error) {
+	var records []*CapabilityCheckRecord
+	err := adapter.engine.Where("owner = ? AND entity_type = ? AND entity_id = ? AND config_hash = ?", owner, entityType, entityId, configHash).
+		Desc("checked_at").
+		Limit(1).
+		Find(&records)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, nil
+	}
+	return records[0], nil
+}
+
+func GetCapabilityCheckRecords(owner, entityType, entityId string, limit int) ([]*CapabilityCheckRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var records []*CapabilityCheckRecord
+	err := adapter.engine.Where("owner = ? AND entity_type = ? AND entity_id = ?", owner, entityType, entityId).
+		Desc("checked_at").
+		Limit(limit).
+		Find(&records)
+	return records, err
+}
+
+func UpdateEntityStatusFromRecord(entity interface{}, record *CapabilityCheckRecord) {
+	if record == nil {
+		return
+	}
+	switch e := entity.(type) {
+	case *Server:
+		e.LatestCapabilityStatus = record.Status
+		e.LatestCheckedAt = record.CheckedAt
+	case *Skill:
+		e.LatestCapabilityStatus = record.Status
+		e.LatestCheckedAt = record.CheckedAt
+	case *Tool:
+		e.LatestCapabilityStatus = record.Status
+		e.LatestCheckedAt = record.CheckedAt
+	}
 }

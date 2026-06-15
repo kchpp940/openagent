@@ -166,6 +166,7 @@ func UpdateTool(id string, t *Tool) (bool, error) {
 		t.ClientSecret = toolDb.ClientSecret
 	}
 
+	configHash := CalculateConfigHash(t)
 	t.LatestCapabilityStatus = string(CapabilityStatusPending)
 	t.LatestCheckedAt = time.Now().Format(time.RFC3339)
 
@@ -174,14 +175,15 @@ func UpdateTool(id string, t *Tool) (bool, error) {
 		return false, err
 	}
 
-	go func(tool *Tool) {
-		CheckToolCapability(tool, "en")
-	}(t)
+	go func(tool *Tool, hash string) {
+		CheckToolCapability(tool, "en", hash)
+	}(t, configHash)
 
 	return true, nil
 }
 
 func AddTool(t *Tool) (bool, error) {
+	configHash := CalculateConfigHash(t)
 	t.LatestCapabilityStatus = string(CapabilityStatusPending)
 	t.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(t)
@@ -189,9 +191,9 @@ func AddTool(t *Tool) (bool, error) {
 		return false, err
 	}
 	if affected > 0 {
-		go func(tool *Tool) {
-			CheckToolCapability(tool, "en")
-		}(t)
+		go func(tool *Tool, hash string) {
+			CheckToolCapability(tool, "en", hash)
+		}(t, configHash)
 	}
 	return affected != 0, nil
 }
@@ -293,7 +295,22 @@ func testToolWithLoader(t *Tool, lang string, loadTool func(owner string, name s
 	return output, nil
 }
 
-func CheckToolCapability(t *Tool, lang string) *CapabilityCheckResult {
+func CheckToolCapability(t *Tool, lang string, configHash ...string) *CapabilityCheckResult {
+	hash := ""
+	if len(configHash) > 0 {
+		hash = configHash[0]
+	}
+	if hash == "" {
+		hash = CalculateConfigHash(t)
+	}
+
+	if hash != "" {
+		existing, err := GetLatestCapabilityCheckRecordByHash(t.Owner, "tool", t.Name, hash)
+		if err == nil && existing != nil && existing.Status != string(CapabilityStatusPending) {
+			return existing.CheckResult
+		}
+	}
+
 	result := NewCapabilityCheckResult()
 
 	result.AddCheck(checkToolBasicConfig(t))
@@ -309,6 +326,7 @@ func CheckToolCapability(t *Tool, lang string) *CapabilityCheckResult {
 	result.AddCheck(checkToolState(t))
 
 	if t.Owner != "" && t.Name != "" {
+		_, _ = SaveCapabilityCheckRecord(t.Owner, "tool", t.Name, result, hash)
 		_ = UpdateToolCapabilityStatus(t, result)
 	}
 

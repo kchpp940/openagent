@@ -15,16 +15,19 @@
 package object
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/util"
 )
 
-func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.ToolRegistry {
+func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) (*tool.ToolRegistry, error) {
 	reg := tool.NewToolRegistry()
 
 	if store == nil {
-		return reg
+		return reg, nil
 	}
 
 	if len(store.Skills) > 0 {
@@ -50,6 +53,9 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err != nil || t == nil {
 			continue
 		}
+		if t.LatestCapabilityStatus == string(CapabilityStatusFailed) {
+			return nil, fmt.Errorf("tool '%s' failed capability check, cannot be used in agent. Please fix its configuration first", t.Name)
+		}
 		tp, err := tool.New(getToolConfig(t), lang)
 		if err != nil {
 			continue
@@ -61,12 +67,26 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		}
 	}
 
-	return reg
+	return reg, nil
 }
 
 // MergeMcpTools merges builtin tools (from the store's tool list) and the
 // web-search flag into an existing McpToolSet, creating one if needed.
-func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool, user, origin, lang string) *mcp.ToolSet {
+func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool, user, origin, lang string) (*mcp.ToolSet, error) {
+	if store != nil {
+		validation, err := ValidateStoreTools(store)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate store tools: %v", err)
+		}
+		if validation != nil && !validation.Ok {
+			var failedNames []string
+			for _, f := range validation.Failed {
+				failedNames = append(failedNames, fmt.Sprintf("%s (%s)", f.Name, f.Type))
+			}
+			return nil, fmt.Errorf("cannot build agent toolset: some tools failed capability check: %s", strings.Join(failedNames, ", "))
+		}
+	}
+
 	if webSearchEnabled {
 		if mcpToolSet == nil {
 			mcpToolSet = &mcp.ToolSet{}
@@ -74,20 +94,23 @@ func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool,
 		mcpToolSet.WebSearchEnabled = true
 	}
 
-	reg := buildMergedBuiltinRegistry(store, user, origin, lang)
+	reg, err := buildMergedBuiltinRegistry(store, user, origin, lang)
+	if err != nil {
+		return nil, err
+	}
 	allTools := reg.GetToolsAsProtocolTools()
 	if len(allTools) == 0 {
-		return mcpToolSet
+		return mcpToolSet, nil
 	}
 
 	if mcpToolSet == nil {
 		return &mcp.ToolSet{
 			Tools:        allTools,
 			BuiltinTools: reg,
-		}
+		}, nil
 	}
 
 	mcpToolSet.Tools = append(mcpToolSet.Tools, allTools...)
 	mcpToolSet.BuiltinTools = reg
-	return mcpToolSet
+	return mcpToolSet, nil
 }

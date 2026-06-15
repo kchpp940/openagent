@@ -113,6 +113,7 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 }
 
 func AddServer(server *Server) (bool, error) {
+	configHash := CalculateConfigHash(server)
 	server.LatestCapabilityStatus = string(CapabilityStatusPending)
 	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(server)
@@ -120,9 +121,9 @@ func AddServer(server *Server) (bool, error) {
 		return false, err
 	}
 	if affected > 0 {
-		go func(s *Server) {
-			CheckServerCapability(s)
-		}(server)
+		go func(s *Server, hash string) {
+			CheckServerCapability(s, hash)
+		}(server, configHash)
 	}
 	return affected != 0, nil
 }
@@ -141,6 +142,7 @@ func UpdateServer(id string, server *Server) (bool, error) {
 		server.Token = oldServer.Token
 	}
 
+	configHash := CalculateConfigHash(server)
 	server.LatestCapabilityStatus = string(CapabilityStatusPending)
 	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
 
@@ -149,9 +151,9 @@ func UpdateServer(id string, server *Server) (bool, error) {
 		return false, err
 	}
 
-	go func(s *Server) {
-		CheckServerCapability(s)
-	}(server)
+	go func(s *Server, hash string) {
+		CheckServerCapability(s, hash)
+	}(server, configHash)
 
 	return true, nil
 }
@@ -346,7 +348,22 @@ func GetPaginationServers(owner string, offset, limit int, field, value, sortFie
 	return servers, nil
 }
 
-func CheckServerCapability(s *Server) *CapabilityCheckResult {
+func CheckServerCapability(s *Server, configHash ...string) *CapabilityCheckResult {
+	hash := ""
+	if len(configHash) > 0 {
+		hash = configHash[0]
+	}
+	if hash == "" {
+		hash = CalculateConfigHash(s)
+	}
+
+	if hash != "" {
+		existing, err := GetLatestCapabilityCheckRecordByHash(s.Owner, "server", s.Name, hash)
+		if err == nil && existing != nil && existing.Status != string(CapabilityStatusPending) {
+			return existing.CheckResult
+		}
+	}
+
 	result := NewCapabilityCheckResult()
 
 	result.AddCheck(checkServerBasicConfig(s))
@@ -357,6 +374,7 @@ func CheckServerCapability(s *Server) *CapabilityCheckResult {
 	result.AddCheck(checkMcpDryRun(s))
 
 	if s.Owner != "" && s.Name != "" {
+		_, _ = SaveCapabilityCheckRecord(s.Owner, "server", s.Name, result, hash)
 		_ = UpdateServerCapabilityStatus(s, result)
 	}
 
