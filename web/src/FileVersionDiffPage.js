@@ -158,6 +158,27 @@ class FileVersionDiffPage extends BaseListPage {
           <Text type="secondary">{diff.obsoleteReason}</Text>
         </Descriptions.Item>
       );
+
+      if (diff.vectorsWritten) {
+        errorItems.push(
+          <Descriptions.Item label={i18next.t("file:Vectors Written")} span={2} key="vectors-written">
+            {diff.orphanVectorsCleaned ? (
+              <Tag color="success">{i18next.t("file:Cleaned")}</Tag>
+            ) : (
+              <Tag color="error">{i18next.t("file:Not Cleaned - Risk")}</Tag>
+            )}
+            <Text type="secondary" style={{marginLeft: 8}}>
+              {i18next.t("file:Orphan vectors from this obsolete job")}
+            </Text>
+          </Descriptions.Item>
+        );
+      } else {
+        errorItems.push(
+          <Descriptions.Item label={i18next.t("file:Vectors Written")} span={2} key="vectors-written">
+            <Tag color="default">{i18next.t("file:No vectors written")}</Tag>
+          </Descriptions.Item>
+        );
+      }
     }
 
     if (diff.parseError) {

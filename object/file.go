@@ -92,6 +92,8 @@ type FileVersionDiff struct {
 	FailedChunkIndices     []int      `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
 	ErrorText              string     `xorm:"mediumtext" json:"errorText"`
 	ObsoleteReason         string     `xorm:"mediumtext" json:"obsoleteReason,omitempty"`
+	VectorsWritten         bool       `json:"vectorsWritten"`
+	OrphanVectorsCleaned   bool       `json:"orphanVectorsCleaned"`
 }
 
 type FileParseVersion struct {
@@ -114,6 +116,8 @@ type FileParseVersion struct {
 	FailedChunkIndices     []int    `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
 	ErrorText              string   `xorm:"mediumtext" json:"errorText"`
 	ObsoleteReason         string   `xorm:"mediumtext" json:"obsoleteReason,omitempty"`
+	VectorsWritten         bool     `json:"vectorsWritten"`
+	OrphanVectorsCleaned   bool     `json:"orphanVectorsCleaned"`
 }
 
 type File struct {
@@ -774,7 +778,7 @@ func IsFileJobCurrent(owner, fileName, jobId string) (bool, *File, error) {
 	return file.CurrentJobId == jobId, file, nil
 }
 
-func MarkJobObsolete(owner, fileName string, version int, jobId, reason string) error {
+func MarkJobObsolete(owner, fileName string, version int, jobId, reason string, vectorsWritten bool) error {
 	diff, err := getFileVersionDiff(owner, fileName, version)
 	if err != nil {
 		return err
@@ -785,8 +789,35 @@ func MarkJobObsolete(owner, fileName string, version int, jobId, reason string) 
 	diff.Status = FileStatusObsolete
 	diff.ObsoleteReason = reason
 	diff.JobId = jobId
+	diff.VectorsWritten = vectorsWritten || diff.VectorsWritten
+
+	if diff.VectorsWritten {
+		file, fileErr := getFile(owner, fileName)
+		if fileErr == nil && file != nil {
+			objectKey := getObjectKeyFromFile(file)
+			deleted, delErr := DeleteVectorsByFileAndParseVersion(owner, file.Store, objectKey, version)
+			if delErr != nil {
+				logs.Error("Failed to clean orphan vectors for obsolete job [%s], file [%s], version %d: %v", jobId, fileName, version, delErr)
+				diff.OrphanVectorsCleaned = false
+			} else {
+				if deleted > 0 {
+					logs.Info("Cleaned %d orphan vectors for obsolete job [%s], file [%s], version %d", deleted, jobId, fileName, version)
+				}
+				diff.OrphanVectorsCleaned = true
+			}
+		}
+	}
+
 	_, err = UpdateFileVersionDiff(diff)
 	return err
+}
+
+func getObjectKeyFromFile(file *File) string {
+	prefix := fmt.Sprintf("%s_", file.Store)
+	if strings.HasPrefix(file.Name, prefix) {
+		return strings.TrimPrefix(file.Name, prefix)
+	}
+	return file.Name
 }
 
 func CompareAndSwapFileVersion(owner, fileName, jobId string, expectedParseVersion int, updateFunc func(*File) error) (bool, error) {

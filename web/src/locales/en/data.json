@@ -134,6 +134,11 @@
     "Active": "Active",
     "Running": "Running",
     "Old": "Old",
+    "Vectors Written": "Vectors Written",
+    "Cleaned": "Cleaned",
+    "Not Cleaned - Risk": "Not Cleaned - Risk",
+    "Orphan vectors from this obsolete job": "Orphan vectors from this obsolete job",
+    "No vectors written": "No vectors written",
     "{count} more errors": "{count} more errors"
   },
   "form": {

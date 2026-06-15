@@ -134,6 +134,11 @@
     "Active": "当前生效",
     "Running": "执行中",
     "Old": "历史版本",
+    "Vectors Written": "向量写入状态",
+    "Cleaned": "已清理",
+    "Not Cleaned - Risk": "未清理 - 有风险",
+    "Orphan vectors from this obsolete job": "此过期任务产生的孤儿向量",
+    "No vectors written": "未写入向量",
     "{count} more errors": "还有 {count} 个错误"
   },
   "form": {

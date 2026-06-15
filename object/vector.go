@@ -70,7 +70,38 @@ func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, e
 		return vectors, err
 	}
 
+	fileVersions := getFileCurrentVectorVersions(relatedStores)
+	if len(fileVersions) > 0 {
+		filtered := make([]*Vector, 0, len(vectors))
+		for _, v := range vectors {
+			key := v.Store + "/" + v.File
+			if currentVV, ok := fileVersions[key]; ok {
+				if v.VectorVersion == 0 || v.VectorVersion == currentVV {
+					filtered = append(filtered, v)
+				}
+			} else {
+				filtered = append(filtered, v)
+			}
+		}
+		vectors = filtered
+	}
+
 	return vectors, nil
+}
+
+func getFileCurrentVectorVersions(storeNames []string) map[string]int {
+	files := []*File{}
+	err := adapter.engine.In("store", storeNames).Find(&files)
+	if err != nil || len(files) == 0 {
+		return nil
+	}
+
+	result := make(map[string]int, len(files))
+	for _, f := range files {
+		key := f.Store + "/" + f.Name
+		result[key] = f.VectorVersion
+	}
+	return result
 }
 
 func getVector(owner string, name string) (*Vector, error) {
@@ -181,6 +212,15 @@ func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, 
 	}
 
 	return affected != 0, nil
+}
+
+func DeleteVectorsByFileAndParseVersion(owner string, storeName string, fileKey string, parseVersion int) (int64, error) {
+	affected, err := adapter.engine.Where("owner = ? AND store = ? AND file = ? AND parse_version = ?", owner, storeName, fileKey, parseVersion).Delete(&Vector{})
+	if err != nil {
+		return 0, err
+	}
+
+	return affected, nil
 }
 
 func GetVectorsByFile(owner string, storeName string, fileKey string) ([]*Vector, error) {
