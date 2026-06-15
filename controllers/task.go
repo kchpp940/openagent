@@ -283,24 +283,20 @@ func (c *ApiController) AnalyzeTask() {
 	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
 	if err != nil {
 		logs.Error("[analyze-task] AnalyzeTask failed id=%s: %v", id, err)
-		task.Result = ""
-		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
-			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
+		if saveErr := object.SaveTaskAnalysisResult(id, nil); saveErr != nil {
+			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, saveErr)
 		}
 		c.ResponseError(err.Error())
 		return
 	}
 
-	task.Result = object.SerializeTaskAnalysisReport(result)
-	task.Score = result.Score
 	logs.Info("[analyze-task] saving task id=%s", id)
-	_, err = object.UpdateTask(id, task)
-	if err != nil {
-		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)
+	if err = object.SaveTaskAnalysisResult(id, result); err != nil {
+		logs.Error("[analyze-task] SaveTaskAnalysisResult failed id=%s: %v", id, err)
 		c.ResponseError(err.Error())
 		return
 	}
 
 	logs.Info("[analyze-task] HTTP OK id=%s", id)
-	c.ResponseOk(result)
+	c.ResponseOk(object.BuildTaskAnalysisReportResponse(result))
 }

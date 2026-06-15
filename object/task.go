@@ -17,6 +17,8 @@ package object
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
@@ -145,7 +147,7 @@ func ParseTaskAnalysisReport(raw string) *TaskAnalysisReport {
 	if err := json.Unmarshal([]byte(raw), &rawData); err != nil {
 		return nil
 	}
-	return normalizeTaskResultFromMap(rawData)
+	return BuildTaskAnalysisReportResponse(rawData)
 }
 
 func SerializeTaskAnalysisReport(report *TaskAnalysisReport) string {
@@ -157,6 +159,124 @@ func SerializeTaskAnalysisReport(report *TaskAnalysisReport) string {
 		return ""
 	}
 	return string(b)
+}
+
+func BuildTaskAnalysisReportResponse(src interface{}) *TaskAnalysisReport {
+	if src == nil {
+		return nil
+	}
+
+	var data map[string]interface{}
+	switch s := src.(type) {
+	case map[string]interface{}:
+		data = s
+	case *TaskAnalysisReport:
+		if s == nil {
+			return nil
+		}
+		b, err := json.Marshal(s)
+		if err != nil {
+			return nil
+		}
+		if err = json.Unmarshal(b, &data); err != nil {
+			return nil
+		}
+	case string:
+		if s == "" {
+			return nil
+		}
+		if err := json.Unmarshal([]byte(s), &data); err != nil {
+			return nil
+		}
+	default:
+		return nil
+	}
+
+	return buildTaskAnalysisReportFromMap(data)
+}
+
+func buildTaskAnalysisReportFromMap(data map[string]interface{}) *TaskAnalysisReport {
+	report := &TaskAnalysisReport{
+		Title:         parseStringField(data["title"]),
+		Designer:      parseStringField(data["designer"]),
+		Stage:         parseStringField(data["stage"]),
+		Participants:  parseStringField(data["participants"]),
+		Grade:         parseStringField(data["grade"]),
+		Instructor:    parseStringField(data["instructor"]),
+		Subject:       parseStringField(data["subject"]),
+		School:        parseStringField(data["school"]),
+		OtherSubjects: parseStringField(data["otherSubjects"]),
+		Textbook:      parseStringField(data["textbook"]),
+		Score:         parseFloatField(data["score"]),
+		Summary:       parseStringField(data["summary"]),
+	}
+
+	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
+		for _, catRaw := range categoriesRaw {
+			if catMap, ok := catRaw.(map[string]interface{}); ok {
+				cat := &TaskAnalysisCategory{
+					Name:  parseStringField(catMap["name"]),
+					Score: parseFloatField(catMap["score"]),
+				}
+
+				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
+					for _, itemRaw := range itemsRaw {
+						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
+							item := &TaskAnalysisItem{
+								Name:         parseStringField(itemMap["name"]),
+								Score:        parseFloatField(itemMap["score"]),
+								Advantage:    parseStringField(itemMap["advantage"]),
+								Disadvantage: parseStringField(itemMap["disadvantage"]),
+								Suggestion:   parseStringField(itemMap["suggestion"]),
+							}
+							cat.Items = append(cat.Items, item)
+						}
+					}
+				}
+
+				report.Categories = append(report.Categories, cat)
+			}
+		}
+	}
+
+	normalizeTaskAnalysisReport(report)
+	return report
+}
+
+func parseStringField(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+func parseFloatField(v interface{}) float64 {
+	if v == nil {
+		return 0
+	}
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case int32:
+		return float64(val)
+	case string:
+		s := strings.TrimSpace(val)
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return f
+		}
+	}
+	return 0
 }
 
 func BuildTaskResponse(task *Task) *TaskResponse {
@@ -180,7 +300,7 @@ func BuildTaskResponse(task *Task) *TaskResponse {
 		Example:     task.Example,
 		Labels:      task.Labels,
 		Log:         task.Log,
-		Result:      ParseTaskAnalysisReport(task.Result),
+		Result:      BuildTaskAnalysisReportResponse(task.Result),
 
 		DocumentUrl:          task.DocumentUrl,
 		DocumentText:         task.DocumentText,
@@ -336,13 +456,18 @@ func UpdateTask(id string, task *Task) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = getTask(owner, name)
+	existing, err := getTask(owner, name)
 	if err != nil {
 		return false, err
+	}
+	if existing == nil {
+		return false, nil
 	}
 	if task == nil {
 		return false, nil
 	}
+
+	task.Result = existing.Result
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(task)
 	if err != nil {
@@ -350,6 +475,30 @@ func UpdateTask(id string, task *Task) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func SaveTaskAnalysisResult(id string, report *TaskAnalysisReport) error {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return err
+	}
+	existing, err := getTask(owner, name)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	existing.Result = SerializeTaskAnalysisReport(report)
+	if report != nil {
+		existing.Score = report.Score
+	} else {
+		existing.Score = 0
+	}
+
+	_, err = adapter.engine.ID(core.PK{owner, name}).Cols("result", "score").Update(existing)
+	return err
 }
 
 func AddTask(task *Task) (bool, error) {

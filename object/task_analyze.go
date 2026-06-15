@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -166,37 +165,7 @@ func extractJSON(raw string) string {
 	return raw
 }
 
-func parseFloat(v interface{}) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case float32:
-		return float64(val)
-	case int:
-		return float64(val)
-	case int64:
-		return float64(val)
-	case string:
-		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
-			return f
-		}
-	}
-	return 0
-}
-
-func parseString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	switch val := v.(type) {
-	case string:
-		return val
-	default:
-		return fmt.Sprintf("%v", val)
-	}
-}
-
-func normalizeTaskResult(result *TaskAnalysisReport) {
+func normalizeTaskAnalysisReport(result *TaskAnalysisReport) {
 	if result == nil {
 		return
 	}
@@ -245,54 +214,6 @@ func normalizeTaskResult(result *TaskAnalysisReport) {
 		}
 		result.Score = math.Round((sum/float64(len(allItemScores)))*10) / 10
 	}
-}
-
-func normalizeTaskResultFromMap(data map[string]interface{}) *TaskAnalysisReport {
-	result := &TaskAnalysisReport{
-		Title:         parseString(data["title"]),
-		Designer:      parseString(data["designer"]),
-		Stage:         parseString(data["stage"]),
-		Participants:  parseString(data["participants"]),
-		Grade:         parseString(data["grade"]),
-		Instructor:    parseString(data["instructor"]),
-		Subject:       parseString(data["subject"]),
-		School:        parseString(data["school"]),
-		OtherSubjects: parseString(data["otherSubjects"]),
-		Textbook:      parseString(data["textbook"]),
-		Score:         parseFloat(data["score"]),
-		Summary:       parseString(data["summary"]),
-	}
-
-	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
-		for _, catRaw := range categoriesRaw {
-			if catMap, ok := catRaw.(map[string]interface{}); ok {
-				cat := &TaskAnalysisCategory{
-					Name:  parseString(catMap["name"]),
-					Score: parseFloat(catMap["score"]),
-				}
-
-				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
-					for _, itemRaw := range itemsRaw {
-						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
-							item := &TaskAnalysisItem{
-								Name:         parseString(itemMap["name"]),
-								Score:        parseFloat(itemMap["score"]),
-								Advantage:    parseString(itemMap["advantage"]),
-								Disadvantage: parseString(itemMap["disadvantage"]),
-								Suggestion:   parseString(itemMap["suggestion"]),
-							}
-							cat.Items = append(cat.Items, item)
-						}
-					}
-				}
-
-				result.Categories = append(result.Categories, cat)
-			}
-		}
-	}
-
-	normalizeTaskResult(result)
-	return result
 }
 
 func AnalyzeTask(task *Task, lang string) (*TaskAnalysisReport, error) {
@@ -372,8 +293,8 @@ func AnalyzeTask(task *Task, lang string) (*TaskAnalysisReport, error) {
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
-	result := normalizeTaskResultFromMap(rawData)
-	if len(result.Categories) == 0 {
+	result := BuildTaskAnalysisReportResponse(rawData)
+	if result == nil || len(result.Categories) == 0 {
 		task.AnalyzeError = "AI返回的分析结果中没有评价维度，请检查文档内容或稍后重试"
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}
