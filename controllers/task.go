@@ -16,6 +16,8 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 
 	"github.com/beego/beego/logs"
 	"github.com/beego/beego/utils/pagination"
@@ -307,4 +309,339 @@ func (c *ApiController) AnalyzeTask() {
 
 	logs.Info("[analyze-task] HTTP OK id=%s", id)
 	c.ResponseOk(result)
+}
+
+func (c *ApiController) checkTaskOwnership(taskOwner string, taskName string) (*object.Task, error) {
+	task, err := object.GetTask(fmt.Sprintf("%s/%s", taskOwner, taskName))
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, fmt.Errorf(c.T("general:The task does not exist"))
+	}
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if task.Owner != username {
+			return nil, fmt.Errorf(c.T("auth:Unauthorized operation"))
+		}
+	}
+	return task, nil
+}
+
+// AddReportComment
+// @Title AddReportComment
+// @Tag Task API
+// @Description add a report comment for a task analysis item
+// @Param body body object.ReportComment true "The report comment details"
+// @Success 200 {object} controllers.Response The Response object
+// @router /add-report-comment [post]
+func (c *ApiController) AddReportComment() {
+	var comment object.ReportComment
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &comment)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	task, err := c.checkTaskOwnership(comment.TaskOwner, comment.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	comment.Owner = task.Owner
+	comment.Author = username
+
+	affected, err := object.AddReportComment(&comment)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(affected)
+}
+
+// GetReportComments
+// @Title GetReportComments
+// @Tag Task API
+// @Description get report comments by task id
+// @Param id query string true "The task id (owner/name)"
+// @Success 200 {array} object.ReportComment The Response object
+// @router /get-report-comments [get]
+func (c *ApiController) GetReportComments() {
+	id := c.Input().Get("id")
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	_, err = c.checkTaskOwnership(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	comments, err := object.GetReportCommentsByTask(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(comments)
+}
+
+// GetReportCommentCount
+// @Title GetReportCommentCount
+// @Tag Task API
+// @Description get report comment counts by task id
+// @Param id query string true "The task id (owner/name)"
+// @Success 200 {object} map[string]int64 The Response object
+// @router /get-report-comment-count [get]
+func (c *ApiController) GetReportCommentCount() {
+	id := c.Input().Get("id")
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	_, err = c.checkTaskOwnership(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	counts, err := object.GetReportCommentCountByTask(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(counts)
+}
+
+// UpdateReportComment
+// @Title UpdateReportComment
+// @Tag Task API
+// @Description update a report comment
+// @Param id query int true "The comment id"
+// @Param body body object.ReportComment true "The report comment details"
+// @Success 200 {object} controllers.Response The Response object
+// @router /update-report-comment [post]
+func (c *ApiController) UpdateReportComment() {
+	idStr := c.Input().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.ResponseError("invalid comment id")
+		return
+	}
+
+	var comment object.ReportComment
+	err = json.Unmarshal(c.Ctx.Input.RequestBody, &comment)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	existing, err := object.GetReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(existing.TaskOwner, existing.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	if !c.IsAdmin() && existing.Author != username {
+		c.ResponseError(c.T("auth:Unauthorized operation"))
+		return
+	}
+
+	comment.Id = id
+	success, err := object.UpdateReportComment(id, &comment)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(success)
+}
+
+// ResolveReportComment
+// @Title ResolveReportComment
+// @Tag Task API
+// @Description resolve a report comment
+// @Param id query int true "The comment id"
+// @Success 200 {object} controllers.Response The Response object
+// @router /resolve-report-comment [post]
+func (c *ApiController) ResolveReportComment() {
+	idStr := c.Input().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.ResponseError("invalid comment id")
+		return
+	}
+
+	existing, err := object.GetReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(existing.TaskOwner, existing.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	success, err := object.ResolveReportComment(id, username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(success)
+}
+
+// ReopenReportComment
+// @Title ReopenReportComment
+// @Tag Task API
+// @Description reopen a resolved report comment
+// @Param id query int true "The comment id"
+// @Success 200 {object} controllers.Response The Response object
+// @router /reopen-report-comment [post]
+func (c *ApiController) ReopenReportComment() {
+	idStr := c.Input().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.ResponseError("invalid comment id")
+		return
+	}
+
+	existing, err := object.GetReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(existing.TaskOwner, existing.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	success, err := object.ReopenReportComment(id, username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(success)
+}
+
+// DisputeReportComment
+// @Title DisputeReportComment
+// @Tag Task API
+// @Description mark a report comment as disputed
+// @Param id query int true "The comment id"
+// @Success 200 {object} controllers.Response The Response object
+// @router /dispute-report-comment [post]
+func (c *ApiController) DisputeReportComment() {
+	idStr := c.Input().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.ResponseError("invalid comment id")
+		return
+	}
+
+	existing, err := object.GetReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(existing.TaskOwner, existing.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	success, err := object.SetReportCommentDisputed(id, username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(success)
+}
+
+// DeleteReportComment
+// @Title DeleteReportComment
+// @Tag Task API
+// @Description delete a report comment
+// @Param id query int true "The comment id"
+// @Success 200 {object} controllers.Response The Response object
+// @router /delete-report-comment [post]
+func (c *ApiController) DeleteReportComment() {
+	idStr := c.Input().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.ResponseError("invalid comment id")
+		return
+	}
+
+	existing, err := object.GetReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if existing == nil {
+		c.ResponseError(c.T("general:The report comment does not exist"))
+		return
+	}
+
+	_, err = c.checkTaskOwnership(existing.TaskOwner, existing.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	username := c.GetSessionUsername()
+	if !c.IsAdmin() && existing.Author != username {
+		c.ResponseError(c.T("auth:Unauthorized operation"))
+		return
+	}
+
+	success, err := object.DeleteReportComment(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(success)
 }

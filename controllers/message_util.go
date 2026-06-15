@@ -95,25 +95,6 @@ func writeInfoStream(responseWriter http.ResponseWriter, infoText string) error 
 	return nil
 }
 
-func writeCapabilityWarningStream(responseWriter http.ResponseWriter, violations []object.CapabilityViolation) error {
-	if len(violations) == 0 {
-		return nil
-	}
-	payload, err := json.Marshal(violations)
-	if err != nil {
-		return err
-	}
-	event := fmt.Sprintf("event: capability_warning\ndata: %s\n\n", payload)
-	_, err = responseWriter.Write([]byte(event))
-	if err != nil {
-		return err
-	}
-	if flusher, ok := responseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return nil
-}
-
 func writeChatUpdateStream(responseWriter http.ResponseWriter, chat *object.Chat) error {
 	if chat == nil {
 		return nil

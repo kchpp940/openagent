@@ -58,9 +58,6 @@ type Skill struct {
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
 	State string `xorm:"varchar(100)" json:"state"`
-
-	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (s *Skill) GetId() string {
@@ -349,9 +346,9 @@ func DeleteSkill(s *Skill) (bool, error) {
 	return affected != 0, nil
 }
 
-func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, []CapabilityViolation, []CapabilityViolation, error) {
+func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, error) {
 	if len(skillNames) == 0 {
-		return nil, nil, nil, nil
+		return nil, nil
 	}
 
 	hasAll := false
@@ -368,55 +365,17 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, []Capabi
 		names = append(names, name)
 	}
 	if hasAll {
-		allSkills, err := GetSkills(owner)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		filtered := make([]*Skill, 0, len(allSkills))
-		var warnings []CapabilityViolation
-		for _, s := range allSkills {
-			avail, err := GetSkillCapabilityAvailability(s)
-			if err != nil {
-				continue
-			}
-			if avail.IsBlocked() {
-				warnings = append(warnings, CapabilityViolation{
-					Kind:       "skill",
-					Name:       s.Name,
-					Status:     string(avail.Status),
-					Reason:     avail.BlockReason("en"),
-					ConfigHash: avail.ConfigHash,
-				})
-				continue
-			}
-			filtered = append(filtered, s)
-		}
-		return filtered, nil, warnings, nil
+		return GetSkills(owner)
 	}
 
 	var skills []*Skill
-	var blocked []CapabilityViolation
 	seen := map[string]bool{}
 	for _, name := range names {
 		s, err := GetSkillByOwnerAndName(owner, name)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if s == nil {
-			continue
-		}
-		avail, err := GetSkillCapabilityAvailability(s)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if avail.IsBlocked() {
-			blocked = append(blocked, CapabilityViolation{
-				Kind:       "skill",
-				Name:       s.Name,
-				Status:     string(avail.Status),
-				Reason:     avail.BlockReason("en"),
-				ConfigHash: avail.ConfigHash,
-			})
 			continue
 		}
 
@@ -428,7 +387,7 @@ func resolveEnabledSkills(owner string, skillNames []string) ([]*Skill, []Capabi
 		skills = append(skills, s)
 	}
 
-	return skills, blocked, nil, nil
+	return skills, nil
 }
 
 func skillNameMatches(s *Skill, skillName string) bool {
@@ -454,16 +413,9 @@ func GetSkillsCatalog(owner string, skillNames []string) (string, error) {
 		return "", nil
 	}
 
-	skills, blocked, _, err := resolveEnabledSkills(owner, skillNames)
+	skills, err := resolveEnabledSkills(owner, skillNames)
 	if err != nil {
 		return "", err
-	}
-	if len(blocked) > 0 {
-		var names []string
-		for _, v := range blocked {
-			names = append(names, v.Name)
-		}
-		return "", fmt.Errorf("some skills are unavailable: %s", strings.Join(names, ", "))
 	}
 
 	var items []string
@@ -560,16 +512,9 @@ type skillLoader struct{}
 
 func (skillLoader) Load(owner string, allowedSkillNames []string, skillName string, referenceName string) (string, error) {
 	if len(allowedSkillNames) > 0 {
-		skills, blocked, _, err := resolveEnabledSkills(owner, allowedSkillNames)
+		skills, err := resolveEnabledSkills(owner, allowedSkillNames)
 		if err != nil {
 			return "", err
-		}
-		if len(blocked) > 0 {
-			var names []string
-			for _, v := range blocked {
-				names = append(names, v.Name)
-			}
-			return "", fmt.Errorf("some skills are unavailable: %s", strings.Join(names, ", "))
 		}
 
 		allowed := false

@@ -46,7 +46,7 @@ export function getChatMessages(owner, chat) {
 
 const eventSourceMap = new Map();
 
-export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd, onInfo, onChat, onToolDelta, onCapabilityWarning) {
+export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd, onInfo, onChat, onToolDelta) {
   if (eventSourceMap.has(`${owner}/${name}`)) {
     return;
   }
@@ -90,16 +90,6 @@ export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSea
   if (onInfo) {
     eventSource.addEventListener("myinfo", (e) => {
       onInfo(e.data);
-    });
-  }
-
-  if (onCapabilityWarning) {
-    eventSource.addEventListener("capability_warning", (e) => {
-      try {
-        onCapabilityWarning(JSON.parse(e.data));
-      } catch {
-        // ignore malformed capability_warning events
-      }
     });
   }
 

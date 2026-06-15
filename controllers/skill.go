@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -125,9 +124,6 @@ func (c *ApiController) UpdateSkill() {
 		c.ResponseError(err.Error())
 		return
 	}
-	if success {
-		object.AsyncTriggerSkillCapabilityCheck(&s, c.GetAcceptLanguage())
-	}
 
 	c.ResponseOk(success)
 }
@@ -152,9 +148,6 @@ func (c *ApiController) AddSkill() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
-	}
-	if success {
-		object.AsyncTriggerSkillCapabilityCheck(&s, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)
@@ -205,81 +198,4 @@ func (c *ApiController) LoadSkill() {
 	}
 
 	c.ResponseOk(s)
-}
-
-// CheckSkillCapability
-// @Title CheckSkillCapability
-// @Tag Skill API
-// @Description run capability checks on a skill configuration
-// @Param body body object.Skill true "The skill configuration to check"
-// @Success 200 {object} object.CapabilityCheckResult The capability check result
-// @router /check-skill-capability [post]
-func (c *ApiController) CheckSkillCapability() {
-	var skill object.Skill
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &skill); err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	checker := object.NewSkillCapabilityChecker(&skill)
-	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
-	c.ResponseOk(result)
-}
-
-// GetSkillCapabilityRecord
-// @Title GetSkillCapabilityRecord
-// @Tag Skill API
-// @Description get the latest persisted capability check record for a skill
-// @Param id query string true "The skill id (owner/name)"
-// @Success 200 {object} object.CapabilityAvailability The capability availability info
-// @router /get-skill-capability-record [get]
-func (c *ApiController) GetSkillCapabilityRecord() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	skill, err := object.GetSkillByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if skill == nil {
-		c.ResponseError(fmt.Sprintf("skill: %s not found", name))
-		return
-	}
-
-	avail, err := object.GetSkillCapabilityAvailability(skill)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
-}
-
-// RunSkillCapabilityCheck
-// @Title RunSkillCapabilityCheck
-// @Tag Skill API
-// @Description run capability check on a saved skill and persist the result
-// @Param id query string true "The skill id (owner/name)"
-// @Success 200 {object} object.CapabilityAvailability The capability availability info
-// @router /run-skill-capability-check [post]
-func (c *ApiController) RunSkillCapabilityCheck() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	skill, err := object.GetSkillByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if skill == nil {
-		c.ResponseError(fmt.Sprintf("skill: %s not found", name))
-		return
-	}
-
-	avail, err := object.RunSkillCapabilityCheck(skill, c.GetAcceptLanguage())
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
 }

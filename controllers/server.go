@@ -113,9 +113,6 @@ func (c *ApiController) UpdateServer() {
 		c.ResponseError(err.Error())
 		return
 	}
-	if success {
-		object.AsyncTriggerServerCapabilityCheck(&server, c.GetAcceptLanguage())
-	}
 
 	c.ResponseOk(success)
 }
@@ -140,9 +137,6 @@ func (c *ApiController) AddServer() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
-	}
-	if success {
-		object.AsyncTriggerServerCapabilityCheck(&server, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)
@@ -288,81 +282,4 @@ func (c *ApiController) SyncIntranetServers() {
 		return
 	}
 	c.ResponseOk(result)
-}
-
-// CheckServerCapability
-// @Title CheckServerCapability
-// @Tag Server API
-// @Description run capability checks on an MCP server configuration
-// @Param body body object.Server true "The server configuration to check"
-// @Success 200 {object} object.CapabilityCheckResult The capability check result
-// @router /check-server-capability [post]
-func (c *ApiController) CheckServerCapability() {
-	var server object.Server
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &server); err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	checker := object.NewServerCapabilityChecker(&server)
-	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
-	c.ResponseOk(result)
-}
-
-// GetServerCapabilityRecord
-// @Title GetServerCapabilityRecord
-// @Tag Server API
-// @Description get the latest persisted capability check record for a server
-// @Param id query string true "The server id (owner/name)"
-// @Success 200 {object} object.CapabilityCheckRecord The capability check record
-// @router /get-server-capability-record [get]
-func (c *ApiController) GetServerCapabilityRecord() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	server, err := object.GetServerByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if server == nil {
-		c.ResponseError(fmt.Sprintf("server: %s not found", name))
-		return
-	}
-
-	avail, err := object.GetServerCapabilityAvailability(server)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
-}
-
-// RunServerCapabilityCheck
-// @Title RunServerCapabilityCheck
-// @Tag Server API
-// @Description run capability check on a saved server and persist the result
-// @Param id query string true "The server id (owner/name)"
-// @Success 200 {object} object.CapabilityAvailability The capability availability info
-// @router /run-server-capability-check [post]
-func (c *ApiController) RunServerCapabilityCheck() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	server, err := object.GetServerByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if server == nil {
-		c.ResponseError(fmt.Sprintf("server: %s not found", name))
-		return
-	}
-
-	avail, err := object.RunServerCapabilityCheck(server, c.GetAcceptLanguage())
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
 }

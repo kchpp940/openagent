@@ -665,16 +665,7 @@ class ChatWidget extends React.Component {
           Setting.scrollToDiv(`chatbox-list-item-${updatedMessages.length}`);
         }, 100);
       },
-      (infoText) => {
-        if (!chat || (this.state.currentChat?.name !== chat.name)) {
-          return;
-        }
-        const lastMessage2 = Setting.deepCopy(lastMessage);
-        lastMessage2.hintText = infoText;
-        const updatedMessages = [...messages];
-        updatedMessages[updatedMessages.length - 1] = lastMessage2;
-        this.setState({messages: updatedMessages});
-      },
+      null,
       (update) => {
         if (!chat || !update?.displayName || update.name !== chat.name) {
           return;
@@ -688,16 +679,6 @@ class ChatWidget extends React.Component {
         const jsonData = JSON.parse(data);
         applyToolDelta(toolCalls, jsonData);
         scheduleToolDeltaFlush();
-      },
-      (warnings) => {
-        if (!chat || (this.state.currentChat?.name !== chat.name)) {
-          return;
-        }
-        const lastMessage2 = Setting.deepCopy(lastMessage);
-        lastMessage2.capabilityWarnings = warnings;
-        const updatedMessages = [...messages];
-        updatedMessages[updatedMessages.length - 1] = lastMessage2;
-        this.setState({messages: updatedMessages});
       }
     );
   }

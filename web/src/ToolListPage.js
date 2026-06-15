@@ -17,77 +17,15 @@ import {Link} from "react-router-dom";
 import {Button, Popconfirm, Switch, Table, Tag, Tooltip} from "antd";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import * as Setting from "./Setting";
 import * as ToolBackend from "./backend/ToolBackend";
 import i18next from "i18next";
-import {CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
+import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
 
 class ToolListPage extends BaseListPage {
   constructor(props) {
     super(props);
-    this.state = {
-      ...this.state,
-      capabilityCheckKeys: {},
-      expandedRowKeys: [],
-      checkingTools: {},
-    };
   }
-
-  triggerCapabilityCheck = (record) => {
-    const toolName = record.name;
-    const owner = record.owner || "admin";
-
-    this.setState((prevState) => {
-      const newExpandedKeys = prevState.expandedRowKeys.includes(toolName)
-        ? prevState.expandedRowKeys
-        : [...prevState.expandedRowKeys, toolName];
-      return {
-        checkingTools: { ...prevState.checkingTools, [toolName]: true },
-        expandedRowKeys: newExpandedKeys,
-      };
-    });
-
-    ToolBackend.runToolCapabilityCheck(owner, toolName)
-      .then((res) => {
-        if (res.status === "ok") {
-          const avail = res.data;
-          this.setState((prevState) => {
-            const newData = prevState.data.map((item) => {
-              if (item.name === toolName) {
-                return {
-                  ...item,
-                  latestCapabilityStatus: avail.status,
-                  latestCheckedAt: avail.checkedAt,
-                };
-              }
-              return item;
-            });
-            return {
-              data: newData,
-              capabilityCheckKeys: {
-                ...prevState.capabilityCheckKeys,
-                [toolName]: (prevState.capabilityCheckKeys[toolName] || 0) + 1,
-              },
-            };
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to run")}: ${res.msg}`);
-        }
-      })
-      .catch((error) => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState((prevState) => ({
-          checkingTools: { ...prevState.checkingTools, [toolName]: false },
-        }));
-      });
-  };
-
-  handleExpandedRowsChange = (expandedRowKeys) => {
-    this.setState({expandedRowKeys});
-  };
 
   newTool() {
     const randomName = Setting.getRandomName();
@@ -223,67 +161,10 @@ class ToolListPage extends BaseListPage {
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
       },
       {
-        title: i18next.t("capability:Availability"),
-        dataIndex: "latestCapabilityStatus",
-        key: "latestCapabilityStatus",
-        width: "130px",
-        sorter: (a, b) => (a.latestCapabilityStatus || "").localeCompare(b.latestCapabilityStatus || ""),
-        render: (status, record) => {
-          let icon, color, text;
-          switch (status) {
-          case "pass":
-            icon = <CheckCircleOutlined style={{color: "#52c41a"}} />;
-            color = "success";
-            text = i18next.t("capability:Passed");
-            break;
-          case "fail":
-            icon = <CloseCircleOutlined style={{color: "#ff4d4f"}} />;
-            color = "error";
-            text = i18next.t("capability:Unavailable");
-            break;
-          case "warning":
-            icon = <ExclamationCircleOutlined style={{color: "#faad14"}} />;
-            color = "warning";
-            text = i18next.t("capability:Needs attention");
-            break;
-          default:
-            icon = <ExclamationCircleOutlined style={{color: "#8c8c8c", opacity: 0.5}} />;
-            color = "default";
-            text = i18next.t("capability:Not checked");
-          }
-          return (
-            <Tooltip title={record.latestCheckedAt ? `${i18next.t("capability:Availability")}: ${text}` : i18next.t("capability:Not checked")}>
-              <Tag icon={icon} color={color} style={{margin: 0}}>
-                {text}
-              </Tag>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        title: i18next.t("capability:Check availability"),
-        key: "capability",
-        width: "140px",
-        render: (_, record) => (
-          <Tooltip title={i18next.t("capability:Check availability")}>
-            <Button
-              type="text"
-              size="small"
-              icon={<SafetyCertificateOutlined />}
-              loading={!!this.state.checkingTools[record.name]}
-              style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
-              onClick={() => {
-                this.triggerCapabilityCheck(record);
-              }}
-            />
-          </Tooltip>
-        ),
-      },
-      {
         title: i18next.t("general:Action"),
         dataIndex: "action",
         key: "action",
-        width: "160px",
+        width: "130px",
         fixed: "right",
         render: (text, record) => (
           <div style={{display: "flex", alignItems: "center", gap: "2px", flexWrap: "nowrap"}}>
@@ -313,26 +194,6 @@ class ToolListPage extends BaseListPage {
       showTotal: (total) => i18next.t("general:{total} in total").replace("{total}", total),
     };
 
-    const expandable = {
-      expandedRowRender: (record) => (
-        <div style={{padding: "0 24px 8px"}}>
-          <CapabilityCheckPanel
-            recordFn={ToolBackend.getToolCapabilityRecord}
-            recordParams={[record.owner, record.name]}
-            checkFn={ToolBackend.checkToolCapability}
-            config={record}
-            title={i18next.t("capability:Check availability")}
-            description={i18next.t("capability:Check availability desc")}
-            triggerKey={this.state.capabilityCheckKeys[record.name]}
-            autoRun={false}
-          />
-        </div>
-      ),
-      rowExpandable: (record) => true,
-      expandedRowKeys: this.state.expandedRowKeys,
-      onExpandedRowsChange: this.handleExpandedRowsChange,
-    };
-
     return (
       <div>
         <Table
@@ -343,7 +204,6 @@ class ToolListPage extends BaseListPage {
           size="middle"
           bordered
           pagination={paginationProps}
-          expandable={expandable}
           title={() => (
             <div>
               {i18next.t("general:Tools")}&nbsp;&nbsp;&nbsp;&nbsp;

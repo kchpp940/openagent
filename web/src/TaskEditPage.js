@@ -14,13 +14,13 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Typography, Upload} from "antd";
+import {Button, Card, Col, Input, Progress, Row, Select, Space, Spin, Tooltip, Typography, Upload} from "antd";
 
 const ANALYZE_PROGRESS_DURATION_SEC = 300;
 const ANALYZE_PROGRESS_TICK_MS = 500;
 const ANALYZE_PROGRESS_MAX_PERCENT = 99;
 
-import {BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
+import {Badge, BarChartOutlined, CheckCircleOutlined, CommentOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
 import * as TaskBackend from "./backend/TaskBackend";
 import * as ScaleBackend from "./backend/ScaleBackend";
 import * as Setting from "./Setting";
@@ -50,6 +50,7 @@ class TaskEditPage extends React.Component {
       analyzeError: "",
       loading: false,
       uploadingDocument: false,
+      commentCounts: {total: 0, open: 0, resolved: 0, disputed: 0},
     };
     this.analyzeProgressIntervalId = null;
     this.analyzeStartTime = null;
@@ -98,12 +99,35 @@ class TaskEditPage extends React.Component {
         if (res.status === "ok") {
           this.setState({
             task: this.normalizeTaskResult(res.data),
+          }, () => {
+            this.loadCommentCounts();
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       });
   }
+
+  loadCommentCounts() {
+    const taskId = `${this.state.owner}/${this.state.taskName}`;
+    TaskBackend.getReportCommentCount(taskId)
+      .then((res) => {
+        if (res.status === "ok" && res.data) {
+          this.setState({commentCounts: res.data});
+        }
+      })
+      .catch(() => {});
+  }
+
+  handleReportCommentChange = (comments) => {
+    const counts = {total: comments.length, open: 0, resolved: 0, disputed: 0};
+    comments.forEach((c) => {
+      if (counts[c.status] !== undefined) {
+        counts[c.status]++;
+      }
+    });
+    this.setState({commentCounts: counts});
+  };
 
   getEffectiveScale() {
     const task = this.state.task;
@@ -325,7 +349,18 @@ class TaskEditPage extends React.Component {
     return (
       <div>
         <div style={{marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-          <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("task:Edit Task")}</span>
+          <div style={{display: "flex", alignItems: "center", gap: "12px"}}>
+            <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("task:Edit Task")}</span>
+            {this.state.commentCounts && (this.state.commentCounts.open > 0 || this.state.commentCounts.disputed > 0) && (
+              <Space>
+                <Tooltip title={`${this.state.commentCounts.open || 0} ${i18next.t("task:open comments")}, ${this.state.commentCounts.disputed || 0} ${i18next.t("task:disputed")}`}>
+                  <Badge count={(this.state.commentCounts.open || 0) + (this.state.commentCounts.disputed || 0)} offset={[4, 0]}>
+                    <Button type="text" size="small" icon={<CommentOutlined style={{color: "#1677ff"}} />} style={{padding: "0 4px"}} />
+                  </Badge>
+                </Tooltip>
+              </Space>
+            )}
+          </div>
           <div style={{display: "flex", gap: "8px", marginRight: "4px"}}>
             {this.renderTaskActions()}
           </div>
@@ -509,6 +544,9 @@ class TaskEditPage extends React.Component {
                   <TaskAnalysisReport
                     result={task.result}
                     downloadFileName={`${task.owner}_${task.name}_report.docx`}
+                    taskId={`${task.owner}/${task.name}`}
+                    currentUser={this.props.account?.name}
+                    onCommentChange={this.handleReportCommentChange}
                   />
                 )}
               </div>,

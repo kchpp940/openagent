@@ -284,15 +284,6 @@ const MultiPaneManager = ({
         setPanes(prev => prev.map((pane, i) =>
           i === paneIndex ? {...pane, chat: updatedChat} : pane
         ));
-      },
-      null,
-      (warnings) => {
-        const lastMessage2 = Setting.deepCopy(lastMessage);
-        lastMessage2.capabilityWarnings = warnings;
-        messages[messages.length - 1] = lastMessage2;
-        setPanes(prev => prev.map((pane, i) =>
-          i === paneIndex ? {...pane, messages: [...messages]} : pane
-        ));
       }
     );
   }, [setLoadingForPane]);

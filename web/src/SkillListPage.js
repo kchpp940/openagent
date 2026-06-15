@@ -17,11 +17,10 @@ import {Link} from "react-router-dom";
 import {Button, Popconfirm, Table, Tag, Tooltip} from "antd";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import * as Setting from "./Setting";
 import * as SkillBackend from "./backend/SkillBackend";
 import i18next from "i18next";
-import {CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, ExclamationCircleOutlined, SafetyCertificateOutlined, ShopOutlined} from "@ant-design/icons";
+import {DeleteOutlined, DownloadOutlined, EditOutlined, ShopOutlined} from "@ant-design/icons";
 import LoadSkillModal from "./LoadSkillModal";
 import SkillMarketplaceModal from "./SkillMarketplaceModal";
 
@@ -34,66 +33,8 @@ class SkillListPage extends BaseListPage {
       ...this.state,
       loadModalVisible: false,
       marketplaceVisible: false,
-      capabilityCheckKeys: {},
-      expandedRowKeys: [],
-      checkingSkills: {},
     };
   }
-
-  triggerCapabilityCheck = (record) => {
-    const skillName = record.name;
-    const owner = record.owner || "admin";
-
-    this.setState((prevState) => {
-      const newExpandedKeys = prevState.expandedRowKeys.includes(skillName)
-        ? prevState.expandedRowKeys
-        : [...prevState.expandedRowKeys, skillName];
-      return {
-        checkingSkills: { ...prevState.checkingSkills, [skillName]: true },
-        expandedRowKeys: newExpandedKeys,
-      };
-    });
-
-    SkillBackend.runSkillCapabilityCheck(owner, skillName)
-      .then((res) => {
-        if (res.status === "ok") {
-          const avail = res.data;
-          this.setState((prevState) => {
-            const newData = prevState.data.map((item) => {
-              if (item.name === skillName) {
-                return {
-                  ...item,
-                  latestCapabilityStatus: avail.status,
-                  latestCheckedAt: avail.checkedAt,
-                };
-              }
-              return item;
-            });
-            return {
-              data: newData,
-              capabilityCheckKeys: {
-                ...prevState.capabilityCheckKeys,
-                [skillName]: (prevState.capabilityCheckKeys[skillName] || 0) + 1,
-              },
-            };
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to run")}: ${res.msg}`);
-        }
-      })
-      .catch((error) => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState((prevState) => ({
-          checkingSkills: { ...prevState.checkingSkills, [skillName]: false },
-        }));
-      });
-  };
-
-  handleExpandedRowsChange = (expandedRowKeys) => {
-    this.setState({expandedRowKeys});
-  };
 
   newSkill() {
     const randomName = Setting.getRandomName();
@@ -227,66 +168,10 @@ class SkillListPage extends BaseListPage {
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
       },
       {
-        title: i18next.t("capability:Availability"),
-        dataIndex: "latestCapabilityStatus",
-        key: "capabilityStatus",
-        width: "120px",
-        render: (status, record) => {
-          let color = "default";
-          let text = i18next.t("capability:Not checked");
-          let icon = null;
-
-          if (status === "pass") {
-            color = "green";
-            text = i18next.t("capability:Pass");
-            icon = <CheckCircleOutlined />;
-          } else if (status === "warning") {
-            color = "orange";
-            text = i18next.t("capability:Warning");
-            icon = <ExclamationCircleOutlined />;
-          } else if (status === "fail") {
-            color = "red";
-            text = i18next.t("capability:Failed");
-            icon = <CloseCircleOutlined />;
-          } else if (status === "pending") {
-            color = "blue";
-            text = i18next.t("capability:Pending");
-            icon = <CheckCircleOutlined />;
-          }
-
-          return (
-            <Tooltip title={text}>
-              <Tag color={color} icon={icon} style={{margin: 0}}>
-                {text}
-              </Tag>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        title: i18next.t("capability:Check availability"),
-        key: "capability",
-        width: "140px",
-        render: (_, record) => (
-          <Tooltip title={i18next.t("capability:Check availability")}>
-            <Button
-              type="text"
-              size="small"
-              icon={<SafetyCertificateOutlined />}
-              loading={!!this.state.checkingSkills[record.name]}
-              style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
-              onClick={() => {
-                this.triggerCapabilityCheck(record);
-              }}
-            />
-          </Tooltip>
-        ),
-      },
-      {
         title: i18next.t("general:Action"),
         dataIndex: "action",
         key: "action",
-        width: "160px",
+        width: "130px",
         fixed: "right",
         render: (text, record) => (
           <div style={{display: "flex", alignItems: "center", gap: "2px", flexWrap: "nowrap"}}>
@@ -339,18 +224,6 @@ class SkillListPage extends BaseListPage {
           rowKey="name"
           size="middle"
           bordered
-          expandable={{
-            expandedRowRender: (record) => (
-              <CapabilityCheckPanel
-                triggerKey={this.state.capabilityCheckKeys[record.name] || 0}
-                recordFn={SkillBackend.getSkillCapabilityRecord}
-                recordParams={[record.owner || "admin", record.name]}
-                autoRun={false}
-              />
-            ),
-            expandedRowKeys: this.state.expandedRowKeys,
-            onExpandedRowsChange: this.handleExpandedRowsChange,
-          }}
           pagination={paginationProps}
           title={() => (
             <div>

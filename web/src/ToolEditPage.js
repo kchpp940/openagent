@@ -14,7 +14,6 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Alert, Button, Card, Col, Input, Row, Select, Space, Switch, Table, Tag} from "antd";
 import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
@@ -32,7 +31,6 @@ class ToolEditPage extends React.Component {
       tool: null,
       originalTool: null,
       isNewTool: props.location?.state?.isNewTool || false,
-      capabilityCheckKey: 0,
     };
   }
 
@@ -318,17 +316,6 @@ class ToolEditPage extends React.Component {
             account={this.props.account}
           />
         </Card>
-
-        <CapabilityCheckPanel
-          recordFn={ToolBackend.getToolCapabilityRecord}
-          recordParams={[tool.owner || "admin", tool.name]}
-          runCheckFn={ToolBackend.runToolCapabilityCheck}
-          runCheckParams={[tool.owner || "admin", tool.name]}
-          title={i18next.t("capability:Check availability")}
-          description={i18next.t("capability:Check availability desc")}
-          triggerKey={this.state.capabilityCheckKey}
-          autoRun={false}
-        />
       </div>
     );
   }
@@ -341,29 +328,13 @@ class ToolEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             toolName: this.state.tool.name,
-            originalTool: Setting.deepCopy(this.state.tool),
             isNewTool: false,
-            capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
-
-          const owner = this.state.tool.owner || "admin";
-          const name = this.state.tool.name;
-          ToolBackend.runToolCapabilityCheck(owner, name)
-            .then((checkRes) => {
-              if (checkRes.status === "ok") {
-                this.setState((prevState) => ({
-                  tool: {
-                    ...prevState.tool,
-                    latestCapabilityStatus: checkRes.data?.status,
-                    latestCheckedAt: checkRes.data?.checkedAt,
-                  },
-                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
-                }));
-              }
-            });
 
           if (exitAfterSave) {
             this.props.history.push("/tools");
+          } else {
+            this.props.history.push(`/tools/${this.state.tool.name}`);
           }
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);

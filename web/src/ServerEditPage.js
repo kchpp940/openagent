@@ -14,7 +14,6 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Button, Card, Col, Input, Row, Space} from "antd";
 import {LinkOutlined} from "@ant-design/icons";
 import * as ServerBackend from "./backend/ServerBackend";
@@ -33,7 +32,6 @@ class ServerEditPage extends React.Component {
       originalServer: null,
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
-      capabilityCheckKey: 0,
     };
   }
 
@@ -67,27 +65,7 @@ class ServerEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            originalServer: Setting.deepCopy(this.state.server),
-            capabilityCheckKey: this.state.capabilityCheckKey + 1,
-          });
-
-          const owner = this.state.server.owner || "admin";
-          const name = this.state.server.name;
-          ServerBackend.runServerCapabilityCheck(owner, name)
-            .then((checkRes) => {
-              if (checkRes.status === "ok") {
-                this.setState((prevState) => ({
-                  server: {
-                    ...prevState.server,
-                    latestCapabilityStatus: checkRes.data?.status,
-                    latestCheckedAt: checkRes.data?.checkedAt,
-                  },
-                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
-                }));
-              }
-            });
-
+          this.setState({originalServer: Setting.deepCopy(this.state.server)});
           if (willExist) {
             this.props.history.push("/servers");
           }
@@ -217,17 +195,6 @@ class ServerEditPage extends React.Component {
             )}
           </Row>
         </Card>
-
-        <CapabilityCheckPanel
-          recordFn={ServerBackend.getServerCapabilityRecord}
-          recordParams={[server.owner || "admin", server.name]}
-          runCheckFn={ServerBackend.runServerCapabilityCheck}
-          runCheckParams={[server.owner || "admin", server.name]}
-          title={i18next.t("capability:Check availability")}
-          description={i18next.t("capability:Check availability desc")}
-          triggerKey={this.state.capabilityCheckKey}
-          autoRun={false}
-        />
       </div>
     );
   }

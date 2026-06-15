@@ -68,7 +68,6 @@ func initAPI() {
 	beego.Router("/api/get-organization-users", &controllers.ApiController{}, "GET:GetOrganizationUsers")
 	beego.Router("/api/add-shared-store", &controllers.ApiController{}, "POST:AddSharedStore")
 	beego.Router("/api/claim-store", &controllers.ApiController{}, "POST:ClaimStore")
-	beego.Router("/api/check-store-capability", &controllers.ApiController{}, "POST:CheckStoreCapability")
 
 	beego.Router("/api/get-global-providers", &controllers.ApiController{}, "GET:GetGlobalProviders")
 	beego.Router("/api/get-providers", &controllers.ApiController{}, "GET:GetProviders")
@@ -97,9 +96,6 @@ func initAPI() {
 	beego.Router("/api/sync-mcp-tool", &controllers.ApiController{}, "POST:SyncMcpTool")
 	beego.Router("/api/get-online-servers", &controllers.ApiController{}, "GET:GetOnlineServers")
 	beego.Router("/api/sync-intranet-servers", &controllers.ApiController{}, "POST:SyncIntranetServers")
-	beego.Router("/api/check-server-capability", &controllers.ApiController{}, "POST:CheckServerCapability")
-	beego.Router("/api/get-server-capability-record", &controllers.ApiController{}, "GET:GetServerCapabilityRecord")
-	beego.Router("/api/run-server-capability-check", &controllers.ApiController{}, "POST:RunServerCapabilityCheck")
 
 	beego.Router("/api/get-global-skills", &controllers.ApiController{}, "GET:GetGlobalSkills")
 	beego.Router("/api/get-skills", &controllers.ApiController{}, "GET:GetSkills")
@@ -111,9 +107,6 @@ func initAPI() {
 	beego.Router("/api/get-marketplace-sources", &controllers.ApiController{}, "GET:GetMarketplaceSources")
 	beego.Router("/api/get-marketplace-skills", &controllers.ApiController{}, "GET:GetMarketplaceSkills")
 	beego.Router("/api/install-marketplace-skill", &controllers.ApiController{}, "POST:InstallMarketplaceSkill")
-	beego.Router("/api/check-skill-capability", &controllers.ApiController{}, "POST:CheckSkillCapability")
-	beego.Router("/api/get-skill-capability-record", &controllers.ApiController{}, "GET:GetSkillCapabilityRecord")
-	beego.Router("/api/run-skill-capability-check", &controllers.ApiController{}, "POST:RunSkillCapabilityCheck")
 
 	beego.Router("/api/get-global-tools", &controllers.ApiController{}, "GET:GetGlobalTools")
 	beego.Router("/api/get-tools", &controllers.ApiController{}, "GET:GetTools")
@@ -122,9 +115,6 @@ func initAPI() {
 	beego.Router("/api/add-tool", &controllers.ApiController{}, "POST:AddTool")
 	beego.Router("/api/delete-tool", &controllers.ApiController{}, "POST:DeleteTool")
 	beego.Router("/api/test-tool", &controllers.ApiController{}, "POST:TestTool")
-	beego.Router("/api/check-tool-capability", &controllers.ApiController{}, "POST:CheckToolCapability")
-	beego.Router("/api/get-tool-capability-record", &controllers.ApiController{}, "GET:GetToolCapabilityRecord")
-	beego.Router("/api/run-tool-capability-check", &controllers.ApiController{}, "POST:RunToolCapabilityCheck")
 
 	beego.Router("/api/get-global-files", &controllers.ApiController{}, "GET:GetGlobalFiles")
 	beego.Router("/api/get-files", &controllers.ApiController{}, "GET:GetFiles")
@@ -184,6 +174,14 @@ func initAPI() {
 	beego.Router("/api/delete-task", &controllers.ApiController{}, "POST:DeleteTask")
 	beego.Router("/api/upload-task-document", &controllers.ApiController{}, "POST:UploadTaskDocument")
 	beego.Router("/api/analyze-task", &controllers.ApiController{}, "POST:AnalyzeTask")
+	beego.Router("/api/add-report-comment", &controllers.ApiController{}, "POST:AddReportComment")
+	beego.Router("/api/get-report-comments", &controllers.ApiController{}, "GET:GetReportComments")
+	beego.Router("/api/get-report-comment-count", &controllers.ApiController{}, "GET:GetReportCommentCount")
+	beego.Router("/api/update-report-comment", &controllers.ApiController{}, "POST:UpdateReportComment")
+	beego.Router("/api/resolve-report-comment", &controllers.ApiController{}, "POST:ResolveReportComment")
+	beego.Router("/api/reopen-report-comment", &controllers.ApiController{}, "POST:ReopenReportComment")
+	beego.Router("/api/dispute-report-comment", &controllers.ApiController{}, "POST:DisputeReportComment")
+	beego.Router("/api/delete-report-comment", &controllers.ApiController{}, "POST:DeleteReportComment")
 
 	beego.Router("/api/get-global-scales", &controllers.ApiController{}, "GET:GetGlobalScales")
 	beego.Router("/api/get-scales", &controllers.ApiController{}, "GET:GetScales")

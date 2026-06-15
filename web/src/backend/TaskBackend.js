@@ -104,3 +104,104 @@ export function analyzeTask(owner, name) {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function addReportComment(comment) {
+  return fetch(`${Setting.ServerUrl}/api/add-report-comment`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(comment),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getReportComments(taskId) {
+  return fetch(`${Setting.ServerUrl}/api/get-report-comments?id=${encodeURIComponent(taskId)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getReportCommentCount(taskId) {
+  return fetch(`${Setting.ServerUrl}/api/get-report-comment-count?id=${encodeURIComponent(taskId)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function updateReportComment(commentId, comment) {
+  return fetch(`${Setting.ServerUrl}/api/update-report-comment?id=${commentId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(comment),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function resolveReportComment(commentId) {
+  return fetch(`${Setting.ServerUrl}/api/resolve-report-comment?id=${commentId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function reopenReportComment(commentId) {
+  return fetch(`${Setting.ServerUrl}/api/reopen-report-comment?id=${commentId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function disputeReportComment(commentId) {
+  return fetch(`${Setting.ServerUrl}/api/dispute-report-comment?id=${commentId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function deleteReportComment(commentId) {
+  return fetch(`${Setting.ServerUrl}/api/delete-report-comment?id=${commentId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function generateStableCategoryKey(categoryName, categoryIndex) {
+  const sanitized = (categoryName || "").toLowerCase()
+    .replace(/[^a-z0-9]/g, "_")
+    .substring(0, 60);
+  return `cat_${categoryIndex}_${sanitized}`;
+}
+
+export function generateStableItemKey(categoryName, itemName, categoryIndex, itemIndex) {
+  const sanitizedCat = (categoryName || "").toLowerCase()
+    .replace(/[^a-z0-9]/g, "_")
+    .substring(0, 60);
+  const sanitizedItem = (itemName || "").toLowerCase()
+    .replace(/[^a-z0-9]/g, "_")
+    .substring(0, 60);
+  return `item_${categoryIndex}_${itemIndex}_${sanitizedCat}_${sanitizedItem}`;
+}

@@ -408,7 +408,7 @@ func (a *Adapter) createTable() {
 		panic(err)
 	}
 
-	err = a.engine.Sync2(new(CapabilityCheckRecord))
+	err = a.engine.Sync2(new(ReportComment))
 	if err != nil {
 		panic(err)
 	}

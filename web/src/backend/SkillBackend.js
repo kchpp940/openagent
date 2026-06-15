@@ -120,35 +120,3 @@ export function installMarketplaceSkill(item) {
     body: JSON.stringify(item),
   }).then(res => Setting.handleFetchResponse(res));
 }
-
-export function checkSkillCapability(skill) {
-  const newSkill = Setting.deepCopy(skill);
-  return fetch(`${Setting.ServerUrl}/api/check-skill-capability`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newSkill),
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function getSkillCapabilityRecord(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-skill-capability-record?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}
-
-export function runSkillCapabilityCheck(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/run-skill-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
-}

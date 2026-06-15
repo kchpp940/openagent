@@ -15,7 +15,7 @@
 import React from "react";
 import {Link} from "react-router-dom";
 import Loading from "./common/Loading";
-import {Alert, Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag} from "antd";
+import {Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag} from "antd";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
@@ -56,8 +56,6 @@ class StoreEditPage extends React.Component {
       isNewStore: props.location?.state?.isNewStore || false,
       ownerUsers: [],
       ownerUsersLoading: false,
-      capabilityBlocked: null,
-      capabilityWarnings: null,
     };
   }
 
@@ -320,40 +318,6 @@ class StoreEditPage extends React.Component {
 
     return (
       <div>
-        {this.state.capabilityBlocked && this.state.capabilityBlocked.length > 0 && (
-          <Alert
-            type="error"
-            showIcon
-            closable
-            style={{marginBottom: 16}}
-            message={i18next.t("capability:Store blocked by failed capabilities").split(":")[0]}
-            description={
-              <ul style={{margin: 0, paddingLeft: 16}}>
-                {this.state.capabilityBlocked.map((v, i) => (
-                  <li key={i}><Tag color="red">{v.kind}</Tag> <strong>{v.name}</strong> — {v.reason}</li>
-                ))}
-              </ul>
-            }
-            onClose={() => this.setState({capabilityBlocked: null})}
-          />
-        )}
-        {this.state.capabilityWarnings && this.state.capabilityWarnings.length > 0 && (
-          <Alert
-            type="warning"
-            showIcon
-            closable
-            style={{marginBottom: 16}}
-            message={i18next.t("capability:Some tools skipped due to availability issues")}
-            description={
-              <ul style={{margin: 0, paddingLeft: 16}}>
-                {this.state.capabilityWarnings.map((v, i) => (
-                  <li key={i}><Tag color="orange">{v.kind}</Tag> <strong>{v.name}</strong> — {v.reason}</li>
-                ))}
-              </ul>
-            }
-            onClose={() => this.setState({capabilityWarnings: null})}
-          />
-        )}
         <div style={{marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"}}>
           <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("store:Edit Store")}</span>
           <div style={{display: "flex", gap: "8px", marginRight: "4px"}}>
@@ -923,19 +887,11 @@ class StoreEditPage extends React.Component {
       store = storeParam;
     }
 
-    this.setState({capabilityBlocked: null, capabilityWarnings: null});
-
     store.fileTree = undefined;
     StoreBackend.updateStore(this.state.owner, this.state.storeName, store)
       .then((res) => {
         if (res.status === "ok") {
-          const warnings = res.data?.warnings;
-          if (warnings && warnings.length > 0) {
-            this.setState({capabilityWarnings: warnings});
-            Setting.showMessage("warning", i18next.t("capability:Store capability warnings").replace("%s", warnings.map(w => `${w.kind}: ${w.name}`).join(", ")));
-          } else {
-            Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          }
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             storeName: this.state.store.name,
             isNewStore: false,
@@ -947,11 +903,6 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
-          const blocked = res.data?.blocked;
-          const warnings = res.data?.warnings;
-          if (blocked && blocked.length > 0) {
-            this.setState({capabilityBlocked: blocked, capabilityWarnings: warnings});
-          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

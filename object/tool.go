@@ -49,9 +49,6 @@ type Tool struct {
 	PromptExamples []string `xorm:"mediumtext" json:"promptExamples"`
 
 	State string `xorm:"varchar(100)" json:"state"`
-
-	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
-	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (t *Tool) GetId() string {

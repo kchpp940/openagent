@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -128,9 +127,6 @@ func (c *ApiController) UpdateTool() {
 		c.ResponseError(err.Error())
 		return
 	}
-	if success {
-		object.AsyncTriggerToolCapabilityCheck(&t, c.GetAcceptLanguage())
-	}
 
 	c.ResponseOk(success)
 }
@@ -155,9 +151,6 @@ func (c *ApiController) AddTool() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
-	}
-	if success {
-		object.AsyncTriggerToolCapabilityCheck(&t, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(success)
@@ -209,82 +202,4 @@ func (c *ApiController) TestTool() {
 	}
 
 	c.ResponseOk(result)
-}
-
-// CheckToolCapability
-// @Title CheckToolCapability
-// @Tag Tool API
-// @Description run capability checks on a tool configuration
-// @Param body body object.Tool true "The tool configuration to check"
-// @Success 200 {object} object.CapabilityCheckResult The capability check result
-// @router /check-tool-capability [post]
-func (c *ApiController) CheckToolCapability() {
-	var t object.Tool
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	checker := object.NewToolCapabilityChecker(&t)
-	result := checker.Check(c.Ctx.Request.Context(), c.GetAcceptLanguage())
-	c.ResponseOk(result)
-}
-
-// GetToolCapabilityRecord
-// @Title GetToolCapabilityRecord
-// @Tag Tool API
-// @Description get the latest persisted capability check record for a tool
-// @Param id query string true "The tool id (owner/name)"
-// @Success 200 {object} object.CapabilityAvailability The capability availability info
-// @router /get-tool-capability-record [get]
-func (c *ApiController) GetToolCapabilityRecord() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	t, err := object.GetToolByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if t == nil {
-		c.ResponseError(fmt.Sprintf("tool: %s not found", name))
-		return
-	}
-
-	avail, err := object.GetToolCapabilityAvailability(t)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
-}
-
-// RunToolCapabilityCheck
-// @Title RunToolCapabilityCheck
-// @Tag Tool API
-// @Description run capability check on a saved tool and persist the result
-// @Param id query string true "The tool id (owner/name)"
-// @Success 200 {object} object.CapabilityAvailability The capability availability info
-// @router /run-tool-capability-check [post]
-func (c *ApiController) RunToolCapabilityCheck() {
-	id := c.Input().Get("id")
-	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-
-	t, err := object.GetToolByOwnerAndName(owner, name)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if t == nil {
-		c.ResponseError(fmt.Sprintf("tool: %s not found", name))
-		return
-	}
-
-	avail, err := object.RunToolCapabilityCheck(t, c.GetAcceptLanguage())
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(avail)
 }

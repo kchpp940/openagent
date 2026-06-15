@@ -18,11 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/conf"
-	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
@@ -229,53 +227,11 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
-	lang := c.GetAcceptLanguage()
-	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if len(blocked) > 0 {
-		names := make([]string, 0, len(blocked))
-		for _, v := range blocked {
-			names = append(names, fmt.Sprintf("[%s] %s (%s)", v.Kind, v.Name, v.Reason))
-		}
-		statusSummary := formatBlockedStatusSummary(blocked)
-		c.Data["json"] = Response{
-			Status: "error",
-			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by capability checks"), statusSummary, strings.Join(names, "; ")),
-			Data: map[string]interface{}{
-				"blocked":  blocked,
-				"warnings": warnings,
-			},
-		}
-		c.ServeJSON()
-		return
-	}
-
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
-
-	if len(warnings) > 0 {
-		names := make([]string, 0, len(warnings))
-		for _, v := range warnings {
-			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
-		}
-		c.Data["json"] = Response{
-			Status: "ok",
-			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
-			Data: map[string]interface{}{
-				"success":  success,
-				"warnings": warnings,
-			},
-		}
-		c.ServeJSON()
-		return
-	}
-	_ = lang
 
 	if !oldStore.IsDefault && store.IsDefault {
 		stores, err := object.GetStores(store.Owner)
@@ -346,53 +302,11 @@ func (c *ApiController) AddStore() {
 		}
 	}
 
-	lang := c.GetAcceptLanguage()
-	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if len(blocked) > 0 {
-		names := make([]string, 0, len(blocked))
-		for _, v := range blocked {
-			names = append(names, fmt.Sprintf("[%s] %s (%s)", v.Kind, v.Name, v.Reason))
-		}
-		statusSummary := formatBlockedStatusSummary(blocked)
-		c.Data["json"] = Response{
-			Status: "error",
-			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store blocked by capability checks"), statusSummary, strings.Join(names, "; ")),
-			Data: map[string]interface{}{
-				"blocked":  blocked,
-				"warnings": warnings,
-			},
-		}
-		c.ServeJSON()
-		return
-	}
-
 	success, err := object.AddStore(&store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
-
-	if len(warnings) > 0 {
-		names := make([]string, 0, len(warnings))
-		for _, v := range warnings {
-			names = append(names, fmt.Sprintf("[%s] %s", v.Kind, v.Name))
-		}
-		c.Data["json"] = Response{
-			Status: "ok",
-			Msg:    fmt.Sprintf(i18n.Translate(lang, "capability:Store capability warnings"), strings.Join(names, ", ")),
-			Data: map[string]interface{}{
-				"success":  success,
-				"warnings": warnings,
-			},
-		}
-		c.ServeJSON()
-		return
-	}
-	_ = lang
 
 	c.ResponseOk(success)
 }
@@ -584,41 +498,4 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
-}
-
-// CheckStoreCapability validates a store's referenced servers/skills/tools
-// and returns any failed (blocking) and warning violations.
-// @Title CheckStoreCapability
-// @Tag Store API
-// @Param body body object.Store true "The store to validate"
-// @Success 200 {object} object. The Response object
-// @router /check-store-capability [post]
-func (c *ApiController) CheckStoreCapability() {
-	var store object.Store
-	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &store); err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	lang := c.GetAcceptLanguage()
-	blocked, warnings, err := object.ValidateStoreCapabilities(&store, lang)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	c.ResponseOk(map[string]interface{}{
-		"blocked":  blocked,
-		"warnings": warnings,
-	})
-}
-
-func formatBlockedStatusSummary(blocked []object.CapabilityViolation) string {
-	seen := map[string]bool{}
-	var statuses []string
-	for _, v := range blocked {
-		if !seen[v.Status] {
-			seen[v.Status] = true
-			statuses = append(statuses, v.Status)
-		}
-	}
-	return strings.Join(statuses, ", ")
 }

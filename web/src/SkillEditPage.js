@@ -14,7 +14,6 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 import {Button, Card, Col, Collapse, Input, Row, Select, Space, Tag, Typography} from "antd";
 import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
@@ -37,7 +36,6 @@ class SkillEditPage extends React.Component {
       skill: null,
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
-      capabilityCheckKey: 0,
     };
   }
 
@@ -247,17 +245,6 @@ class SkillEditPage extends React.Component {
             )}
           </Row>
         </Card>
-
-        <CapabilityCheckPanel
-          recordFn={SkillBackend.getSkillCapabilityRecord}
-          recordParams={[skill.owner || "admin", skill.name]}
-          runCheckFn={SkillBackend.runSkillCapabilityCheck}
-          runCheckParams={[skill.owner || "admin", skill.name]}
-          title={i18next.t("capability:Check availability")}
-          description={i18next.t("capability:Check availability desc")}
-          triggerKey={this.state.capabilityCheckKey}
-          autoRun={false}
-        />
       </div>
     );
   }
@@ -270,29 +257,13 @@ class SkillEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({
             skillName: this.state.skill.name,
-            originalSkill: Setting.deepCopy(this.state.skill),
             isNewSkill: false,
-            capabilityCheckKey: this.state.capabilityCheckKey + 1,
           });
-
-          const owner = this.state.skill.owner || "admin";
-          const name = this.state.skill.name;
-          SkillBackend.runSkillCapabilityCheck(owner, name)
-            .then((checkRes) => {
-              if (checkRes.status === "ok") {
-                this.setState((prevState) => ({
-                  skill: {
-                    ...prevState.skill,
-                    latestCapabilityStatus: checkRes.data?.status,
-                    latestCheckedAt: checkRes.data?.checkedAt,
-                  },
-                  capabilityCheckKey: prevState.capabilityCheckKey + 1,
-                }));
-              }
-            });
 
           if (exitAfterSave) {
             this.props.history.push("/skills");
+          } else {
+            this.props.history.push(`/skills/${this.state.skill.name}`);
           }
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
