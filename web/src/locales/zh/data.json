@@ -988,6 +988,7 @@
     "Skipped": "跳过",
     "Not checked": "未检查",
     "Checking...": "检查中...",
+    "Pending": "待检查",
     "passed": "通过",
     "failed": "失败",
     "warnings": "警告",

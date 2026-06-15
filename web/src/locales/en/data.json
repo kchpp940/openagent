@@ -988,6 +988,7 @@
     "Skipped": "Skipped",
     "Not checked": "Not checked",
     "Checking...": "Checking...",
+    "Pending": "Pending",
     "passed": "passed",
     "failed": "failed",
     "warnings": "warnings",

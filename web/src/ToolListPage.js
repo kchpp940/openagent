@@ -165,27 +165,35 @@ class ToolListPage extends BaseListPage {
     });
   };
 
-  getCapabilityStatusBadge = (toolName) => {
-    const result = this.state.capabilityResults[toolName];
+  getCapabilityStatusBadge = (tool) => {
+    const toolName = tool.name;
     const isChecking = this.state.checkingTools[toolName];
+    const frontendResult = this.state.capabilityResults[toolName];
 
     if (isChecking) {
       return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
     }
 
-    if (!result) {
+    let status;
+    if (frontendResult) {
+      status = frontendResult.overallStatus;
+    } else if (tool.latestCapabilityStatus) {
+      status = tool.latestCapabilityStatus;
+    } else {
       return <Badge status="default" text={i18next.t("capability:Not checked")} />;
     }
 
-    switch (result.overallStatus) {
+    switch (status) {
       case "passed":
         return <Badge status="success" text={i18next.t("capability:Passed")} />;
       case "failed":
         return <Badge status="error" text={i18next.t("capability:Failed")} />;
       case "warning":
         return <Badge status="warning" text={i18next.t("capability:Warning")} />;
+      case "pending":
+        return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
       default:
-        return <Badge status="default" text={result.overallStatus} />;
+        return <Badge status="default" text={status} />;
     }
   };
 
@@ -262,7 +270,7 @@ class ToolListPage extends BaseListPage {
         dataIndex: "capability",
         key: "capability",
         width: "130px",
-        render: (_, record) => this.getCapabilityStatusBadge(record.name),
+        render: (_, record) => this.getCapabilityStatusBadge(record),
       },
       {
         title: i18next.t("general:Action"),

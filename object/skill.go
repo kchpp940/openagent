@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/tool"
@@ -61,6 +62,9 @@ type Skill struct {
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
 	State string `xorm:"varchar(100)" json:"state"`
+
+	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (s *Skill) GetId() string {
@@ -314,17 +318,32 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 		return false, nil
 	}
 
+	s.LatestCapabilityStatus = string(CapabilityStatusPending)
+	s.LatestCheckedAt = time.Now().Format(time.RFC3339)
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(s)
 	if err != nil {
 		return false, err
 	}
+
+	go func(skill *Skill) {
+		CheckSkillCapability(skill, "en")
+	}(s)
+
 	return true, nil
 }
 
 func AddSkill(s *Skill) (bool, error) {
+	s.LatestCapabilityStatus = string(CapabilityStatusPending)
+	s.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(s)
 	if err != nil {
 		return false, err
+	}
+	if affected > 0 {
+		go func(skill *Skill) {
+			CheckSkillCapability(skill, "en")
+		}(s)
 	}
 	return affected != 0, nil
 }
@@ -543,8 +562,13 @@ func CheckSkillCapability(s *Skill, lang string) *CapabilityCheckResult {
 	result.AddCheck(checkSkillReferences(s))
 	result.AddCheck(checkSkillToolRegistration(s))
 	result.AddCheck(checkSkillToolSchema(s))
+	result.AddCheck(checkSkillAgentSchemaIntegration(s))
 	result.AddCheck(checkSkillDryRun(s))
 	result.AddCheck(checkSkillState(s))
+
+	if s.Owner != "" && s.Name != "" {
+		_ = UpdateSkillCapabilityStatus(s, result)
+	}
 
 	return result
 }
@@ -693,6 +717,56 @@ func checkSkillToolSchema(s *Skill) *CapabilityCheckItem {
 	return PassedCheck(name, desc,
 		fmt.Sprintf("load_skill tool schema is valid (type=%s, properties=%d, required=%d)",
 			inputSchema.Type, len(inputSchema.Properties), len(inputSchema.Required)))
+}
+
+func checkSkillAgentSchemaIntegration(s *Skill) *CapabilityCheckItem {
+	name := "agent_schema_integration"
+	desc := "Check if skill integrates correctly into agent's tool schema pipeline"
+
+	if s.Name == "" {
+		return SkippedCheck(name, desc, "Skipped: skill name is empty")
+	}
+
+	mockStore := &Store{
+		Owner:  s.Owner,
+		Name:   "capability_check_mock",
+		Skills: []string{s.Name},
+	}
+
+	reg := buildMergedBuiltinRegistry(mockStore, s.Owner, "capability_check", "en")
+	if reg == nil {
+		return FailedCheck(name, desc,
+			"Failed to build merged builtin registry for agent",
+			"Check skill configuration and agent integration code",
+		)
+	}
+
+	tools := reg.GetToolsAsProtocolTools()
+	if len(tools) == 0 {
+		return FailedCheck(name, desc,
+			"No tools generated from agent schema pipeline",
+			"Skill may not be properly integrated into agent's tool building pipeline",
+		)
+	}
+
+	var loadSkillTool *protocol.Tool
+	for _, t := range tools {
+		if t.Name == "load_skill" {
+			loadSkillTool = t
+			break
+		}
+	}
+
+	if loadSkillTool == nil {
+		return FailedCheck(name, desc,
+			"load_skill tool not found in agent's generated tool schema",
+			"Skill may not be properly registered in the agent tool pipeline",
+		)
+	}
+
+	return PassedCheck(name, desc,
+		fmt.Sprintf("Skill integrates correctly into agent schema pipeline (%d total tools, load_skill verified)",
+			len(tools)))
 }
 
 func checkSkillDryRun(s *Skill) *CapabilityCheckItem {

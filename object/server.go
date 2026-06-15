@@ -51,6 +51,9 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
+
+	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (s *Server) GetId() string {
@@ -110,9 +113,16 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 }
 
 func AddServer(server *Server) (bool, error) {
+	server.LatestCapabilityStatus = string(CapabilityStatusPending)
+	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(server)
 	if err != nil {
 		return false, err
+	}
+	if affected > 0 {
+		go func(s *Server) {
+			CheckServerCapability(s)
+		}(server)
 	}
 	return affected != 0, nil
 }
@@ -131,10 +141,18 @@ func UpdateServer(id string, server *Server) (bool, error) {
 		server.Token = oldServer.Token
 	}
 
+	server.LatestCapabilityStatus = string(CapabilityStatusPending)
+	server.LatestCheckedAt = time.Now().Format(time.RFC3339)
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
 		return false, err
 	}
+
+	go func(s *Server) {
+		CheckServerCapability(s)
+	}(server)
+
 	return true, nil
 }
 
@@ -337,6 +355,10 @@ func CheckServerCapability(s *Server) *CapabilityCheckResult {
 	result.AddCheck(checkMcpToolList(s))
 	result.AddCheck(checkMcpToolSchema(s))
 	result.AddCheck(checkMcpDryRun(s))
+
+	if s.Owner != "" && s.Name != "" {
+		_ = UpdateServerCapabilityStatus(s, result)
+	}
 
 	return result
 }

@@ -499,3 +499,36 @@ func (c *ApiController) AddSharedStore() {
 
 	c.ResponseOk(newStore)
 }
+
+// ValidateStoreTools
+// @Title ValidateStoreTools
+// @Tag Store API
+// @Description validate store tools capability and return warnings
+// @Param body body object.Store true "The store to validate"
+// @Success 200 {object} controllers.Response The Response object
+// @router /validate-store-tools [post]
+func (c *ApiController) ValidateStoreTools() {
+	var store object.Store
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if store.Owner == "" {
+		store.Owner = c.GetSessionUsername()
+	}
+
+	if store.Owner == "" {
+		c.ResponseError("owner is required")
+		return
+	}
+
+	warnings, err := object.ValidateStoreTools(&store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(warnings)
+}

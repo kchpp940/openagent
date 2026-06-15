@@ -169,27 +169,35 @@ class SkillListPage extends BaseListPage {
     });
   };
 
-  getSkillCapabilityStatusBadge = (skillName) => {
-    const result = this.state.capabilityResults[skillName];
+  getSkillCapabilityStatusBadge = (skill) => {
+    const skillName = skill.name;
     const isChecking = this.state.checkingSkills[skillName];
+    const frontendResult = this.state.capabilityResults[skillName];
 
     if (isChecking) {
       return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
     }
 
-    if (!result) {
+    let status;
+    if (frontendResult) {
+      status = frontendResult.overallStatus;
+    } else if (skill.latestCapabilityStatus) {
+      status = skill.latestCapabilityStatus;
+    } else {
       return <Badge status="default" text={i18next.t("capability:Not checked")} />;
     }
 
-    switch (result.overallStatus) {
+    switch (status) {
       case "passed":
         return <Badge status="success" text={i18next.t("capability:Passed")} />;
       case "failed":
         return <Badge status="error" text={i18next.t("capability:Failed")} />;
       case "warning":
         return <Badge status="warning" text={i18next.t("capability:Warning")} />;
+      case "pending":
+        return <Badge status="processing" text={i18next.t("capability:Checking...")} />;
       default:
-        return <Badge status="default" text={result.overallStatus} />;
+        return <Badge status="default" text={status} />;
     }
   };
 
@@ -266,7 +274,7 @@ class SkillListPage extends BaseListPage {
         dataIndex: "capability",
         key: "capability",
         width: "130px",
-        render: (_, record) => this.getSkillCapabilityStatusBadge(record.name),
+        render: (_, record) => this.getSkillCapabilityStatusBadge(record),
       },
       {
         title: i18next.t("general:Action"),

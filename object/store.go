@@ -352,6 +352,124 @@ func DeleteStore(store *Store) (bool, error) {
 	return affected != 0, nil
 }
 
+type CapabilityWarning struct {
+	Type    string `json:"type"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func ValidateStoreTools(store *Store) ([]*CapabilityWarning, error) {
+	var warnings []*CapabilityWarning
+
+	if store == nil {
+		return warnings, nil
+	}
+
+	if store.McpServer != "" {
+		server, err := getServer(store.Owner, store.McpServer)
+		if err != nil {
+			return warnings, err
+		}
+		if server != nil && server.LatestCapabilityStatus == string(CapabilityStatusFailed) {
+			warnings = append(warnings, &CapabilityWarning{
+				Type:    "server",
+				Name:    server.Name,
+				Status:  server.LatestCapabilityStatus,
+				Message: "MCP server capability check failed, tools may not work properly",
+			})
+		} else if server != nil && server.LatestCapabilityStatus == string(CapabilityStatusPending) {
+			warnings = append(warnings, &CapabilityWarning{
+				Type:    "server",
+				Name:    server.Name,
+				Status:  server.LatestCapabilityStatus,
+				Message: "MCP server capability check is in progress",
+			})
+		} else if server != nil && server.LatestCapabilityStatus == "" {
+			warnings = append(warnings, &CapabilityWarning{
+				Type:    "server",
+				Name:    server.Name,
+				Status:  "unknown",
+				Message: "MCP server capability has not been checked yet",
+			})
+		}
+	}
+
+	if len(store.Skills) > 0 {
+		allSkills := store.Skills
+		if len(allSkills) == 1 && allSkills[0] == "All" {
+			skills, err := GetSkills(store.Owner)
+			if err != nil {
+				return warnings, err
+			}
+			allSkills = make([]string, 0, len(skills))
+			for _, s := range skills {
+				allSkills = append(allSkills, s.Name)
+			}
+		}
+
+		for _, skillName := range allSkills {
+			skill, err := getSkill(store.Owner, skillName)
+			if err != nil {
+				continue
+			}
+			if skill != nil && skill.LatestCapabilityStatus == string(CapabilityStatusFailed) {
+				warnings = append(warnings, &CapabilityWarning{
+					Type:    "skill",
+					Name:    skill.Name,
+					Status:  skill.LatestCapabilityStatus,
+					Message: "Skill capability check failed, load_skill tool may not work",
+				})
+			} else if skill != nil && skill.LatestCapabilityStatus == "" {
+				warnings = append(warnings, &CapabilityWarning{
+					Type:    "skill",
+					Name:    skill.Name,
+					Status:  "unknown",
+					Message: "Skill capability has not been checked yet",
+				})
+			}
+		}
+	}
+
+	if len(store.Tools) > 0 {
+		allTools := store.Tools
+		if len(allTools) == 1 && allTools[0] == "All" {
+			tools, err := GetTools(store.Owner)
+			if err != nil {
+				return warnings, err
+			}
+			allTools = make([]string, 0, len(tools))
+			for _, t := range tools {
+				allTools = append(allTools, t.Name)
+			}
+		}
+
+		for _, toolName := range allTools {
+			tool, err := getTool(store.Owner, toolName)
+			if err != nil {
+				continue
+			}
+			if tool != nil && tool.LatestCapabilityStatus == string(CapabilityStatusFailed) {
+				warnings = append(warnings, &CapabilityWarning{
+					Type:    "tool",
+					Name:    tool.Name,
+					Status:  tool.LatestCapabilityStatus,
+					Message: "Tool capability check failed, the tool may not work properly",
+				})
+			} else if tool != nil && tool.LatestCapabilityStatus == "" {
+				warnings = append(warnings, &CapabilityWarning{
+					Type:    "tool",
+					Name:    tool.Name,
+					Status:  "unknown",
+					Message: "Tool capability has not been checked yet",
+				})
+			}
+		}
+	}
+
+	return warnings, nil
+}
+
 func (store *Store) GetId() string {
 	return fmt.Sprintf("%s/%s", store.Owner, store.Name)
 }

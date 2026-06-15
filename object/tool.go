@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/auth"
@@ -52,6 +53,9 @@ type Tool struct {
 	PromptExamples []string `xorm:"mediumtext" json:"promptExamples"`
 
 	State string `xorm:"varchar(100)" json:"state"`
+
+	LatestCapabilityStatus string `xorm:"varchar(50)" json:"latestCapabilityStatus"`
+	LatestCheckedAt        string `xorm:"varchar(100)" json:"latestCheckedAt"`
 }
 
 func (t *Tool) GetId() string {
@@ -162,17 +166,32 @@ func UpdateTool(id string, t *Tool) (bool, error) {
 		t.ClientSecret = toolDb.ClientSecret
 	}
 
+	t.LatestCapabilityStatus = string(CapabilityStatusPending)
+	t.LatestCheckedAt = time.Now().Format(time.RFC3339)
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(t)
 	if err != nil {
 		return false, err
 	}
+
+	go func(tool *Tool) {
+		CheckToolCapability(tool, "en")
+	}(t)
+
 	return true, nil
 }
 
 func AddTool(t *Tool) (bool, error) {
+	t.LatestCapabilityStatus = string(CapabilityStatusPending)
+	t.LatestCheckedAt = time.Now().Format(time.RFC3339)
 	affected, err := adapter.engine.Insert(t)
 	if err != nil {
 		return false, err
+	}
+	if affected > 0 {
+		go func(tool *Tool) {
+			CheckToolCapability(tool, "en")
+		}(t)
 	}
 	return affected != 0, nil
 }
@@ -285,8 +304,13 @@ func CheckToolCapability(t *Tool, lang string) *CapabilityCheckResult {
 	result.AddCheck(checkToolInitialization(t, lang))
 	result.AddCheck(checkToolRegistration(t, lang))
 	result.AddCheck(checkToolSchemas(t, lang))
+	result.AddCheck(checkToolAgentSchemaIntegration(t, lang))
 	result.AddCheck(checkToolDryRun(t, lang))
 	result.AddCheck(checkToolState(t))
+
+	if t.Owner != "" && t.Name != "" {
+		_ = UpdateToolCapabilityStatus(t, result)
+	}
 
 	return result
 }
@@ -549,6 +573,55 @@ func checkToolSchemas(t *Tool, lang string) *CapabilityCheckItem {
 
 	return PassedCheck(name, desc,
 		fmt.Sprintf("%d built-in tool(s) available, %d with schemas", len(builtinTools), validSchemas),
+	)
+}
+
+func checkToolAgentSchemaIntegration(t *Tool, lang string) *CapabilityCheckItem {
+	name := "agent_schema_integration"
+	desc := "Check if tool integrates correctly into agent's tool schema pipeline"
+
+	if t.Name == "" || t.Owner == "" {
+		return SkippedCheck(name, desc, "Skipped: tool name or owner is empty")
+	}
+
+	config := getToolConfig(t)
+	tp, err := tool.New(config, lang)
+	if err != nil {
+		return SkippedCheck(name, desc, "Skipped: tool initialization failed")
+	}
+
+	builtinTools := tp.BuiltinTools()
+	if len(builtinTools) == 0 {
+		return WarningCheck(name, desc,
+			"No built-in tools to register in agent pipeline",
+			"This tool type may not expose any callable functions",
+		)
+	}
+
+	reg := tool.NewToolRegistry()
+	for _, bt := range builtinTools {
+		wrapped := wrapSnapshotBuiltin(t.Owner, bt)
+		wrapped = wrapGeneratedResourceBuiltin(wrapped, t.Owner, t.Owner, "capability_check")
+		reg.RegisterTool(wrapped)
+	}
+
+	protocolTools := reg.GetToolsAsProtocolTools()
+	if len(protocolTools) == 0 {
+		return FailedCheck(name, desc,
+			"No protocol tools generated from agent schema pipeline",
+			"Tool may not be properly integrated into agent's tool building pipeline",
+		)
+	}
+
+	if len(protocolTools) != len(builtinTools) {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("Only %d/%d tools were converted to agent protocol tools", len(protocolTools), len(builtinTools)),
+			"Some tool schemas may be invalid after agent pipeline wrapping",
+		)
+	}
+
+	return PassedCheck(name, desc,
+		fmt.Sprintf("Tool integrates correctly into agent schema pipeline (%d tools registered)", len(protocolTools)),
 	)
 }
 

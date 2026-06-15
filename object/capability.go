@@ -14,7 +14,10 @@
 
 package object
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type CapabilityStatus string
 
@@ -23,6 +26,7 @@ const (
 	CapabilityStatusFailed  CapabilityStatus = "failed"
 	CapabilityStatusWarning CapabilityStatus = "warning"
 	CapabilityStatusSkipped CapabilityStatus = "skipped"
+	CapabilityStatusPending CapabilityStatus = "pending"
 )
 
 type CapabilityCheckItem struct {
@@ -132,4 +136,37 @@ func FormatCheckSummary(result *CapabilityCheckResult) string {
 	return fmt.Sprintf("%d/%d passed, %d failed, %d warnings, %d skipped",
 		result.PassedChecks, result.TotalChecks,
 		result.FailedChecks, result.WarningChecks, result.SkippedChecks)
+}
+
+func UpdateServerCapabilityStatus(server *Server, result *CapabilityCheckResult) error {
+	if server == nil {
+		return nil
+	}
+	now := time.Now().Format(time.RFC3339)
+	server.LatestCapabilityStatus = string(result.OverallStatus)
+	server.LatestCheckedAt = now
+	_, err := adapter.engine.ID(server.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(server)
+	return err
+}
+
+func UpdateSkillCapabilityStatus(skill *Skill, result *CapabilityCheckResult) error {
+	if skill == nil {
+		return nil
+	}
+	now := time.Now().Format(time.RFC3339)
+	skill.LatestCapabilityStatus = string(result.OverallStatus)
+	skill.LatestCheckedAt = now
+	_, err := adapter.engine.ID(skill.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(skill)
+	return err
+}
+
+func UpdateToolCapabilityStatus(tool *Tool, result *CapabilityCheckResult) error {
+	if tool == nil {
+		return nil
+	}
+	now := time.Now().Format(time.RFC3339)
+	tool.LatestCapabilityStatus = string(result.OverallStatus)
+	tool.LatestCheckedAt = now
+	_, err := adapter.engine.ID(tool.GetId()).Cols("latest_capability_status", "latest_checked_at").Update(tool)
+	return err
 }

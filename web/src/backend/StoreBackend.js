@@ -133,3 +133,15 @@ export function addSharedStore(owner, name, targetUser) {
     body: JSON.stringify({owner, name, targetUser}),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function validateStoreTools(store) {
+  const newStore = Setting.deepCopy(store);
+  return fetch(`${Setting.ServerUrl}/api/validate-store-tools`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newStore),
+  }).then(res => Setting.handleFetchResponse(res));
+}
