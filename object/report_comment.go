@@ -44,6 +44,8 @@ type ReportComment struct {
 	TaskOwner         string `xorm:"varchar(100) notnull index" json:"taskOwner"`
 	TaskName          string `xorm:"varchar(100) notnull index" json:"taskName"`
 
+	AnchorId       string `xorm:"varchar(64) index" json:"anchorId"`
+	ItemAnchorId   string `xorm:"varchar(64) index" json:"itemAnchorId"`
 	AnchorCategory string `xorm:"varchar(100) index" json:"anchorCategory"`
 	AnchorItem     string `xorm:"varchar(200) index" json:"anchorItem"`
 	AnchorField    string `xorm:"varchar(300) index" json:"anchorField"`
@@ -67,6 +69,8 @@ type ReportComment struct {
 }
 
 type TaskAnchor struct {
+	AnchorId          string `json:"anchorId"`
+	ItemAnchorId      string `json:"itemAnchorId"`
 	AnchorType        string `json:"anchorType"`
 	AnchorField       string `json:"anchorField"`
 	AnchorItem        string `json:"anchorItem"`
@@ -137,6 +141,31 @@ func GenerateFieldAnchor(categoryName string, itemName string, field string, con
 	return "F:" + itemAnchor + "::" + field
 }
 
+func shortIdFromLong(s string) string {
+	if s == "" {
+		return ""
+	}
+	h := sha1.Sum([]byte(s))
+	return hex.EncodeToString(h[:])[:12]
+}
+
+func GenerateAnchorId(anchorType string, anchorCategory string, anchorItem string, anchorField string) string {
+	switch anchorType {
+	case AnchorTypeCategory:
+		return "A:C:" + shortIdFromLong(anchorCategory)
+	case AnchorTypeItem:
+		return "A:I:" + shortIdFromLong(anchorItem)
+	case AnchorTypeField:
+		return "A:F:" + shortIdFromLong(anchorField)
+	default:
+		return "A:X:" + shortIdFromLong(anchorCategory+"||"+anchorItem+"::"+anchorField)
+	}
+}
+
+func GenerateItemAnchorIdFromNames(categoryName string, itemName string) string {
+	return "A:I:" + shortIdFromLong(GenerateItemAnchor(categoryName, itemName))
+}
+
 func (r *ReportComment) FillAnchorsFromTask() {
 	if r.CategoryName != "" && r.AnchorCategory == "" {
 		r.AnchorCategory = GenerateCategoryAnchor(r.CategoryName)
@@ -156,6 +185,18 @@ func (r *ReportComment) FillAnchorsFromTask() {
 	if r.StableItemKey == "" && r.CategoryName != "" && r.ItemName != "" {
 		r.StableItemKey = GenerateStableItemKey(r.CategoryName, r.ItemName, 0, 0)
 	}
+	if r.ItemAnchorId == "" && r.AnchorItem != "" {
+		r.ItemAnchorId = GenerateAnchorId(AnchorTypeItem, r.AnchorCategory, r.AnchorItem, "")
+	} else if r.ItemAnchorId == "" && r.CategoryName != "" && r.ItemName != "" {
+		r.ItemAnchorId = GenerateItemAnchorIdFromNames(r.CategoryName, r.ItemName)
+	}
+	if r.AnchorId == "" && r.AnchorField != "" {
+		r.AnchorId = GenerateAnchorId(AnchorTypeField, r.AnchorCategory, r.AnchorItem, r.AnchorField)
+	} else if r.AnchorId == "" && r.AnchorItem != "" {
+		r.AnchorId = GenerateAnchorId(AnchorTypeItem, r.AnchorCategory, r.AnchorItem, "")
+	} else if r.AnchorId == "" && r.AnchorCategory != "" {
+		r.AnchorId = GenerateAnchorId(AnchorTypeCategory, r.AnchorCategory, "", "")
+	}
 }
 
 func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
@@ -169,7 +210,10 @@ func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
 		}
 		catAnchor := GenerateCategoryAnchor(cat.Name)
 		stableCatKey := GenerateStableCategoryKey(cat.Name, ci)
+		catAnchorId := GenerateAnchorId(AnchorTypeCategory, catAnchor, "", "")
 		res.Anchors = append(res.Anchors, &TaskAnchor{
+			AnchorId:          catAnchorId,
+			ItemAnchorId:      "",
 			AnchorType:        AnchorTypeCategory,
 			AnchorCategory:    catAnchor,
 			StableCategoryKey: stableCatKey,
@@ -182,6 +226,7 @@ func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
 			}
 			itemAnchor := GenerateItemAnchor(cat.Name, item.Name)
 			stableItemKey := GenerateStableItemKey(cat.Name, item.Name, ci, ii)
+			itemAnchorId := GenerateAnchorId(AnchorTypeItem, catAnchor, itemAnchor, "")
 
 			addField := func(field string, content interface{}) {
 				contentStr := ""
@@ -197,7 +242,10 @@ func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
 				}
 				fieldAnchor := GenerateFieldAnchor(cat.Name, item.Name, field, contentStr)
 				ch := shortContentHash(contentStr)
+				fieldAnchorId := GenerateAnchorId(AnchorTypeField, catAnchor, itemAnchor, fieldAnchor)
 				res.Anchors = append(res.Anchors, &TaskAnchor{
+					AnchorId:          fieldAnchorId,
+					ItemAnchorId:      itemAnchorId,
 					AnchorType:        AnchorTypeField,
 					AnchorCategory:    catAnchor,
 					AnchorItem:        itemAnchor,
@@ -215,6 +263,8 @@ func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
 			}
 
 			res.Anchors = append(res.Anchors, &TaskAnchor{
+				AnchorId:          itemAnchorId,
+				ItemAnchorId:      itemAnchorId,
 				AnchorType:        AnchorTypeItem,
 				AnchorCategory:    catAnchor,
 				AnchorItem:        itemAnchor,
@@ -233,6 +283,19 @@ func BuildTaskResultAnchors(result *TaskResult) *TaskAnchorsResult {
 		}
 	}
 	return res
+}
+
+func FindAnchorById(anchors []*TaskAnchor, anchorId string) *TaskAnchor {
+	anchorId = strings.TrimSpace(anchorId)
+	if anchorId == "" {
+		return nil
+	}
+	for _, a := range anchors {
+		if a != nil && a.AnchorId == anchorId {
+			return a
+		}
+	}
+	return nil
 }
 
 func findBestAnchorByFallback(anchors []*TaskAnchor, comment *ReportComment) *TaskAnchor {
@@ -276,7 +339,11 @@ func GroupCommentsWithAnchors(comments []*ReportComment, anchors []*TaskAnchor) 
 	result := map[string][]*ReportComment{}
 	anchorByField := map[string]*TaskAnchor{}
 	anchorByItem := map[string]*TaskAnchor{}
+	anchorById := map[string]*TaskAnchor{}
 	for _, a := range anchors {
+		if a.AnchorId != "" {
+			anchorById[a.AnchorId] = a
+		}
 		if a.AnchorType == AnchorTypeField && a.AnchorField != "" {
 			anchorByField[a.AnchorField] = a
 		}
@@ -288,24 +355,40 @@ func GroupCommentsWithAnchors(comments []*ReportComment, anchors []*TaskAnchor) 
 	}
 	for _, c := range comments {
 		var matchedKey string
-		if c.AnchorField != "" {
-			if a, ok := anchorByField[c.AnchorField]; ok {
-				matchedKey = a.StableItemKey
+		if c.AnchorId != "" {
+			if a, ok := anchorById[c.AnchorId]; ok && a.ItemAnchorId != "" {
+				matchedKey = a.ItemAnchorId
+			}
+		}
+		if matchedKey == "" && c.ItemAnchorId != "" {
+			matchedKey = c.ItemAnchorId
+		}
+		if matchedKey == "" && c.AnchorField != "" {
+			if a, ok := anchorByField[c.AnchorField]; ok && a.ItemAnchorId != "" {
+				matchedKey = a.ItemAnchorId
 			}
 		}
 		if matchedKey == "" && c.AnchorItem != "" {
-			if a, ok := anchorByItem[c.AnchorItem]; ok {
-				matchedKey = a.StableItemKey
+			if a, ok := anchorByItem[c.AnchorItem]; ok && a.ItemAnchorId != "" {
+				matchedKey = a.ItemAnchorId
 			}
 		}
 		if matchedKey == "" {
 			best := findBestAnchorByFallback(anchors, c)
-			if best != nil {
-				matchedKey = best.StableItemKey
+			if best != nil && best.ItemAnchorId != "" {
+				matchedKey = best.ItemAnchorId
+			} else if best != nil && best.AnchorType == AnchorTypeItem {
+				if best.ItemAnchorId != "" {
+					matchedKey = best.ItemAnchorId
+				} else if best.AnchorId != "" {
+					matchedKey = best.AnchorId
+				}
 			}
 		}
 		if matchedKey == "" {
-			if c.StableItemKey != "" {
+			if c.ItemAnchorId != "" {
+				matchedKey = c.ItemAnchorId
+			} else if c.StableItemKey != "" {
 				matchedKey = c.StableItemKey
 			} else {
 				matchedKey = "__orphan__"

@@ -313,21 +313,10 @@ func (c *ApiController) AnalyzeTask() {
 }
 
 type addReportCommentRequest struct {
-	TaskOwner         string `json:"taskOwner"`
-	TaskName          string `json:"taskName"`
-	AnchorField       string `json:"anchorField"`
-	AnchorItem        string `json:"anchorItem"`
-	AnchorCategory    string `json:"anchorCategory"`
-	ContentHash       string `json:"contentHash"`
-	StableCategoryKey string `json:"stableCategoryKey"`
-	StableItemKey     string `json:"stableItemKey"`
-	CategoryName      string `json:"categoryName"`
-	ItemName          string `json:"itemName"`
-	ReferencedField   string `json:"referencedField"`
-	ReferencedContent string `json:"referencedContent"`
-	Content           string `json:"content"`
-	CategoryIndex     int    `json:"categoryIndex"`
-	ItemIndex         int    `json:"itemIndex"`
+	TaskOwner string `json:"taskOwner"`
+	TaskName  string `json:"taskName"`
+	AnchorId  string `json:"anchorId"`
+	Content   string `json:"content"`
 }
 
 type updateReportCommentRequest struct {
@@ -396,8 +385,8 @@ func (c *ApiController) GetTaskResultAnchors() {
 // AddReportComment
 // @Title AddReportComment
 // @Tag Task API
-// @Description add a report comment for a task analysis item
-// @Param body body addReportCommentRequest true "The report comment details"
+// @Description add a report comment, anchor resolved server-side from latest task analysis result
+// @Param body body addReportCommentRequest true "taskOwner, taskName, anchorId, content only"
 // @Success 200 {object} controllers.Response The Response object
 // @router /add-report-comment [post]
 func (c *ApiController) AddReportComment() {
@@ -408,8 +397,15 @@ func (c *ApiController) AddReportComment() {
 		return
 	}
 
-	if strings.TrimSpace(req.Content) == "" {
+	req.AnchorId = strings.TrimSpace(req.AnchorId)
+	req.Content = strings.TrimSpace(req.Content)
+
+	if req.Content == "" {
 		c.ResponseError(c.T("general:Content cannot be empty"))
+		return
+	}
+	if req.AnchorId == "" {
+		c.ResponseError(c.T("task:Anchor ID is required"))
 		return
 	}
 
@@ -419,27 +415,71 @@ func (c *ApiController) AddReportComment() {
 		return
 	}
 
+	result, _, err := object.GetLatestTaskResult(req.TaskOwner, req.TaskName)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if result == nil {
+		c.ResponseError(c.T("task:No task analysis result available to bind comment"))
+		return
+	}
+
+	anchors := object.BuildTaskResultAnchors(result)
+	matched := object.FindAnchorById(anchors.Anchors, req.AnchorId)
+	if matched == nil {
+		c.ResponseError(c.T("task:The specified anchor does not exist in the latest analysis"))
+		return
+	}
+
+	var itemAnchor *object.TaskAnchor
+	if matched.AnchorType == object.AnchorTypeField || matched.AnchorType == object.AnchorTypeItem {
+		if matched.ItemAnchorId != "" && matched.AnchorId != matched.ItemAnchorId {
+			itemAnchor = object.FindAnchorById(anchors.Anchors, matched.ItemAnchorId)
+		} else if matched.AnchorType == object.AnchorTypeItem {
+			itemAnchor = matched
+		} else {
+			itemAnchor = matched
+		}
+	} else {
+		itemAnchor = nil
+	}
+
 	username := c.GetSessionUsername()
+	itemAnchorId := ""
+	if itemAnchor != nil {
+		itemAnchorId = itemAnchor.AnchorId
+	} else if matched.ItemAnchorId != "" {
+		itemAnchorId = matched.ItemAnchorId
+	}
 
 	comment := &object.ReportComment{
 		Owner:             task.Owner,
 		TaskOwner:         req.TaskOwner,
 		TaskName:          req.TaskName,
-		AnchorCategory:    strings.TrimSpace(req.AnchorCategory),
-		AnchorItem:        strings.TrimSpace(req.AnchorItem),
-		AnchorField:       strings.TrimSpace(req.AnchorField),
-		ContentHash:       strings.TrimSpace(req.ContentHash),
-		StableCategoryKey: strings.TrimSpace(req.StableCategoryKey),
-		StableItemKey:     strings.TrimSpace(req.StableItemKey),
-		CategoryName:      req.CategoryName,
-		ItemName:          req.ItemName,
-		ReferencedField:   req.ReferencedField,
-		ReferencedContent: req.ReferencedContent,
-		Content:           strings.TrimSpace(req.Content),
+		AnchorId:          matched.AnchorId,
+		ItemAnchorId:      itemAnchorId,
+		AnchorCategory:    matched.AnchorCategory,
+		AnchorItem:        matched.AnchorItem,
+		AnchorField:       matched.AnchorField,
+		ContentHash:       matched.ContentHash,
+		StableCategoryKey: matched.StableCategoryKey,
+		StableItemKey:     matched.StableItemKey,
+		CategoryName:      matched.CategoryName,
+		ItemName:          matched.ItemName,
+		ReferencedField:   matched.ReferencedField,
+		ReferencedContent: matched.ReferencedContent,
+		Content:           req.Content,
 		Author:            username,
 	}
 
-	_, _ = req.CategoryIndex, req.ItemIndex
+	comment.FillAnchorsFromTask()
+	if comment.AnchorId == "" {
+		comment.AnchorId = matched.AnchorId
+	}
+	if comment.ItemAnchorId == "" && itemAnchorId != "" {
+		comment.ItemAnchorId = itemAnchorId
+	}
 
 	affected, err := object.AddReportComment(comment)
 	if err != nil {

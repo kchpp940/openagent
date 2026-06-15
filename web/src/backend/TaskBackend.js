@@ -115,7 +115,7 @@ export function getTaskResultAnchors(taskId) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
-export function addReportComment(payload) {
+export function addReportComment(taskOwner, taskName, anchorId, content) {
   return fetch(`${Setting.ServerUrl}/api/add-report-comment`, {
     method: "POST",
     credentials: "include",
@@ -123,7 +123,12 @@ export function addReportComment(payload) {
       "Accept-Language": Setting.getAcceptLanguage(),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      taskOwner,
+      taskName,
+      anchorId,
+      content,
+    }),
   }).then(res => Setting.handleFetchResponse(res));
 }
 
