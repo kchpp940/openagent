@@ -137,14 +137,14 @@ func (c *ApiController) GetTask() {
 // @Tag Task API
 // @Description update task
 // @Param id query string true "The id (owner/name) of the task"
-// @Param body body object.TaskResponse true "The details of the task"
+// @Param body body object.TaskUpdateRequest true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /update-task [post]
 func (c *ApiController) UpdateTask() {
 	id := c.Input().Get("id")
 
-	var taskResp object.TaskResponse
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &taskResp)
+	var req object.TaskUpdateRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -160,7 +160,6 @@ func (c *ApiController) UpdateTask() {
 		return
 	}
 
-	// Check ownership for non-admins
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
 		if existingTask.Owner != username {
@@ -169,7 +168,7 @@ func (c *ApiController) UpdateTask() {
 		}
 	}
 
-	task := object.ParseTaskFromResponse(&taskResp)
+	task := object.ParseTaskFromUpdateRequest(&req)
 	success, err := object.UpdateTask(id, task)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -183,18 +182,18 @@ func (c *ApiController) UpdateTask() {
 // @Title AddTask
 // @Tag Task API
 // @Description add task
-// @Param body body object.TaskResponse true "The details of the task"
+// @Param body body object.TaskCreateRequest true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /add-task [post]
 func (c *ApiController) AddTask() {
-	var taskResp object.TaskResponse
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &taskResp)
+	var req object.TaskCreateRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	task := object.ParseTaskFromResponse(&taskResp)
+	task := object.ParseTaskFromCreateRequest(&req)
 	success, err := object.AddTask(task)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -208,22 +207,20 @@ func (c *ApiController) AddTask() {
 // @Title DeleteTask
 // @Tag Task API
 // @Description delete task
-// @Param body body object.TaskResponse true "The details of the task"
+// @Param body body object.TaskDeleteRequest true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-task [post]
 func (c *ApiController) DeleteTask() {
-	var taskResp object.TaskResponse
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &taskResp)
+	var req object.TaskDeleteRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	// Check ownership for non-admins
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
-		// Fetch task from database to verify ownership
-		id := taskResp.Owner + "/" + taskResp.Name
+		id := req.Owner + "/" + req.Name
 		existingTask, err := object.GetTask(id)
 		if err != nil {
 			c.ResponseError(err.Error())
@@ -239,7 +236,7 @@ func (c *ApiController) DeleteTask() {
 		}
 	}
 
-	task := object.ParseTaskFromResponse(&taskResp)
+	task := object.ParseTaskFromDeleteRequest(&req)
 	success, err := object.DeleteTask(task)
 	if err != nil {
 		c.ResponseError(err.Error())

@@ -132,6 +132,65 @@ type TaskResponse struct {
 	AnalyzeError         string `json:"analyzeError"`
 }
 
+type TaskUpdateRequest struct {
+	Owner       string   `json:"owner"`
+	Name        string   `json:"name"`
+	CreatedTime string   `json:"createdTime"`
+	DisplayName string   `json:"displayName"`
+	Provider    string   `json:"provider"`
+	Type        string   `json:"type"`
+	Subject     string   `json:"subject"`
+	Topic       string   `json:"topic"`
+	Activity    string   `json:"activity"`
+	Grade       string   `json:"grade"`
+	Path        string   `json:"path"`
+	Scale       string   `json:"scale"`
+	Example     string   `json:"example"`
+	Labels      []string `json:"labels"`
+	Log         string   `json:"log"`
+
+	DocumentUrl          string `json:"documentUrl"`
+	DocumentText         string `json:"documentText"`
+	DocumentFileType     string `json:"documentFileType"`
+	DocumentParseStatus  string `json:"documentParseStatus"`
+	DocumentError        string `json:"documentError"`
+	DocumentTypeSource   string `json:"documentTypeSource"`
+	DocumentTypeConflict bool   `json:"documentTypeConflict"`
+	DocumentConflictMsg  string `json:"documentConflictMsg"`
+}
+
+type TaskCreateRequest struct {
+	Owner       string   `json:"owner"`
+	Name        string   `json:"name"`
+	CreatedTime string   `json:"createdTime"`
+	DisplayName string   `json:"displayName"`
+	Provider    string   `json:"provider"`
+	Type        string   `json:"type"`
+	Subject     string   `json:"subject"`
+	Topic       string   `json:"topic"`
+	Activity    string   `json:"activity"`
+	Grade       string   `json:"grade"`
+	Path        string   `json:"path"`
+	Scale       string   `json:"scale"`
+	Example     string   `json:"example"`
+	Labels      []string `json:"labels"`
+	Log         string   `json:"log"`
+
+	DocumentUrl          string `json:"documentUrl"`
+	DocumentText         string `json:"documentText"`
+	DocumentFileType     string `json:"documentFileType"`
+	DocumentParseStatus  string `json:"documentParseStatus"`
+	DocumentError        string `json:"documentError"`
+	DocumentTypeSource   string `json:"documentTypeSource"`
+	DocumentTypeConflict bool   `json:"documentTypeConflict"`
+	DocumentConflictMsg  string `json:"documentConflictMsg"`
+}
+
+type TaskDeleteRequest struct {
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+}
+
 func (task *Task) IsDocumentReadyForAnalysis() bool {
 	if task == nil {
 		return false
@@ -325,29 +384,26 @@ func BuildTaskResponses(tasks []*Task) []*TaskResponse {
 	return resp
 }
 
-func ParseTaskFromResponse(r *TaskResponse) *Task {
+func ParseTaskFromUpdateRequest(r *TaskUpdateRequest) *Task {
 	if r == nil {
 		return nil
 	}
 	return &Task{
-		Owner:       r.Owner,
-		Name:        r.Name,
-		CreatedTime: r.CreatedTime,
-		DisplayName: r.DisplayName,
-		Provider:    r.Provider,
-		Type:        r.Type,
-		Subject:     r.Subject,
-		Topic:       r.Topic,
-		Score:       r.Score,
-		Activity:    r.Activity,
-		Grade:       r.Grade,
-		Path:        r.Path,
-		Scale:       r.Scale,
-		Example:     r.Example,
-		Labels:      r.Labels,
-		Log:         r.Log,
-		Result:      SerializeTaskAnalysisReport(r.Result),
-
+		Owner:                r.Owner,
+		Name:                 r.Name,
+		CreatedTime:          r.CreatedTime,
+		DisplayName:          r.DisplayName,
+		Provider:             r.Provider,
+		Type:                 r.Type,
+		Subject:              r.Subject,
+		Topic:                r.Topic,
+		Activity:             r.Activity,
+		Grade:                r.Grade,
+		Path:                 r.Path,
+		Scale:                r.Scale,
+		Example:              r.Example,
+		Labels:               r.Labels,
+		Log:                  r.Log,
 		DocumentUrl:          r.DocumentUrl,
 		DocumentText:         r.DocumentText,
 		DocumentFileType:     r.DocumentFileType,
@@ -356,7 +412,47 @@ func ParseTaskFromResponse(r *TaskResponse) *Task {
 		DocumentTypeSource:   r.DocumentTypeSource,
 		DocumentTypeConflict: r.DocumentTypeConflict,
 		DocumentConflictMsg:  r.DocumentConflictMsg,
-		AnalyzeError:         r.AnalyzeError,
+	}
+}
+
+func ParseTaskFromCreateRequest(r *TaskCreateRequest) *Task {
+	if r == nil {
+		return nil
+	}
+	return &Task{
+		Owner:                r.Owner,
+		Name:                 r.Name,
+		CreatedTime:          r.CreatedTime,
+		DisplayName:          r.DisplayName,
+		Provider:             r.Provider,
+		Type:                 r.Type,
+		Subject:              r.Subject,
+		Topic:                r.Topic,
+		Activity:             r.Activity,
+		Grade:                r.Grade,
+		Path:                 r.Path,
+		Scale:                r.Scale,
+		Example:              r.Example,
+		Labels:               r.Labels,
+		Log:                  r.Log,
+		DocumentUrl:          r.DocumentUrl,
+		DocumentText:         r.DocumentText,
+		DocumentFileType:     r.DocumentFileType,
+		DocumentParseStatus:  r.DocumentParseStatus,
+		DocumentError:        r.DocumentError,
+		DocumentTypeSource:   r.DocumentTypeSource,
+		DocumentTypeConflict: r.DocumentTypeConflict,
+		DocumentConflictMsg:  r.DocumentConflictMsg,
+	}
+}
+
+func ParseTaskFromDeleteRequest(r *TaskDeleteRequest) *Task {
+	if r == nil {
+		return nil
+	}
+	return &Task{
+		Owner: r.Owner,
+		Name:  r.Name,
 	}
 }
 
@@ -468,6 +564,8 @@ func UpdateTask(id string, task *Task) (bool, error) {
 	}
 
 	task.Result = existing.Result
+	task.Score = existing.Score
+	task.AnalyzeError = existing.AnalyzeError
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(task)
 	if err != nil {
