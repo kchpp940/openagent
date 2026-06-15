@@ -259,3 +259,32 @@ func (c *ApiController) GetToolCapabilityRecord() {
 	}
 	c.ResponseOk(avail)
 }
+
+// RunToolCapabilityCheck
+// @Title RunToolCapabilityCheck
+// @Tag Tool API
+// @Description run capability check on a saved tool and persist the result
+// @Param id query string true "The tool id (owner/name)"
+// @Success 200 {object} object.CapabilityAvailability The capability availability info
+// @router /run-tool-capability-check [post]
+func (c *ApiController) RunToolCapabilityCheck() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	t, err := object.GetToolByOwnerAndName(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if t == nil {
+		c.ResponseError(fmt.Sprintf("tool: %s not found", name))
+		return
+	}
+
+	avail, err := object.RunToolCapabilityCheck(t, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(avail)
+}

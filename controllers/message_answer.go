@@ -331,7 +331,11 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		webSearchEnabled = questionMessage.WebSearchEnabled
 	}
 	origin := getOriginFromHost(host)
-	mcpToolSet = object.MergeMcpTools(mcpToolSet, store, webSearchEnabled, message.User, origin, lang)
+	mcpToolSet, _, err = object.MergeMcpTools(mcpToolSet, store, webSearchEnabled, message.User, origin, lang)
+	if err != nil {
+		responseErrorStream(message, err.Error())
+		return
+	}
 
 	var knowledge []*model.RawMessage
 	var vectorScores []object.VectorScore

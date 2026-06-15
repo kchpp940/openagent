@@ -30,22 +30,59 @@ class ToolListPage extends BaseListPage {
       ...this.state,
       capabilityCheckKeys: {},
       expandedRowKeys: [],
+      checkingTools: {},
     };
   }
 
-  triggerCapabilityCheck = (toolName) => {
+  triggerCapabilityCheck = (record) => {
+    const toolName = record.name;
+    const owner = record.owner || "admin";
+
     this.setState((prevState) => {
       const newExpandedKeys = prevState.expandedRowKeys.includes(toolName)
         ? prevState.expandedRowKeys
         : [...prevState.expandedRowKeys, toolName];
       return {
-        capabilityCheckKeys: {
-          ...prevState.capabilityCheckKeys,
-          [toolName]: (prevState.capabilityCheckKeys[toolName] || 0) + 1,
-        },
+        checkingTools: { ...prevState.checkingTools, [toolName]: true },
         expandedRowKeys: newExpandedKeys,
       };
     });
+
+    ToolBackend.runToolCapabilityCheck(owner, toolName)
+      .then((res) => {
+        if (res.status === "ok") {
+          const avail = res.data;
+          this.setState((prevState) => {
+            const newData = prevState.data.map((item) => {
+              if (item.name === toolName) {
+                return {
+                  ...item,
+                  latestCapabilityStatus: avail.status,
+                  latestCheckedAt: avail.checkedAt,
+                };
+              }
+              return item;
+            });
+            return {
+              data: newData,
+              capabilityCheckKeys: {
+                ...prevState.capabilityCheckKeys,
+                [toolName]: (prevState.capabilityCheckKeys[toolName] || 0) + 1,
+              },
+            };
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to run")}: ${res.msg}`);
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState((prevState) => ({
+          checkingTools: { ...prevState.checkingTools, [toolName]: false },
+        }));
+      });
   };
 
   handleExpandedRowsChange = (expandedRowKeys) => {
@@ -233,9 +270,10 @@ class ToolListPage extends BaseListPage {
               type="text"
               size="small"
               icon={<SafetyCertificateOutlined />}
+              loading={!!this.state.checkingTools[record.name]}
               style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
               onClick={() => {
-                this.triggerCapabilityCheck(record.name);
+                this.triggerCapabilityCheck(record);
               }}
             />
           </Tooltip>

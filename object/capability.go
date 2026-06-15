@@ -875,6 +875,109 @@ func AsyncTriggerToolCapabilityCheck(t *Tool, lang string) {
 	}()
 }
 
+// RunServerCapabilityCheck runs a capability check synchronously, persists the
+// full result, and returns the updated availability info.
+func RunServerCapabilityCheck(s *Server, lang string) (*CapabilityAvailability, error) {
+	if s == nil || s.Owner == "" || s.Name == "" {
+		return nil, fmt.Errorf("invalid server")
+	}
+	configHash := ComputeServerConfigHash(s)
+	owner := s.Owner
+	name := s.Name
+
+	_ = SetCapabilityPending(owner, name, "server", configHash)
+	_ = SaveServerCapabilityStatus(owner, name, CapabilityStatusPending)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result := NewServerCapabilityChecker(s).Check(ctx, lang)
+	if result == nil {
+		return nil, fmt.Errorf("check returned nil result")
+	}
+
+	if err := PersistCapabilityCheckResult(owner, name, "server", configHash, result); err != nil {
+		return nil, err
+	}
+	if err := SaveServerCapabilityStatus(owner, name, result.OverallStatus); err != nil {
+		return nil, err
+	}
+
+	// Refresh server entity with updated status
+	updated, err := GetServerByOwnerAndName(owner, name)
+	if err != nil || updated == nil {
+		return nil, fmt.Errorf("failed to refresh server after check")
+	}
+	return GetServerCapabilityAvailability(updated)
+}
+
+// RunSkillCapabilityCheck runs a capability check synchronously, persists the
+// full result, and returns the updated availability info.
+func RunSkillCapabilityCheck(s *Skill, lang string) (*CapabilityAvailability, error) {
+	if s == nil || s.Owner == "" || s.Name == "" {
+		return nil, fmt.Errorf("invalid skill")
+	}
+	configHash := ComputeSkillConfigHash(s)
+	owner := s.Owner
+	name := s.Name
+
+	_ = SetCapabilityPending(owner, name, "skill", configHash)
+	_ = SaveSkillCapabilityStatus(owner, name, CapabilityStatusPending)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	result := NewSkillCapabilityChecker(s).Check(ctx, lang)
+	if result == nil {
+		return nil, fmt.Errorf("check returned nil result")
+	}
+
+	if err := PersistCapabilityCheckResult(owner, name, "skill", configHash, result); err != nil {
+		return nil, err
+	}
+	if err := SaveSkillCapabilityStatus(owner, name, result.OverallStatus); err != nil {
+		return nil, err
+	}
+
+	updated, err := GetSkillByOwnerAndName(owner, name)
+	if err != nil || updated == nil {
+		return nil, fmt.Errorf("failed to refresh skill after check")
+	}
+	return GetSkillCapabilityAvailability(updated)
+}
+
+// RunToolCapabilityCheck runs a capability check synchronously, persists the
+// full result, and returns the updated availability info.
+func RunToolCapabilityCheck(t *Tool, lang string) (*CapabilityAvailability, error) {
+	if t == nil || t.Owner == "" || t.Name == "" {
+		return nil, fmt.Errorf("invalid tool")
+	}
+	configHash := ComputeToolConfigHash(t)
+	owner := t.Owner
+	name := t.Name
+
+	_ = SetCapabilityPending(owner, name, "tool", configHash)
+	_ = SaveToolCapabilityStatus(owner, name, CapabilityStatusPending)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result := NewToolCapabilityChecker(t).Check(ctx, lang)
+	if result == nil {
+		return nil, fmt.Errorf("check returned nil result")
+	}
+
+	if err := PersistCapabilityCheckResult(owner, name, "tool", configHash, result); err != nil {
+		return nil, err
+	}
+	if err := SaveToolCapabilityStatus(owner, name, result.OverallStatus); err != nil {
+		return nil, err
+	}
+
+	updated, err := GetToolByOwnerAndName(owner, name)
+	if err != nil || updated == nil {
+		return nil, fmt.Errorf("failed to refresh tool after check")
+	}
+	return GetToolCapabilityAvailability(updated)
+}
+
 // IsCapabilityFailed returns true if the stored status equals "fail".
 // Empty / unknown status is treated as not-failed (lenient).
 func IsCapabilityFailed(status string) bool {

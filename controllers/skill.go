@@ -254,3 +254,32 @@ func (c *ApiController) GetSkillCapabilityRecord() {
 	}
 	c.ResponseOk(avail)
 }
+
+// RunSkillCapabilityCheck
+// @Title RunSkillCapabilityCheck
+// @Tag Skill API
+// @Description run capability check on a saved skill and persist the result
+// @Param id query string true "The skill id (owner/name)"
+// @Success 200 {object} object.CapabilityAvailability The capability availability info
+// @router /run-skill-capability-check [post]
+func (c *ApiController) RunSkillCapabilityCheck() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	skill, err := object.GetSkillByOwnerAndName(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if skill == nil {
+		c.ResponseError(fmt.Sprintf("skill: %s not found", name))
+		return
+	}
+
+	avail, err := object.RunSkillCapabilityCheck(skill, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(avail)
+}

@@ -337,3 +337,32 @@ func (c *ApiController) GetServerCapabilityRecord() {
 	}
 	c.ResponseOk(avail)
 }
+
+// RunServerCapabilityCheck
+// @Title RunServerCapabilityCheck
+// @Tag Server API
+// @Description run capability check on a saved server and persist the result
+// @Param id query string true "The server id (owner/name)"
+// @Success 200 {object} object.CapabilityAvailability The capability availability info
+// @router /run-server-capability-check [post]
+func (c *ApiController) RunServerCapabilityCheck() {
+	id := c.Input().Get("id")
+	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
+
+	server, err := object.GetServerByOwnerAndName(owner, name)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if server == nil {
+		c.ResponseError(fmt.Sprintf("server: %s not found", name))
+		return
+	}
+
+	avail, err := object.RunServerCapabilityCheck(server, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(avail)
+}

@@ -113,3 +113,13 @@ export function getToolCapabilityRecord(owner, name) {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function runToolCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-tool-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

@@ -132,3 +132,23 @@ export function checkSkillCapability(skill) {
     body: JSON.stringify(newSkill),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getSkillCapabilityRecord(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/get-skill-capability-record?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function runSkillCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-skill-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

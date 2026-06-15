@@ -15,16 +15,21 @@
 package object
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/util"
 )
 
-func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.ToolRegistry {
+func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) (*tool.ToolRegistry, []CapabilityViolation, []CapabilityViolation) {
 	reg := tool.NewToolRegistry()
+	var blocked []CapabilityViolation
+	var warnings []CapabilityViolation
 
 	if store == nil {
-		return reg
+		return reg, nil, nil
 	}
 
 	if len(store.Skills) > 0 {
@@ -34,13 +39,24 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 	}
 
 	toolNames := store.Tools
-	if len(toolNames) == 1 && toolNames[0] == "All" {
+	isAllMode := len(toolNames) == 1 && toolNames[0] == "All"
+	if isAllMode {
 		allTools, err := GetTools(store.Owner)
 		if err == nil {
 			toolNames = make([]string, 0, len(allTools))
 			for _, t := range allTools {
 				avail, err := GetToolCapabilityAvailability(t)
-				if err != nil || avail.IsBlocked() {
+				if err != nil {
+					continue
+				}
+				if avail.IsBlocked() {
+					warnings = append(warnings, CapabilityViolation{
+						Kind:       "tool",
+						Name:       t.Name,
+						Status:     string(avail.Status),
+						Reason:     avail.BlockReason(lang),
+						ConfigHash: avail.ConfigHash,
+					})
 					continue
 				}
 				toolNames = append(toolNames, t.Name)
@@ -49,13 +65,36 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 	}
 
 	for _, tname := range toolNames {
+		if isAllMode && tname == "All" {
+			continue
+		}
 		id := util.GetIdFromOwnerAndName(store.Owner, tname)
 		t, err := GetTool(id)
 		if err != nil || t == nil {
 			continue
 		}
 		avail, err := GetToolCapabilityAvailability(t)
-		if err != nil || avail.IsBlocked() {
+		if err != nil {
+			continue
+		}
+		if avail.IsBlocked() {
+			if isAllMode {
+				warnings = append(warnings, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     string(avail.Status),
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			} else {
+				blocked = append(blocked, CapabilityViolation{
+					Kind:       "tool",
+					Name:       t.Name,
+					Status:     string(avail.Status),
+					Reason:     avail.BlockReason(lang),
+					ConfigHash: avail.ConfigHash,
+				})
+			}
 			continue
 		}
 		tp, err := tool.New(getToolConfig(t), lang)
@@ -69,12 +108,14 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		}
 	}
 
-	return reg
+	return reg, blocked, warnings
 }
 
 // MergeMcpTools merges builtin tools (from the store's tool list) and the
 // web-search flag into an existing McpToolSet, creating one if needed.
-func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool, user, origin, lang string) *mcp.ToolSet {
+// Returns the tool set, a list of warning violations (from All-mode skips),
+// and an error if explicitly-selected tools are blocked.
+func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool, user, origin, lang string) (*mcp.ToolSet, []CapabilityViolation, error) {
 	if webSearchEnabled {
 		if mcpToolSet == nil {
 			mcpToolSet = &mcp.ToolSet{}
@@ -82,20 +123,32 @@ func MergeMcpTools(mcpToolSet *mcp.ToolSet, store *Store, webSearchEnabled bool,
 		mcpToolSet.WebSearchEnabled = true
 	}
 
-	reg := buildMergedBuiltinRegistry(store, user, origin, lang)
+	if store == nil {
+		return mcpToolSet, nil, nil
+	}
+
+	reg, blocked, warnings := buildMergedBuiltinRegistry(store, user, origin, lang)
+	if len(blocked) > 0 {
+		var names []string
+		for _, v := range blocked {
+			names = append(names, v.Name)
+		}
+		return nil, warnings, fmt.Errorf("some tools are unavailable: %s", strings.Join(names, ", "))
+	}
+
 	allTools := reg.GetToolsAsProtocolTools()
 	if len(allTools) == 0 {
-		return mcpToolSet
+		return mcpToolSet, warnings, nil
 	}
 
 	if mcpToolSet == nil {
 		return &mcp.ToolSet{
 			Tools:        allTools,
 			BuiltinTools: reg,
-		}
+		}, warnings, nil
 	}
 
 	mcpToolSet.Tools = append(mcpToolSet.Tools, allTools...)
 	mcpToolSet.BuiltinTools = reg
-	return mcpToolSet
+	return mcpToolSet, warnings, nil
 }
