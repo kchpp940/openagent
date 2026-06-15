@@ -247,6 +247,24 @@ func (c *ApiController) GetOnlineServers() {
 	c.ResponseOk(result)
 }
 
+// CheckServerCapability
+// @Title CheckServerCapability
+// @Tag Server API
+// @Description run capability checks on an MCP server and return structured results with fix suggestions
+// @Param body body object.Server true "The server configuration to check"
+// @Success 200 {object} object.CapabilityCheckResult The capability check result
+// @router /check-server-capability [post]
+func (c *ApiController) CheckServerCapability() {
+	var server object.Server
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &server); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result := object.CheckServerCapability(&server)
+	c.ResponseOk(result)
+}
+
 // SyncIntranetServers
 // @Title SyncIntranetServers
 // @Tag Server API

@@ -203,3 +203,21 @@ func (c *ApiController) TestTool() {
 
 	c.ResponseOk(result)
 }
+
+// CheckToolCapability
+// @Title CheckToolCapability
+// @Tag Tool API
+// @Description run capability checks on a tool and return structured results with fix suggestions
+// @Param body body object.Tool true "The tool configuration to check"
+// @Success 200 {object} object.CapabilityCheckResult The capability check result
+// @router /check-tool-capability [post]
+func (c *ApiController) CheckToolCapability() {
+	var t object.Tool
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &t); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result := object.CheckToolCapability(&t, c.GetAcceptLanguage())
+	c.ResponseOk(result)
+}

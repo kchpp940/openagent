@@ -114,3 +114,15 @@ export function syncIntranetServers(cidr, ports = [], paths = []) {
     body: JSON.stringify({cidr, ports, paths}),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function checkServerCapability(server) {
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/check-server-capability`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
+}

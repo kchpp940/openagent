@@ -325,3 +325,165 @@ func GetPaginationServers(owner string, offset, limit int, field, value, sortFie
 	}
 	return servers, nil
 }
+
+func CheckServerCapability(s *Server) *CapabilityCheckResult {
+	result := NewCapabilityCheckResult()
+
+	result.AddCheck(checkServerUrl(s))
+	result.AddCheck(checkMcpConnection(s))
+	result.AddCheck(checkMcpToolList(s))
+	result.AddCheck(checkMcpToolSchema(s))
+	result.AddCheck(checkMcpDryRun(s))
+
+	return result
+}
+
+func checkServerUrl(s *Server) *CapabilityCheckItem {
+	name := "server_url"
+	desc := "Check if server URL is configured"
+
+	if s.Url == "" {
+		return FailedCheck(name, desc,
+			"Server URL is empty",
+			"Please enter the MCP server URL in the configuration",
+		)
+	}
+
+	if !strings.HasPrefix(s.Url, "http://") && !strings.HasPrefix(s.Url, "https://") {
+		return FailedCheck(name, desc,
+			"Server URL must start with http:// or https://",
+			"Add the correct protocol prefix to the URL",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Server URL is configured: %s", s.Url))
+}
+
+func checkMcpConnection(s *Server) *CapabilityCheckItem {
+	name := "mcp_connection"
+	desc := "Check MCP server connection"
+
+	if s.Url == "" {
+		return SkippedCheck(name, desc, "Skipped: server URL is empty")
+	}
+
+	cli, err := mcp.NewClient(s.Url, s.Token)
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Failed to connect to MCP server: %v", err),
+			"Verify the server URL is correct and the server is running",
+		)
+	}
+	defer cli.Close()
+
+	return PassedCheck(name, desc, "Successfully connected to MCP server")
+}
+
+func checkMcpToolList(s *Server) *CapabilityCheckItem {
+	name := "tool_list"
+	desc := "Check if tool list can be fetched"
+
+	if s.Url == "" {
+		return SkippedCheck(name, desc, "Skipped: server URL is empty")
+	}
+
+	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Failed to fetch tool list: %v", err),
+			"Check if the MCP server is running and supports tools/list",
+		)
+	}
+
+	if len(tools) == 0 {
+		return WarningCheck(name, desc,
+			"No tools found on the server",
+			"The server may not expose any tools, or there may be a configuration issue",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Successfully fetched %d tools", len(tools)))
+}
+
+func checkMcpToolSchema(s *Server) *CapabilityCheckItem {
+	name := "tool_schema"
+	desc := "Check if tool schemas are valid"
+
+	if s.Url == "" {
+		return SkippedCheck(name, desc, "Skipped: server URL is empty")
+	}
+
+	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
+	if err != nil {
+		return SkippedCheck(name, desc, "Skipped: cannot fetch tool list")
+	}
+
+	if len(tools) == 0 {
+		return SkippedCheck(name, desc, "Skipped: no tools available")
+	}
+
+	validSchemas := 0
+	for _, t := range tools {
+		if t.InputSchema.Type != "" || len(t.InputSchema.Properties) > 0 {
+			validSchemas++
+		}
+	}
+
+	if validSchemas == 0 {
+		return WarningCheck(name, desc,
+			"No tools have input schemas defined",
+			"Tools may work without schemas, but schema validation is recommended",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("%d/%d tools have valid schemas", validSchemas, len(tools)))
+}
+
+func checkMcpDryRun(s *Server) *CapabilityCheckItem {
+	name := "dry_run"
+	desc := "Check if a dry-run tool call succeeds"
+
+	if s.Url == "" {
+		return SkippedCheck(name, desc, "Skipped: server URL is empty")
+	}
+
+	tools, err := mcp.GetToolsFromURL(s.Url, s.Token)
+	if err != nil {
+		return SkippedCheck(name, desc, "Skipped: cannot fetch tool list")
+	}
+
+	if len(tools) == 0 {
+		return SkippedCheck(name, desc, "Skipped: no tools available")
+	}
+
+	testTool := findNoArgTool(tools)
+	if testTool == nil {
+		return WarningCheck(name, desc,
+			"No zero-argument tool found for dry-run test",
+			"Add testContent configuration to test a specific tool",
+		)
+	}
+
+	_, err = mcp.CallTool(s.Url, s.Token, testTool.Name, map[string]interface{}{})
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Dry-run call to '%s' failed: %v", testTool.Name, err),
+			"Check tool permissions and server configuration",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Dry-run call to '%s' succeeded", testTool.Name))
+}
+
+func findNoArgTool(tools []*protocol.Tool) *protocol.Tool {
+	for _, t := range tools {
+		schema := t.InputSchema
+		if len(schema.Required) == 0 && len(schema.Properties) == 0 {
+			return t
+		}
+		if len(schema.Required) == 0 {
+			return t
+		}
+	}
+	return nil
+}

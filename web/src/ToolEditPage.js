@@ -19,6 +19,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
+import CapabilityCheckPanel from "./common/CapabilityCheckPanel";
 
 const {Option} = Select;
 
@@ -308,6 +309,17 @@ class ToolEditPage extends React.Component {
           </Card>
         )}
 
+        <Card size="small" title={renderCardTitle(i18next.t("capability:Availability Check"), i18next.t("capability:Verify tool desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <CapabilityCheckPanel
+            ref={(panel) => this.capabilityPanel = panel}
+            title={i18next.t("capability:Tool Capability Check")}
+            description={i18next.t("capability:Check if the tool is properly configured and functional")}
+            autoCheck={false}
+            checkTrigger={this.state.capabilityCheckTrigger}
+            onCheck={() => this.checkToolCapability()}
+          />
+        </Card>
+
         <Card size="small" title={renderCardTitle(i18next.t("general:Test"), i18next.t("general:Test desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <TestToolWidget
             tool={tool}
@@ -329,6 +341,7 @@ class ToolEditPage extends React.Component {
           this.setState({
             toolName: this.state.tool.name,
             isNewTool: false,
+            capabilityCheckTrigger: (this.state.capabilityCheckTrigger || 0) + 1,
           });
 
           if (exitAfterSave) {
@@ -343,6 +356,16 @@ class ToolEditPage extends React.Component {
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
+  }
+
+  async checkToolCapability() {
+    const tool = Setting.deepCopy(this.state.tool);
+    const res = await ToolBackend.checkToolCapability(tool);
+    if (res.status === "ok") {
+      return res.data;
+    } else {
+      throw new Error(res.msg || "Failed to check capability");
+    }
   }
 
   cancelToolEdit() {

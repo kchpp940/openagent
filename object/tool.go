@@ -270,3 +270,214 @@ func testToolWithLoader(t *Tool, lang string, loadTool func(owner string, name s
 	}
 	return output, nil
 }
+
+func CheckToolCapability(t *Tool, lang string) *CapabilityCheckResult {
+	result := NewCapabilityCheckResult()
+
+	result.AddCheck(checkToolBasicConfig(t))
+	result.AddCheck(checkToolTypeSupport(t))
+	result.AddCheck(checkToolRequiredConfig(t))
+	result.AddCheck(checkToolInitialization(t, lang))
+	result.AddCheck(checkToolSchemas(t, lang))
+	result.AddCheck(checkToolDryRun(t, lang))
+	result.AddCheck(checkToolState(t))
+
+	return result
+}
+
+func checkToolBasicConfig(t *Tool) *CapabilityCheckItem {
+	name := "basic_config"
+	desc := "Check basic tool configuration"
+
+	if t.Name == "" {
+		return FailedCheck(name, desc,
+			"Tool name is empty",
+			"Please provide a name for the tool",
+		)
+	}
+
+	if t.Type == "" {
+		return FailedCheck(name, desc,
+			"Tool type is empty",
+			"Please select a tool type",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Basic configuration is complete: %s (%s)", t.Name, t.Type))
+}
+
+func checkToolTypeSupport(t *Tool) *CapabilityCheckItem {
+	name := "type_support"
+	desc := "Check if tool type is supported"
+
+	supportedTypes := map[string]bool{
+		"time":           true,
+		"web_search":     true,
+		"shell":          true,
+		"local_file":     true,
+		"office":         true,
+		"web_fetch":      true,
+		"web_browser":    true,
+		"gui":            true,
+		"video_download": true,
+		"browser_use":    true,
+	}
+
+	if !supportedTypes[t.Type] {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Unsupported tool type: %s", t.Type),
+			"Choose a supported tool type from the dropdown",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Tool type '%s' is supported", t.Type))
+}
+
+func checkToolRequiredConfig(t *Tool) *CapabilityCheckItem {
+	name := "required_config"
+	desc := "Check required configuration for tool type"
+
+	missingFields := []string{}
+
+	switch t.Type {
+	case "web_search":
+		if t.SubType == "Google" {
+			if t.ClientId == "" {
+				missingFields = append(missingFields, "Search engine ID (cx)")
+			}
+			if t.ClientSecret == "" || t.ClientSecret == "***" {
+				missingFields = append(missingFields, "API key")
+			}
+		}
+	case "web_fetch", "web_browser", "browser_use":
+		// These tools work without extra config but may need provider URL
+	case "local_file":
+		// May need OCR endpoint but not strictly required
+	}
+
+	if len(missingFields) > 0 {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Missing required fields: %s", strings.Join(missingFields, ", ")),
+			fmt.Sprintf("Fill in the required configuration fields for %s tool", t.Type),
+		)
+	}
+
+	return PassedCheck(name, desc, "All required configuration is present")
+}
+
+func checkToolInitialization(t *Tool, lang string) *CapabilityCheckItem {
+	name := "initialization"
+	desc := "Check if tool can be initialized"
+
+	config := getToolConfig(t)
+	_, err := tool.New(config, lang)
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Failed to initialize tool: %v", err),
+			"Check tool configuration and dependencies",
+		)
+	}
+
+	return PassedCheck(name, desc, "Tool initialized successfully")
+}
+
+func checkToolSchemas(t *Tool, lang string) *CapabilityCheckItem {
+	name := "tool_schemas"
+	desc := "Check if tool schemas are valid"
+
+	config := getToolConfig(t)
+	tp, err := tool.New(config, lang)
+	if err != nil {
+		return SkippedCheck(name, desc, "Skipped: tool initialization failed")
+	}
+
+	builtinTools := tp.BuiltinTools()
+	if len(builtinTools) == 0 {
+		return WarningCheck(name, desc,
+			"No built-in tools found",
+			"This tool type may not expose any callable functions",
+		)
+	}
+
+	validSchemas := 0
+	for _, bt := range builtinTools {
+		if bt.GetInputSchema() != nil {
+			validSchemas++
+		}
+	}
+
+	return PassedCheck(name, desc,
+		fmt.Sprintf("%d built-in tool(s) available, %d with schemas", len(builtinTools), validSchemas),
+	)
+}
+
+func checkToolDryRun(t *Tool, lang string) *CapabilityCheckItem {
+	name := "dry_run"
+	desc := "Check if a dry-run tool call succeeds"
+
+	if strings.TrimSpace(t.TestContent) == "" {
+		return WarningCheck(name, desc,
+			"No test content configured",
+			"Add testContent with a valid tool name and arguments to run a dry-run test",
+		)
+	}
+
+	var payload struct {
+		Tool      string                 `json:"tool"`
+		Arguments map[string]interface{} `json:"arguments"`
+	}
+	if err := json.Unmarshal([]byte(t.TestContent), &payload); err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Invalid test content JSON: %v", err),
+			"Fix the testContent JSON format: {\"tool\":\"name\",\"arguments\":{}}",
+		)
+	}
+
+	if strings.TrimSpace(payload.Tool) == "" {
+		return FailedCheck(name, desc,
+			"Test content missing 'tool' field",
+			"Add the tool name to test in the testContent JSON",
+		)
+	}
+
+	result, err := TestTool(t, lang)
+	if err != nil {
+		return FailedCheck(name, desc,
+			fmt.Sprintf("Dry-run test failed: %v", err),
+			"Check tool configuration and test arguments",
+		)
+	}
+
+	if result == "" {
+		return WarningCheck(name, desc,
+			"Dry-run test returned empty result",
+			"The tool ran successfully but returned no output",
+		)
+	}
+
+	truncatedResult := result
+	if len(truncatedResult) > 100 {
+		truncatedResult = truncatedResult[:100] + "..."
+	}
+	return PassedCheck(name, desc, fmt.Sprintf("Dry-run test succeeded: %s", truncatedResult))
+}
+
+func checkToolState(t *Tool) *CapabilityCheckItem {
+	name := "tool_state"
+	desc := "Check tool state"
+
+	switch t.State {
+	case "Active":
+		return PassedCheck(name, desc, "Tool is active and ready to use")
+	case "Inactive":
+		return WarningCheck(name, desc,
+			"Tool is inactive",
+			"Set the state to 'Active' to enable this tool",
+		)
+	default:
+		return WarningCheck(name, desc,
+			fmt.Sprintf("Unknown tool state: %s", t.State),
+			"Use 'Active' or 'Inactive' state",
+		)
+	}
+}

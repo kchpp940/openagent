@@ -91,3 +91,15 @@ export function testTool(tool) {
     body: JSON.stringify(newTool),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function checkToolCapability(tool) {
+  const newTool = Setting.deepCopy(tool);
+  return fetch(`${Setting.ServerUrl}/api/check-tool-capability`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTool),
+  }).then(res => Setting.handleFetchResponse(res));
+}

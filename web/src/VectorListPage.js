@@ -20,7 +20,7 @@ import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as VectorBackend from "./backend/VectorBackend";
 import i18next from "i18next";
-import {DeleteOutlined, DiffOutlined, EditOutlined} from "@ant-design/icons";
+import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
 import Editor from "./common/Editor";
 
 class VectorListPage extends BaseListPage {
@@ -129,17 +129,6 @@ class VectorListPage extends BaseListPage {
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
-  }
-
-  viewVersionDiff() {
-    if (!this.state.fileFilter) {
-      return;
-    }
-
-    const firstVector = this.state.data[0];
-    if (firstVector) {
-      this.props.history.push(`/files/${firstVector.owner}/${encodeURIComponent(`${firstVector.store}_${this.state.fileFilter}`)}/diff`);
-    }
   }
 
   renderTable(vectors) {
@@ -304,17 +293,6 @@ class VectorListPage extends BaseListPage {
               {i18next.t("general:Vectors")}
               {this.state.fileFilter ? <span style={{marginLeft: "8px", color: "#888", fontWeight: "normal", fontSize: "13px"}}>({this.state.fileFilter})</span> : null}
               &nbsp;&nbsp;&nbsp;&nbsp;
-              {this.state.fileFilter && this.state.data.length > 0 && (
-                <Button
-                  type="default"
-                  size="small"
-                  icon={<DiffOutlined />}
-                  onClick={() => this.viewVersionDiff()}
-                  style={{marginRight: 8}}
-                >
-                  {i18next.t("file:Version Compare")}
-                </Button>
-              )}
               <Button type="primary" size="small" onClick={this.addVector.bind(this)}>{i18next.t("general:Add")}</Button>
               {this.state.selectedRowKeys.length > 0 && (
                 <Popconfirm title={`${i18next.t("general:Sure to delete")}: ${this.state.selectedRowKeys.length} ${i18next.t("general:items")} ?`} onConfirm={() => this.performBulkDelete(this.state.selectedRows, this.state.selectedRowKeys)} okText={i18next.t("general:OK")} cancelText={i18next.t("general:Cancel")}>

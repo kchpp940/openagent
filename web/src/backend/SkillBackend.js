@@ -120,3 +120,15 @@ export function installMarketplaceSkill(item) {
     body: JSON.stringify(item),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function checkSkillCapability(skill) {
+  const newSkill = Setting.deepCopy(skill);
+  return fetch(`${Setting.ServerUrl}/api/check-skill-capability`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newSkill),
+  }).then(res => Setting.handleFetchResponse(res));
+}

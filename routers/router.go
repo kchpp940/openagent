@@ -96,6 +96,7 @@ func initAPI() {
 	beego.Router("/api/sync-mcp-tool", &controllers.ApiController{}, "POST:SyncMcpTool")
 	beego.Router("/api/get-online-servers", &controllers.ApiController{}, "GET:GetOnlineServers")
 	beego.Router("/api/sync-intranet-servers", &controllers.ApiController{}, "POST:SyncIntranetServers")
+	beego.Router("/api/check-server-capability", &controllers.ApiController{}, "POST:CheckServerCapability")
 
 	beego.Router("/api/get-global-skills", &controllers.ApiController{}, "GET:GetGlobalSkills")
 	beego.Router("/api/get-skills", &controllers.ApiController{}, "GET:GetSkills")
@@ -107,6 +108,7 @@ func initAPI() {
 	beego.Router("/api/get-marketplace-sources", &controllers.ApiController{}, "GET:GetMarketplaceSources")
 	beego.Router("/api/get-marketplace-skills", &controllers.ApiController{}, "GET:GetMarketplaceSkills")
 	beego.Router("/api/install-marketplace-skill", &controllers.ApiController{}, "POST:InstallMarketplaceSkill")
+	beego.Router("/api/check-skill-capability", &controllers.ApiController{}, "POST:CheckSkillCapability")
 
 	beego.Router("/api/get-global-tools", &controllers.ApiController{}, "GET:GetGlobalTools")
 	beego.Router("/api/get-tools", &controllers.ApiController{}, "GET:GetTools")
@@ -115,6 +117,7 @@ func initAPI() {
 	beego.Router("/api/add-tool", &controllers.ApiController{}, "POST:AddTool")
 	beego.Router("/api/delete-tool", &controllers.ApiController{}, "POST:DeleteTool")
 	beego.Router("/api/test-tool", &controllers.ApiController{}, "POST:TestTool")
+	beego.Router("/api/check-tool-capability", &controllers.ApiController{}, "POST:CheckToolCapability")
 
 	beego.Router("/api/get-global-files", &controllers.ApiController{}, "GET:GetGlobalFiles")
 	beego.Router("/api/get-files", &controllers.ApiController{}, "GET:GetFiles")
@@ -123,10 +126,6 @@ func initAPI() {
 	beego.Router("/api/add-file", &controllers.ApiController{}, "POST:AddFile")
 	beego.Router("/api/delete-file", &controllers.ApiController{}, "POST:DeleteFile")
 	beego.Router("/api/refresh-file-vectors", &controllers.ApiController{}, "POST:RefreshFileVectors")
-	beego.Router("/api/refresh-file-vectors-incremental", &controllers.ApiController{}, "POST:RefreshFileVectorsIncremental")
-	beego.Router("/api/get-file-version-diffs", &controllers.ApiController{}, "GET:GetFileVersionDiffs")
-	beego.Router("/api/get-latest-file-version-diff", &controllers.ApiController{}, "GET:GetLatestFileVersionDiff")
-	beego.Router("/api/get-file-parse-versions", &controllers.ApiController{}, "GET:GetFileParseVersions")
 	beego.Router("/api/upload-file", &controllers.ApiController{}, "POST:UploadFile")
 
 	beego.Router("/api/get-global-vectors", &controllers.ApiController{}, "GET:GetGlobalVectors")

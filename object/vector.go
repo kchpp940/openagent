@@ -26,18 +26,16 @@ type Vector struct {
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
 
-	DisplayName   string  `xorm:"varchar(100)" json:"displayName"`
-	Store         string  `xorm:"varchar(100)" json:"store"`
-	Provider      string  `xorm:"varchar(100) index" json:"provider"`
-	File          string  `xorm:"varchar(500)" json:"file"`
-	Index         int     `json:"index"`
-	Text          string  `xorm:"mediumtext" json:"text"`
-	TokenCount    int     `json:"tokenCount"`
-	Price         float64 `json:"price"`
-	Currency      string  `xorm:"varchar(100)" json:"currency"`
-	Score         float32 `json:"score"`
-	ParseVersion  int     `xorm:"default 0" json:"parseVersion"`
-	VectorVersion int     `xorm:"default 0" json:"vectorVersion"`
+	DisplayName string  `xorm:"varchar(100)" json:"displayName"`
+	Store       string  `xorm:"varchar(100)" json:"store"`
+	Provider    string  `xorm:"varchar(100) index" json:"provider"`
+	File        string  `xorm:"varchar(500)" json:"file"`
+	Index       int     `json:"index"`
+	Text        string  `xorm:"mediumtext" json:"text"`
+	TokenCount  int     `json:"tokenCount"`
+	Price       float64 `json:"price"`
+	Currency    string  `xorm:"varchar(100)" json:"currency"`
+	Score       float32 `json:"score"`
 
 	Data      []float32 `xorm:"mediumtext" json:"data"`
 	Dimension int       `json:"dimension"`
@@ -70,42 +68,7 @@ func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, e
 		return vectors, err
 	}
 
-	fileVersions := getFileCurrentVectorVersions(relatedStores)
-	if len(fileVersions) > 0 {
-		filtered := make([]*Vector, 0, len(vectors))
-		for _, v := range vectors {
-			key := v.Store + "/" + v.File
-			if currentVV, ok := fileVersions[key]; ok {
-				if currentVV > 0 {
-					if v.VectorVersion == currentVV {
-						filtered = append(filtered, v)
-					}
-				} else {
-					filtered = append(filtered, v)
-				}
-			} else {
-				filtered = append(filtered, v)
-			}
-		}
-		vectors = filtered
-	}
-
 	return vectors, nil
-}
-
-func getFileCurrentVectorVersions(storeNames []string) map[string]int {
-	files := []*File{}
-	err := adapter.engine.In("store", storeNames).Find(&files)
-	if err != nil || len(files) == 0 {
-		return nil
-	}
-
-	result := make(map[string]int, len(files))
-	for _, f := range files {
-		key := f.Store + "/" + f.Name
-		result[key] = f.VectorVersion
-	}
-	return result
 }
 
 func getVector(owner string, name string) (*Vector, error) {
@@ -216,29 +179,6 @@ func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, 
 	}
 
 	return affected != 0, nil
-}
-
-func DeleteVectorsByFileAndParseVersion(owner string, storeName string, fileKey string, parseVersion int, vectorVersion int) (int64, error) {
-	session := adapter.engine.Where("owner = ? AND store = ? AND file = ? AND parse_version = ?", owner, storeName, fileKey, parseVersion)
-	if vectorVersion > 0 {
-		session = session.And("vector_version = ?", vectorVersion)
-	}
-	affected, err := session.Delete(&Vector{})
-	if err != nil {
-		return 0, err
-	}
-
-	return affected, nil
-}
-
-func GetVectorsByFile(owner string, storeName string, fileKey string) ([]*Vector, error) {
-	vectors := []*Vector{}
-	err := adapter.engine.Where("owner = ? AND store = ? AND file = ?", owner, storeName, fileKey).
-		Asc("index").Find(&vectors)
-	if err != nil {
-		return nil, err
-	}
-	return vectors, nil
 }
 
 func (vector *Vector) GetId() string {

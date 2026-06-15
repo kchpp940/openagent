@@ -199,3 +199,21 @@ func (c *ApiController) LoadSkill() {
 
 	c.ResponseOk(s)
 }
+
+// CheckSkillCapability
+// @Title CheckSkillCapability
+// @Tag Skill API
+// @Description run capability checks on a skill and return structured results with fix suggestions
+// @Param body body object.Skill true "The skill configuration to check"
+// @Success 200 {object} object.CapabilityCheckResult The capability check result
+// @router /check-skill-capability [post]
+func (c *ApiController) CheckSkillCapability() {
+	var skill object.Skill
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &skill); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result := object.CheckSkillCapability(&skill)
+	c.ResponseOk(result)
+}

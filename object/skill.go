@@ -530,3 +530,127 @@ func (skillLoader) Load(owner string, allowedSkillNames []string, skillName stri
 	}
 	return LoadSkillPromptContent(owner, skillName, referenceName)
 }
+
+func CheckSkillCapability(s *Skill) *CapabilityCheckResult {
+	result := NewCapabilityCheckResult()
+
+	result.AddCheck(checkSkillBasicConfig(s))
+	result.AddCheck(checkSkillContent(s))
+	result.AddCheck(checkSkillDescription(s))
+	result.AddCheck(checkSkillReferences(s))
+	result.AddCheck(checkSkillState(s))
+
+	return result
+}
+
+func checkSkillBasicConfig(s *Skill) *CapabilityCheckItem {
+	name := "basic_config"
+	desc := "Check basic skill configuration"
+
+	if s.Name == "" {
+		return FailedCheck(name, desc,
+			"Skill name is empty",
+			"Please provide a name for the skill",
+		)
+	}
+
+	if s.DisplayName == "" {
+		return WarningCheck(name, desc,
+			"Skill display name is empty",
+			"Adding a display name makes the skill more user-friendly",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Basic configuration is complete for skill: %s", s.Name))
+}
+
+func checkSkillContent(s *Skill) *CapabilityCheckItem {
+	name := "skill_content"
+	desc := "Check skill content validity"
+
+	if strings.TrimSpace(s.Content) == "" {
+		return FailedCheck(name, desc,
+			"Skill content is empty",
+			"Add instructions or documentation to the skill content",
+		)
+	}
+
+	contentLen := len(strings.TrimSpace(s.Content))
+	if contentLen < 50 {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("Skill content is very short (%d chars)", contentLen),
+			"Consider adding more detailed instructions for better results",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Skill content is present (%d chars)", contentLen))
+}
+
+func checkSkillDescription(s *Skill) *CapabilityCheckItem {
+	name := "skill_description"
+	desc := "Check skill description"
+
+	if strings.TrimSpace(s.Description) == "" {
+		return WarningCheck(name, desc,
+			"Skill description is empty",
+			"Add a brief description to help users understand what this skill does",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("Skill description: %s", truncateString(s.Description, 60)))
+}
+
+func checkSkillReferences(s *Skill) *CapabilityCheckItem {
+	name := "references"
+	desc := "Check skill reference files"
+
+	if s.References == nil || len(s.References) == 0 {
+		return SkippedCheck(name, desc, "No reference files configured")
+	}
+
+	validRefs := 0
+	emptyRefs := 0
+	for _, ref := range s.References {
+		if strings.TrimSpace(ref.Content) != "" {
+			validRefs++
+		} else {
+			emptyRefs++
+		}
+	}
+
+	if emptyRefs > 0 {
+		return WarningCheck(name, desc,
+			fmt.Sprintf("%d/%d reference files are empty", emptyRefs, len(s.References)),
+			"Consider filling in or removing empty reference files",
+		)
+	}
+
+	return PassedCheck(name, desc, fmt.Sprintf("%d reference files are valid", validRefs))
+}
+
+func checkSkillState(s *Skill) *CapabilityCheckItem {
+	name := "skill_state"
+	desc := "Check skill state"
+
+	switch s.State {
+	case "Active":
+		return PassedCheck(name, desc, "Skill is active and ready to use")
+	case "Inactive":
+		return WarningCheck(name, desc,
+			"Skill is inactive",
+			"Set the state to 'Active' to enable this skill",
+		)
+	default:
+		return WarningCheck(name, desc,
+			fmt.Sprintf("Unknown skill state: %s", s.State),
+			"Use 'Active' or 'Inactive' state",
+		)
+	}
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}

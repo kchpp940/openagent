@@ -328,16 +328,6 @@ func (a *Adapter) createTable() {
 		panic(err)
 	}
 
-	err = a.engine.Sync2(new(FileParseVersion))
-	if err != nil {
-		panic(err)
-	}
-
-	err = a.engine.Sync2(new(FileVersionDiff))
-	if err != nil {
-		panic(err)
-	}
-
 	err = a.engine.Sync2(new(Vector))
 	if err != nil {
 		panic(err)
