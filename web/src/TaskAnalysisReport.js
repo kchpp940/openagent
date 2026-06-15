@@ -24,7 +24,7 @@ import {
   FullscreenOutlined,
   MessageOutlined,
   ReloadOutlined,
-  SaveOutlined,
+  SaveOutlined
 } from "@ant-design/icons";
 import i18next from "i18next";
 import TaskAnalysisRadarChart from "./TaskAnalysisRadarChart";
@@ -73,16 +73,16 @@ const STATUS_CONFIG = {
 };
 
 function getCommentBadgeColor(comments) {
-  if (!comments || comments.length === 0) return "default";
+  if (!comments || comments.length === 0) {return "default";}
   const hasOpen = comments.some((c) => c.status === "open");
   const hasDisputed = comments.some((c) => c.status === "disputed");
-  if (hasDisputed) return "orange";
-  if (hasOpen) return "blue";
+  if (hasDisputed) {return "orange";}
+  if (hasOpen) {return "blue";}
   return "green";
 }
 
 function countUnresolved(comments) {
-  if (!comments) return 0;
+  if (!comments) {return 0;}
   return comments.filter((c) => c.status !== "resolved").length;
 }
 
@@ -113,7 +113,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   }, [taskId]);
 
   const loadAllComments = async() => {
-    if (!taskId) return;
+    if (!taskId) {return;}
     setCommentsLoading(true);
     try {
       const res = await TaskBackend.getReportComments(taskId);
@@ -169,7 +169,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
     (backendAnchors || []).forEach((a) => {
       if (a && a.anchorType === "item" && typeof a.categoryIndex === "number" && typeof a.itemIndex === "number") {
         const k = `${a.categoryIndex}||${a.itemIndex}`;
-        if (!m[k]) m[k] = a;
+        if (!m[k]) {m[k] = a;}
       }
     });
     (backendAnchors || []).forEach((a) => {
@@ -186,10 +186,10 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   const anchorsByItemAnchorId = useMemo(() => {
     const m = {};
     (backendAnchors || []).forEach((a) => {
-      if (!a) return;
+      if (!a) {return;}
       const k = a.itemAnchorId;
-      if (!k) return;
-      if (!m[k]) m[k] = [];
+      if (!k) {return;}
+      if (!m[k]) {m[k] = [];}
       m[k].push(a);
     });
     return m;
@@ -285,7 +285,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   };
 
   const openCommentsDrawer = (target) => {
-    if (!target) return;
+    if (!target) {return;}
     setActiveTarget(target);
     setNewCommentText("");
     setEditingComment(null);
@@ -294,7 +294,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   };
 
   const getItemComments = (itemAnchorId, stableItemKeyFallback) => {
-    if (!itemAnchorId && !stableItemKeyFallback) return [];
+    if (!itemAnchorId && !stableItemKeyFallback) {return [];}
     if (itemAnchorId && groupedComments[itemAnchorId]) {
       return groupedComments[itemAnchorId];
     }
@@ -308,7 +308,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   };
 
   const getTargetComments = () => {
-    if (!activeTarget) return [];
+    if (!activeTarget) {return [];}
     if (activeTarget.itemAnchorId && groupedComments[activeTarget.itemAnchorId]) {
       return groupedComments[activeTarget.itemAnchorId];
     }
@@ -316,15 +316,15 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
       return groupedComments[activeTarget.stableItemKey];
     }
     return allComments.filter((c) => {
-      if (activeTarget.anchorId && c.anchorId === activeTarget.anchorId) return true;
-      if (activeTarget.itemAnchorId && c.itemAnchorId === activeTarget.itemAnchorId) return true;
-      if (activeTarget.stableItemKey && c.stableItemKey === activeTarget.stableItemKey) return true;
+      if (activeTarget.anchorId && c.anchorId === activeTarget.anchorId) {return true;}
+      if (activeTarget.itemAnchorId && c.itemAnchorId === activeTarget.itemAnchorId) {return true;}
+      if (activeTarget.stableItemKey && c.stableItemKey === activeTarget.stableItemKey) {return true;}
       return false;
     });
   };
 
   const handleAddComment = async() => {
-    if (!newCommentText.trim() || !activeTarget || !activeTarget.anchorId || !taskId) return;
+    if (!newCommentText.trim() || !activeTarget || !activeTarget.anchorId || !taskId) {return;}
     setSubmitting(true);
     try {
       const [taskOwner, ...rest] = taskId.split("/");
@@ -356,7 +356,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   };
 
   const saveEditComment = async() => {
-    if (!editingComment || !editingText.trim()) return;
+    if (!editingComment || !editingText.trim()) {return;}
     setSubmitting(true);
     try {
       const payload = {
@@ -534,7 +534,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   const totalUnresolved = Number(commentCounts.unresolved) || 0;
 
   const CommentBadgeButton = ({target, itemComments, size = "small"}) => {
-    if (!target) return null;
+    if (!target) {return null;}
     const unresolved = countUnresolved(itemComments);
     const badgeColor = getCommentBadgeColor(itemComments);
     return (
@@ -705,7 +705,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
   ];
 
   const renderDrawerTitle = () => {
-    if (!activeTarget) return i18next.t("task:Comments");
+    if (!activeTarget) {return i18next.t("task:Comments");}
     return (
       <div>
         <div style={{fontWeight: 600}}>
@@ -750,13 +750,13 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
                   const target = matched
                     ? buildTargetFromAnchor(matched)
                     : {
-                        anchorId: first.anchorId,
-                        itemAnchorId: first.itemAnchorId,
-                        categoryName: first.categoryName,
-                        itemName: first.itemName,
-                        referencedField: first.referencedField,
-                        referencedContent: first.referencedContent,
-                      };
+                      anchorId: first.anchorId,
+                      itemAnchorId: first.itemAnchorId,
+                      categoryName: first.categoryName,
+                      itemName: first.itemName,
+                      referencedField: first.referencedField,
+                      referencedContent: first.referencedContent,
+                    };
                   setActiveTarget(target);
                   setCommentsDrawerOpen(true);
                 }
@@ -851,7 +851,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
         });
         if (groupedComments["__orphan__"]) {
           groupedComments["__orphan__"].forEach((c) => {
-            if (c.categoryName === cat.name) catComments.push(c);
+            if (c.categoryName === cat.name) {catComments.push(c);}
           });
         }
         const catUnresolved = countUnresolved(catComments);
@@ -884,7 +884,7 @@ export default function TaskAnalysisReport({result, downloadFileName, taskId, on
         onClose={() => setCommentsDrawerOpen(false)}
         extra={
           <Space>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => { commentsLoadedRef.current = false; loadAllComments(); }}>
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => {commentsLoadedRef.current = false; loadAllComments();}}>
               {i18next.t("general:Refresh")}
             </Button>
           </Space>

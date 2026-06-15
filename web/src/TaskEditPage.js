@@ -20,7 +20,7 @@ const ANALYZE_PROGRESS_DURATION_SEC = 300;
 const ANALYZE_PROGRESS_TICK_MS = 500;
 const ANALYZE_PROGRESS_MAX_PERCENT = 99;
 
-import {Badge, BarChartOutlined, CheckCircleOutlined, CommentOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
+import {Badge, BarChartOutlined, CheckCircleOutlined, ClearOutlined, CloseCircleOutlined, CloseOutlined, CommentOutlined, DownloadOutlined, FilePdfOutlined, FileWordOutlined, UploadOutlined, WarningOutlined} from "@ant-design/icons";
 import * as TaskBackend from "./backend/TaskBackend";
 import * as ScaleBackend from "./backend/ScaleBackend";
 import * as Setting from "./Setting";
@@ -114,7 +114,7 @@ class TaskEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok" && res.data) {
           const c = res.data || {};
-          if (c.unresolved == null) {
+          if (c.unresolved === null) {
             c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
           }
           this.setState({commentCounts: c});
@@ -127,7 +127,7 @@ class TaskEditPage extends React.Component {
     const data = payload || {};
     if (data.counts) {
       const c = {...data.counts};
-      if (c.unresolved == null) {
+      if (c.unresolved === null) {
         c.unresolved = Number(c.open || 0) + Number(c.disputed || 0);
       }
       this.setState({commentCounts: c});
