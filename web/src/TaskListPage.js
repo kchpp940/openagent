@@ -27,7 +27,6 @@ import i18next from "i18next";
 import * as ConfTask from "./ConfTask";
 import * as Conf from "./Conf";
 import TaskAnalysisReport from "./TaskAnalysisReport";
-import {normalizeTaskAnalysisReport} from "./TaskAnalysisTypes";
 
 const {TextArea} = Input;
 
@@ -187,13 +186,6 @@ class TaskListPage extends BaseListPage {
       });
   }
 
-  parseReportResult(result) {
-    if (!result) {
-      return null;
-    }
-    return normalizeTaskAnalysisReport(result);
-  }
-
   renderTable(tasks) {
     let columns = [
       {
@@ -336,8 +328,7 @@ class TaskListPage extends BaseListPage {
         fixed: "right",
         sorter: (a, b) => (Number(a.score) || 0) - (Number(b.score) || 0),
         render: (text, record) => {
-          const parsed = this.parseReportResult(record.result);
-          if (!parsed) {
+          if (!record.result) {
             return null;
           }
           const s = record.score;
@@ -346,7 +337,7 @@ class TaskListPage extends BaseListPage {
           const showScoreTag = hasNumericScore && !!label;
           const popoverContent = (
             <div style={{width: "50vw", height: "50vh", overflow: "auto"}}>
-              <TaskAnalysisReport result={parsed} />
+              <TaskAnalysisReport result={record.result} />
             </div>
           );
           const scoreFontStyle = {fontSize: "17px", fontWeight: 600};
@@ -359,8 +350,8 @@ class TaskListPage extends BaseListPage {
               {label}
             </Tag>
           ) : (
-            <span style={{cursor: "pointer", ...(parsed.score !== null && parsed.score !== undefined ? scoreFontStyle : {})}}>
-              {parsed.score !== null && parsed.score !== undefined ? `${parsed.score}${i18next.t("task:Score Unit")}` : i18next.t("task:Report")}
+            <span style={{cursor: "pointer", ...(record.result.score !== null && record.result.score !== undefined ? scoreFontStyle : {})}}>
+              {record.result.score !== null && record.result.score !== undefined ? `${record.result.score}${i18next.t("task:Score Unit")}` : i18next.t("task:Report")}
             </span>
           );
           return (

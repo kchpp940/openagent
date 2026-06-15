@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
-import {normalizeTaskAnalysisReport} from "../TaskAnalysisTypes";
 
 export function getGlobalTasks() {
   return fetch(`${Setting.ServerUrl}/api/get-global-tasks`, {
@@ -42,12 +41,7 @@ export function getTask(owner, name) {
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => Setting.handleFetchResponse(res)).then(res => {
-    if (res.status === "ok" && res.data?.result) {
-      res.data.result = normalizeTaskAnalysisReport(res.data.result);
-    }
-    return res;
-  });
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateTask(owner, name, task) {
@@ -108,10 +102,5 @@ export function analyzeTask(owner, name) {
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => Setting.handleFetchResponse(res)).then(res => {
-    if (res.status === "ok" && res.data) {
-      res.data = normalizeTaskAnalysisReport(res.data);
-    }
-    return res;
-  });
+  }).then(res => Setting.handleFetchResponse(res));
 }

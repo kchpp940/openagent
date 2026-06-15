@@ -288,16 +288,9 @@ func (c *ApiController) AnalyzeTask() {
 		return
 	}
 
-	logs.Info("[analyze-task] serializing result id=%s", id)
-	resultBytes, err := json.Marshal(result)
-	if err != nil {
-		logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
-		c.ResponseError(err.Error())
-		return
-	}
-	task.Result = string(resultBytes)
+	task.ResultObj = result
 	task.Score = result.Score
-	logs.Info("[analyze-task] saving task id=%s resultBytes=%d", id, len(resultBytes))
+	logs.Info("[analyze-task] saving task id=%s", id)
 	_, err = object.UpdateTask(id, task)
 	if err != nil {
 		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)

@@ -61,7 +61,7 @@ function shortLabel(name) {
 
 /** Y-axis for the vertical sub-70 chart: default 50–80; extend min when any score falls below 50. */
 function getLowScoreVerticalAxisBounds(items) {
-  const minScore = Math.min(...items.map((it) => Number(it.score) || 0));
+  const minScore = Math.min(...items.map((it) => it.score));
   const yMax = 80;
   if (minScore >= 50) {
     return {yMin: 50, yMax};

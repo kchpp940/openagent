@@ -15,6 +15,7 @@
 package object
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/the-open-agent/openagent/util"
@@ -39,25 +40,25 @@ type TaskAnalysisItem struct {
 }
 
 type TaskAnalysisCategory struct {
-	Name  string                `json:"name"`
-	Score float64               `json:"score"`
+	Name  string              `json:"name"`
+	Score float64             `json:"score"`
 	Items []*TaskAnalysisItem `json:"items"`
 }
 
 type TaskAnalysisReport struct {
-	Title         string                    `json:"title"`
-	Designer      string                    `json:"designer"`
-	Stage         string                    `json:"stage"`
-	Participants  string                    `json:"participants"`
-	Grade         string                    `json:"grade"`
-	Instructor    string                    `json:"instructor"`
-	Subject       string                    `json:"subject"`
-	School        string                    `json:"school"`
-	OtherSubjects string                    `json:"otherSubjects"`
-	Textbook      string                    `json:"textbook"`
-	Score         float64                   `json:"score"`
-	Summary       string                    `json:"summary"`
-	Categories    []*TaskAnalysisCategory   `json:"categories"`
+	Title         string                  `json:"title"`
+	Designer      string                  `json:"designer"`
+	Stage         string                  `json:"stage"`
+	Participants  string                  `json:"participants"`
+	Grade         string                  `json:"grade"`
+	Instructor    string                  `json:"instructor"`
+	Subject       string                  `json:"subject"`
+	School        string                  `json:"school"`
+	OtherSubjects string                  `json:"otherSubjects"`
+	Textbook      string                  `json:"textbook"`
+	Score         float64                 `json:"score"`
+	Summary       string                  `json:"summary"`
+	Categories    []*TaskAnalysisCategory `json:"categories"`
 }
 
 type TaskResultItem = TaskAnalysisItem
@@ -86,17 +87,18 @@ type Task struct {
 	Labels  []string `xorm:"mediumtext" json:"labels"`
 	Log     string   `xorm:"mediumtext" json:"log"`
 
-	Result string `xorm:"mediumtext" json:"result"`
+	Result    string              `xorm:"mediumtext" json:"-"`
+	ResultObj *TaskAnalysisReport `xorm:"-" json:"result"`
 
-	DocumentUrl           string `xorm:"varchar(500)" json:"documentUrl"`
-	DocumentText          string `xorm:"mediumtext" json:"documentText"`
-	DocumentFileType      string `xorm:"varchar(100)" json:"documentFileType"`
-	DocumentParseStatus   string `xorm:"varchar(50)" json:"documentParseStatus"`
-	DocumentError         string `xorm:"varchar(500)" json:"documentError"`
-	DocumentTypeSource    string `xorm:"varchar(50)" json:"documentTypeSource"`
-	DocumentTypeConflict  bool   `xorm:"bool" json:"documentTypeConflict"`
-	DocumentConflictMsg   string `xorm:"varchar(500)" json:"documentConflictMsg"`
-	AnalyzeError          string `xorm:"varchar(500)" json:"analyzeError"`
+	DocumentUrl          string `xorm:"varchar(500)" json:"documentUrl"`
+	DocumentText         string `xorm:"mediumtext" json:"documentText"`
+	DocumentFileType     string `xorm:"varchar(100)" json:"documentFileType"`
+	DocumentParseStatus  string `xorm:"varchar(50)" json:"documentParseStatus"`
+	DocumentError        string `xorm:"varchar(500)" json:"documentError"`
+	DocumentTypeSource   string `xorm:"varchar(50)" json:"documentTypeSource"`
+	DocumentTypeConflict bool   `xorm:"bool" json:"documentTypeConflict"`
+	DocumentConflictMsg  string `xorm:"varchar(500)" json:"documentConflictMsg"`
+	AnalyzeError         string `xorm:"varchar(500)" json:"analyzeError"`
 }
 
 func (task *Task) IsDocumentReadyForAnalysis() bool {
@@ -104,6 +106,55 @@ func (task *Task) IsDocumentReadyForAnalysis() bool {
 		return false
 	}
 	return task.DocumentParseStatus == DocumentParseStatusSuccess && task.DocumentText != ""
+}
+
+func ParseTaskAnalysisReport(raw string) *TaskAnalysisReport {
+	if raw == "" {
+		return nil
+	}
+	var rawData map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &rawData); err != nil {
+		return nil
+	}
+	return normalizeTaskResultFromMap(rawData)
+}
+
+func (task *Task) PopulateResultObj() {
+	if task == nil {
+		return
+	}
+	task.ResultObj = ParseTaskAnalysisReport(task.Result)
+}
+
+func (task *Task) SerializeResultObj() {
+	if task == nil {
+		return
+	}
+	if task.ResultObj == nil {
+		task.Result = ""
+		return
+	}
+	if b, err := json.Marshal(task.ResultObj); err == nil {
+		task.Result = string(b)
+	}
+}
+
+func PopulateTaskResultObj(task *Task) {
+	if task != nil {
+		task.PopulateResultObj()
+	}
+}
+
+func PopulateTasksResultObj(tasks []*Task) {
+	for _, t := range tasks {
+		t.PopulateResultObj()
+	}
+}
+
+func SerializeTaskResultObj(task *Task) {
+	if task != nil {
+		task.SerializeResultObj()
+	}
 }
 
 func GetMaskedTask(task *Task, isMaskEnabled bool) *Task {
@@ -140,6 +191,7 @@ func GetGlobalTasks(owner string) ([]*Task, error) {
 		return tasks, err
 	}
 
+	PopulateTasksResultObj(tasks)
 	return tasks, nil
 }
 
@@ -154,6 +206,7 @@ func GetTasks(owner string) ([]*Task, error) {
 		return tasks, err
 	}
 
+	PopulateTasksResultObj(tasks)
 	return tasks, nil
 }
 
@@ -165,6 +218,7 @@ func getTask(owner string, name string) (*Task, error) {
 	}
 
 	if existed {
+		task.PopulateResultObj()
 		return &task, nil
 	} else {
 		return nil, nil
@@ -210,21 +264,24 @@ func UpdateTask(id string, task *Task) (bool, error) {
 		return false, nil
 	}
 
+	SerializeTaskResultObj(task)
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(task)
 	if err != nil {
 		return false, err
 	}
 
-	// return affected != 0
+	task.PopulateResultObj()
 	return true, nil
 }
 
 func AddTask(task *Task) (bool, error) {
+	SerializeTaskResultObj(task)
 	affected, err := adapter.engine.Insert(task)
 	if err != nil {
 		return false, err
 	}
 
+	task.PopulateResultObj()
 	return affected != 0, nil
 }
 
@@ -254,5 +311,6 @@ func GetPaginationTasks(owner string, offset, limit int, field, value, sortField
 		return tasks, err
 	}
 
+	PopulateTasksResultObj(tasks)
 	return tasks, nil
 }
