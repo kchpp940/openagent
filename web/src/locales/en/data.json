@@ -127,6 +127,13 @@
     "Failed": "Failed",
     "Failed Chunks": "Failed Chunks",
     "chunks": "chunks",
+    "Obsolete": "Obsolete",
+    "Skipped": "Skipped",
+    "Job ID": "Job ID",
+    "Obsolete Reason": "Obsolete Reason",
+    "Active": "Active",
+    "Running": "Running",
+    "Old": "Old",
     "{count} more errors": "{count} more errors"
   },
   "form": {

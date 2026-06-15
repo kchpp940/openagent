@@ -127,6 +127,13 @@
     "Failed": "失败",
     "Failed Chunks": "失败的段落",
     "chunks": "个段落",
+    "Obsolete": "已过期",
+    "Skipped": "已跳过",
+    "Job ID": "任务 ID",
+    "Obsolete Reason": "过期原因",
+    "Active": "当前生效",
+    "Running": "执行中",
+    "Old": "历史版本",
     "{count} more errors": "还有 {count} 个错误"
   },
   "form": {

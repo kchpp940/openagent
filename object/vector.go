@@ -26,16 +26,18 @@ type Vector struct {
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
 
-	DisplayName string  `xorm:"varchar(100)" json:"displayName"`
-	Store       string  `xorm:"varchar(100)" json:"store"`
-	Provider    string  `xorm:"varchar(100) index" json:"provider"`
-	File        string  `xorm:"varchar(500)" json:"file"`
-	Index       int     `json:"index"`
-	Text        string  `xorm:"mediumtext" json:"text"`
-	TokenCount  int     `json:"tokenCount"`
-	Price       float64 `json:"price"`
-	Currency    string  `xorm:"varchar(100)" json:"currency"`
-	Score       float32 `json:"score"`
+	DisplayName   string  `xorm:"varchar(100)" json:"displayName"`
+	Store         string  `xorm:"varchar(100)" json:"store"`
+	Provider      string  `xorm:"varchar(100) index" json:"provider"`
+	File          string  `xorm:"varchar(500)" json:"file"`
+	Index         int     `json:"index"`
+	Text          string  `xorm:"mediumtext" json:"text"`
+	TokenCount    int     `json:"tokenCount"`
+	Price         float64 `json:"price"`
+	Currency      string  `xorm:"varchar(100)" json:"currency"`
+	Score         float32 `json:"score"`
+	ParseVersion  int     `xorm:"default 0" json:"parseVersion"`
+	VectorVersion int     `xorm:"default 0" json:"vectorVersion"`
 
 	Data      []float32 `xorm:"mediumtext" json:"data"`
 	Dimension int       `json:"dimension"`

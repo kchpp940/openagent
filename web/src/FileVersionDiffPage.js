@@ -76,6 +76,8 @@ class FileVersionDiffPage extends BaseListPage {
       "Finished": {color: "success", text: i18next.t("file:Finished")},
       "PartialFailed": {color: "warning", text: i18next.t("file:Partial Failed")},
       "Error": {color: "error", text: i18next.t("file:Error")},
+      "Obsolete": {color: "default", text: i18next.t("file:Obsolete")},
+      "Skipped": {color: "default", text: i18next.t("file:Skipped")},
     };
     const config = statusMap[status] || {color: "default", text: status};
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -141,6 +143,22 @@ class FileVersionDiffPage extends BaseListPage {
     }
 
     const errorItems = [];
+
+    if (diff.jobId) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Job ID")} span={2} key="job-id">
+          <Text code copyable>{diff.jobId}</Text>
+        </Descriptions.Item>
+      );
+    }
+
+    if (diff.obsoleteReason) {
+      errorItems.push(
+        <Descriptions.Item label={i18next.t("file:Obsolete Reason")} span={2} key="obsolete-reason">
+          <Text type="secondary">{diff.obsoleteReason}</Text>
+        </Descriptions.Item>
+      );
+    }
 
     if (diff.parseError) {
       errorItems.push(
@@ -310,18 +328,45 @@ class FileVersionDiffPage extends BaseListPage {
   }
 
   renderVersionHistory() {
-    const {diffs} = this.state;
+    const {diffs, file} = this.state;
     if (!diffs || diffs.length === 0) {
       return null;
     }
 
+    const currentJobId = file?.currentJobId;
+    const currentParseVersion = file?.parseVersion || 0;
+
     const columns = [
+      {
+        title: i18next.t("file:Current"),
+        key: "isCurrent",
+        width: 80,
+        render: (_, record) => {
+          if (record.toParseVersion === currentParseVersion && record.status !== "Obsolete") {
+            return <Tag color="green">{i18next.t("file:Active")}</Tag>;
+          }
+          if (record.jobId && record.jobId === currentJobId && record.status !== "Obsolete") {
+            return <Tag color="blue">{i18next.t("file:Running")}</Tag>;
+          }
+          if (record.status === "Obsolete") {
+            return <Tag color="default">{i18next.t("file:Obsolete")}</Tag>;
+          }
+          return <Tag color="default">{i18next.t("file:Old")}</Tag>;
+        },
+      },
       {
         title: i18next.t("file:Version"),
         dataIndex: "version",
         key: "version",
         width: 100,
         render: (text) => `v${text}`,
+      },
+      {
+        title: i18next.t("file:Job ID"),
+        dataIndex: "jobId",
+        key: "jobId",
+        width: 180,
+        render: (text) => text ? <Text code style={{fontSize: 11}}>{text.substring(0, 24)}...</Text> : "-",
       },
       {
         title: i18next.t("file:From → To"),
@@ -365,14 +410,35 @@ class FileVersionDiffPage extends BaseListPage {
       },
     ];
 
+    const rowClassName = (record) => {
+      if (record.status === "Obsolete") {
+        return "obsolete-row";
+      }
+      if (record.toParseVersion === currentParseVersion) {
+        return "active-row";
+      }
+      return "";
+    };
+
     return (
       <Card title={i18next.t("file:Version History")} style={{marginBottom: 16}}>
+        <style>{`
+          .obsolete-row {
+            opacity: 0.55;
+            background: #fafafa !important;
+            font-style: italic;
+          }
+          .active-row {
+            background: #f0fff4 !important;
+          }
+        `}</style>
         <Table
           columns={columns}
           dataSource={diffs}
           rowKey="version"
           pagination={false}
           size="small"
+          rowClassName={rowClassName}
           onRow={(record) => ({
             onClick: () => this.setState({selectedDiff: record}),
             style: {cursor: "pointer", background: this.state.selectedDiff?.version === record.version ? "#e6f7ff" : undefined},

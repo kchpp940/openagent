@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/beego/beego/logs"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/storage"
 	"github.com/the-open-agent/openagent/util"
@@ -39,6 +40,8 @@ const (
 	FileStatusFinished      FileStatus = "Finished"
 	FileStatusPartialFailed FileStatus = "PartialFailed"
 	FileStatusError         FileStatus = "Error"
+	FileStatusObsolete      FileStatus = "Obsolete"
+	FileStatusSkipped       FileStatus = "Skipped"
 )
 
 type ChunkDiffType string
@@ -64,6 +67,7 @@ type FileVersionDiff struct {
 	Name        string `xorm:"varchar(512) notnull pk" json:"name"`
 	Version     int    `xorm:"notnull pk" json:"version"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
+	JobId       string `xorm:"varchar(100)" json:"jobId"`
 
 	FromParseVersion int    `json:"fromParseVersion"`
 	ToParseVersion   int    `json:"toParseVersion"`
@@ -87,6 +91,7 @@ type FileVersionDiff struct {
 	VectorGenerationErrors []string   `xorm:"mediumtext" json:"vectorGenerationErrors,omitempty"`
 	FailedChunkIndices     []int      `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
 	ErrorText              string     `xorm:"mediumtext" json:"errorText"`
+	ObsoleteReason         string     `xorm:"mediumtext" json:"obsoleteReason,omitempty"`
 }
 
 type FileParseVersion struct {
@@ -94,6 +99,7 @@ type FileParseVersion struct {
 	Name        string `xorm:"varchar(512) notnull pk" json:"name"`
 	Version     int    `xorm:"notnull pk" json:"version"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
+	JobId       string `xorm:"varchar(100)" json:"jobId"`
 
 	ContentHash   string            `xorm:"varchar(64)" json:"contentHash"`
 	ChunkHash     string            `xorm:"varchar(64)" json:"chunkHash"`
@@ -107,6 +113,7 @@ type FileParseVersion struct {
 	VectorGenerationErrors []string `xorm:"mediumtext" json:"vectorGenerationErrors,omitempty"`
 	FailedChunkIndices     []int    `xorm:"mediumtext" json:"failedChunkIndices,omitempty"`
 	ErrorText              string   `xorm:"mediumtext" json:"errorText"`
+	ObsoleteReason         string   `xorm:"mediumtext" json:"obsoleteReason,omitempty"`
 }
 
 type File struct {
@@ -128,6 +135,7 @@ type File struct {
 	ContentHash   string           `xorm:"varchar(64)" json:"contentHash"`
 	ChunkHash     string           `xorm:"varchar(64)" json:"chunkHash"`
 	VectorVersion int              `json:"vectorVersion"`
+	CurrentJobId  string           `xorm:"varchar(100)" json:"currentJobId"`
 	LatestDiff    *FileVersionDiff `xorm:"-" json:"latestDiff,omitempty"`
 }
 
@@ -721,4 +729,90 @@ func summarizeDiff(diffs []ChunkDiff, maxSamples int) (added, deleted, modified,
 		}
 	}
 	return added, deleted, modified, unchanged
+}
+
+func generateJobId() string {
+	return fmt.Sprintf("job_%s_%s", util.GetCurrentTime(), util.GetRandomName())
+}
+
+func AcquireFileJob(owner, fileName string) (string, int, error) {
+	file, err := getFile(owner, fileName)
+	if err != nil {
+		return "", 0, err
+	}
+
+	jobId := generateJobId()
+	newVersion := 1
+	if file != nil {
+		newVersion = file.ParseVersion + 1
+	}
+
+	if file == nil {
+		return jobId, newVersion, nil
+	}
+
+	file.CurrentJobId = jobId
+	_, err = UpdateFile(file.GetId(), file)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return jobId, newVersion, nil
+}
+
+func IsFileJobCurrent(owner, fileName, jobId string) (bool, *File, error) {
+	file, err := getFile(owner, fileName)
+	if err != nil {
+		return false, nil, err
+	}
+	if file == nil {
+		return true, nil, nil
+	}
+	if file.CurrentJobId == "" {
+		return true, file, nil
+	}
+	return file.CurrentJobId == jobId, file, nil
+}
+
+func MarkJobObsolete(owner, fileName string, version int, jobId, reason string) error {
+	diff, err := getFileVersionDiff(owner, fileName, version)
+	if err != nil {
+		return err
+	}
+	if diff == nil {
+		return nil
+	}
+	diff.Status = FileStatusObsolete
+	diff.ObsoleteReason = reason
+	diff.JobId = jobId
+	_, err = UpdateFileVersionDiff(diff)
+	return err
+}
+
+func CompareAndSwapFileVersion(owner, fileName, jobId string, expectedParseVersion int, updateFunc func(*File) error) (bool, error) {
+	file, err := getFile(owner, fileName)
+	if err != nil {
+		return false, err
+	}
+	if file == nil {
+		return false, fmt.Errorf("file not found")
+	}
+
+	if file.CurrentJobId != jobId {
+		return false, nil
+	}
+	if expectedParseVersion > 0 && file.ParseVersion != expectedParseVersion-1 {
+		return false, nil
+	}
+
+	err = updateFunc(file)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = UpdateFile(file.GetId(), file)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
