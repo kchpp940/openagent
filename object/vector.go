@@ -76,7 +76,11 @@ func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, e
 		for _, v := range vectors {
 			key := v.Store + "/" + v.File
 			if currentVV, ok := fileVersions[key]; ok {
-				if v.VectorVersion == 0 || v.VectorVersion == currentVV {
+				if currentVV > 0 {
+					if v.VectorVersion == currentVV {
+						filtered = append(filtered, v)
+					}
+				} else {
 					filtered = append(filtered, v)
 				}
 			} else {
@@ -214,8 +218,12 @@ func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, 
 	return affected != 0, nil
 }
 
-func DeleteVectorsByFileAndParseVersion(owner string, storeName string, fileKey string, parseVersion int) (int64, error) {
-	affected, err := adapter.engine.Where("owner = ? AND store = ? AND file = ? AND parse_version = ?", owner, storeName, fileKey, parseVersion).Delete(&Vector{})
+func DeleteVectorsByFileAndParseVersion(owner string, storeName string, fileKey string, parseVersion int, vectorVersion int) (int64, error) {
+	session := adapter.engine.Where("owner = ? AND store = ? AND file = ? AND parse_version = ?", owner, storeName, fileKey, parseVersion)
+	if vectorVersion > 0 {
+		session = session.And("vector_version = ?", vectorVersion)
+	}
+	affected, err := session.Delete(&Vector{})
 	if err != nil {
 		return 0, err
 	}

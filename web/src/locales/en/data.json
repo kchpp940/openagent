@@ -135,8 +135,10 @@
     "Running": "Running",
     "Old": "Old",
     "Vectors Written": "Vectors Written",
-    "Cleaned": "Cleaned",
+    "Physically Cleaned": "Physically Cleaned",
+    "Query Isolated": "Query Isolated",
     "Not Cleaned - Risk": "Not Cleaned - Risk",
+    "Not Cleaned - Isolated by Query": "Not Cleaned - Isolated by Query",
     "Orphan vectors from this obsolete job": "Orphan vectors from this obsolete job",
     "No vectors written": "No vectors written",
     "{count} more errors": "{count} more errors"

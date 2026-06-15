@@ -151,6 +151,8 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 		expectedVectorVersion = oldParseVersion.VectorVersion
 	}
 
+	nextVectorVersion := expectedVectorVersion + 1
+
 	diff := &FileVersionDiff{
 		Owner:            owner,
 		Name:             fileName,
@@ -176,7 +178,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 
 	isCurrent, _, err := IsFileJobCurrent(owner, fileName, jobId)
 	if err != nil || !isCurrent {
-		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before parse", false)
+		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before parse", false, 0)
 		saveParseVersionOnError(owner, fileName, newVersion, "", "", 0, nil, FileStatusObsolete, diff)
 		return false, 0, nil
 	}
@@ -194,7 +196,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 			f.ErrorText = diff.ErrorText
 			_, _ = UpdateFile(f.GetId(), f)
 		} else {
-			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during parse error handling", false)
+			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during parse error handling", false, 0)
 			diff.Status = FileStatusObsolete
 		}
 		saveParseVersionOnError(owner, fileName, newVersion, "", "", 0, nil, diff.Status, diff)
@@ -229,7 +231,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 			f.ErrorText = diff.ErrorText
 			_, _ = UpdateFile(f.GetId(), f)
 		} else {
-			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during split provider error", false)
+			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during split provider error", false, 0)
 			diff.Status = FileStatusObsolete
 		}
 		saveParseVersionOnError(owner, fileName, newVersion, contentHash, "", 0, nil, diff.Status, diff)
@@ -248,7 +250,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 			f.ErrorText = diff.ErrorText
 			_, _ = UpdateFile(f.GetId(), f)
 		} else {
-			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during split error", false)
+			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded during split error", false, 0)
 			diff.Status = FileStatusObsolete
 		}
 		saveParseVersionOnError(owner, fileName, newVersion, contentHash, "", 0, nil, diff.Status, diff)
@@ -261,7 +263,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 
 	isCurrent, _, err = IsFileJobCurrent(owner, fileName, jobId)
 	if err != nil || !isCurrent {
-		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded after split", false)
+		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded after split", false, 0)
 		saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, expectedVectorVersion, newChunks, newChunkHashes, FileStatusObsolete, diff)
 		return false, 0, nil
 	}
@@ -273,7 +275,6 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 			diff.UnchangedCount = len(newChunks)
 			_, _ = UpdateFileVersionDiff(diff)
 
-			nextVectorVersion := existingFile.VectorVersion + 1
 			updated, err := CompareAndSwapFileVersion(owner, fileName, jobId, newVersion, func(f *File) error {
 				f.ParseVersion = newVersion
 				f.VectorVersion = nextVectorVersion
@@ -286,7 +287,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 				return false, 0, err
 			}
 			if !updated {
-				_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "CAS failed for content-unchanged update", false)
+				_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "CAS failed for content-unchanged update", false, nextVectorVersion)
 				diff.Status = FileStatusObsolete
 			}
 			saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, existingFile.VectorVersion, newChunks, newChunkHashes, diff.Status, diff)
@@ -299,7 +300,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 
 	isCurrent, _, err = IsFileJobCurrent(owner, fileName, jobId)
 	if err != nil || !isCurrent {
-		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before vector processing", false)
+		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before vector processing", false, 0)
 		saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, expectedVectorVersion, newChunks, newChunkHashes, FileStatusObsolete, diff)
 		return false, 0, nil
 	}
@@ -308,10 +309,6 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 	var chunksToProcess []int
 	vectorGenerationErrors := []string{}
 	failedChunkIndices := []int{}
-	nextVectorVersion := expectedVectorVersion + 1
-	if !incremental {
-		nextVectorVersion = expectedVectorVersion + 1
-	}
 
 	if incremental && existingFile != nil && existingFile.ContentHash != "" {
 		diffs = computeChunkDiff(oldChunks, newChunks)
@@ -335,7 +332,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 
 		isCurrent, _, err = IsFileJobCurrent(owner, fileName, jobId)
 		if err != nil || !isCurrent {
-			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before incremental delete vectors", false)
+			_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before incremental delete vectors", false, 0)
 			saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, expectedVectorVersion, newChunks, newChunkHashes, FileStatusObsolete, diff)
 			return false, 0, nil
 		}
@@ -382,7 +379,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 		if !incremental && existingFile != nil && len(oldVectors) > 0 {
 			isCurrent, _, err = IsFileJobCurrent(owner, fileName, jobId)
 			if err != nil || !isCurrent {
-				_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before full refresh delete vectors", false)
+				_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before full refresh delete vectors", false, 0)
 				saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, expectedVectorVersion, newChunks, newChunkHashes, FileStatusObsolete, diff)
 				return false, 0, nil
 			}
@@ -480,7 +477,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 
 	isCurrent, _, err = IsFileJobCurrent(owner, fileName, jobId)
 	if !isCurrent || err != nil {
-		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before final file update", diff.VectorsWritten)
+		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "Superseded before final file update", diff.VectorsWritten, nextVectorVersion)
 		diff.Status = FileStatusObsolete
 		_, _ = UpdateFileVersionDiff(diff)
 		saveParseVersion(owner, fileName, newVersion, contentHash, newChunkHash, nextVectorVersion, newChunks, newChunkHashes, FileStatusObsolete, diff)
@@ -501,7 +498,7 @@ func addVectorsForFileIncremental(embeddingProviderObj embedding.EmbeddingProvid
 		return false, totalTokenCount, err
 	}
 	if !updated {
-		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "CAS failed for final file update", diff.VectorsWritten)
+		_ = MarkJobObsolete(owner, fileName, newVersion, jobId, "CAS failed for final file update", diff.VectorsWritten, nextVectorVersion)
 		diff.Status = FileStatusObsolete
 		_, _ = UpdateFileVersionDiff(diff)
 	}
@@ -532,6 +529,7 @@ func saveParseVersion(owner string, fileName string, version int, contentHash st
 		ObsoleteReason:         diff.ObsoleteReason,
 		VectorsWritten:         diff.VectorsWritten,
 		OrphanVectorsCleaned:   diff.OrphanVectorsCleaned,
+		QueryFiltered:          diff.QueryFiltered,
 	}
 	_, _ = AddFileParseVersion(parseVersion)
 }
@@ -565,6 +563,7 @@ func saveParseVersionOnError(owner string, fileName string, version int, content
 		ObsoleteReason:         diff.ObsoleteReason,
 		VectorsWritten:         diff.VectorsWritten,
 		OrphanVectorsCleaned:   diff.OrphanVectorsCleaned,
+		QueryFiltered:          diff.QueryFiltered,
 	}
 	_, _ = AddFileParseVersion(parseVersion)
 }

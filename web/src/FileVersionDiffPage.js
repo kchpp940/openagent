@@ -160,16 +160,29 @@ class FileVersionDiffPage extends BaseListPage {
       );
 
       if (diff.vectorsWritten) {
+        let safetyTags = [];
+        if (diff.orphanVectorsCleaned) {
+          safetyTags.push(<Tag color="success" key="cleaned">{i18next.t("file:Physically Cleaned")}</Tag>);
+        }
+        if (diff.queryFiltered) {
+          safetyTags.push(<Tag color="blue" key="filtered">{i18next.t("file:Query Isolated")}</Tag>);
+        }
+        if (!diff.orphanVectorsCleaned && !diff.queryFiltered) {
+          safetyTags.push(<Tag color="error" key="risk">{i18next.t("file:Not Cleaned - Risk")}</Tag>);
+        } else if (!diff.orphanVectorsCleaned && diff.queryFiltered) {
+          safetyTags.push(<Tag color="warning" key="partial">{i18next.t("file:Not Cleaned - Isolated by Query")}</Tag>);
+        }
+
         errorItems.push(
           <Descriptions.Item label={i18next.t("file:Vectors Written")} span={2} key="vectors-written">
-            {diff.orphanVectorsCleaned ? (
-              <Tag color="success">{i18next.t("file:Cleaned")}</Tag>
-            ) : (
-              <Tag color="error">{i18next.t("file:Not Cleaned - Risk")}</Tag>
-            )}
-            <Text type="secondary" style={{marginLeft: 8}}>
-              {i18next.t("file:Orphan vectors from this obsolete job")}
-            </Text>
+            <div>
+              {safetyTags}
+              <div style={{marginTop: 4}}>
+                <Text type="secondary" style={{fontSize: 12}}>
+                  {i18next.t("file:Orphan vectors from this obsolete job")}
+                </Text>
+              </div>
+            </div>
           </Descriptions.Item>
         );
       } else {

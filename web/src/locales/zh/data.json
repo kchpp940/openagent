@@ -135,8 +135,10 @@
     "Running": "执行中",
     "Old": "历史版本",
     "Vectors Written": "向量写入状态",
-    "Cleaned": "已清理",
+    "Physically Cleaned": "已物理清理",
+    "Query Isolated": "查询隔离",
     "Not Cleaned - Risk": "未清理 - 有风险",
+    "Not Cleaned - Isolated by Query": "未物理清理 - 查询已隔离",
     "Orphan vectors from this obsolete job": "此过期任务产生的孤儿向量",
     "No vectors written": "未写入向量",
     "{count} more errors": "还有 {count} 个错误"
