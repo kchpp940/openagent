@@ -34,8 +34,6 @@ class VectorListPage extends BaseListPage {
         fileFilter,
         searchText: fileFilter,
         searchedColumn: "file",
-        fileInfo: null,
-        loadingFileInfo: false,
       };
     }
   }
@@ -44,55 +42,10 @@ class VectorListPage extends BaseListPage {
     const {pagination} = this.state;
     if (this.state.fileFilter) {
       this.fetch({pagination, searchText: this.state.fileFilter, searchedColumn: "file"});
-      this.loadFileInfo(this.state.fileFilter);
     } else {
       this.fetch({pagination});
     }
     this.getForm();
-  }
-
-  loadFileInfo(filePath) {
-    const storeName = this.getApiStoreName();
-    const owner = this.props.account?.name || "admin";
-    this.setState({loadingFileInfo: true});
-    FileBackend.getFiles(owner, storeName)
-      .then((res) => {
-        if (res.status === "ok" && res.data) {
-          const matchedFile = res.data.find(f => {
-            const name = f.name || "";
-            const prefix = `${storeName}_`;
-            const objectKey = name.startsWith(prefix) ? name.slice(prefix.length) : name;
-            return objectKey === filePath || name === filePath;
-          });
-          this.setState({
-            fileInfo: matchedFile || null,
-            loadingFileInfo: false,
-          });
-        } else {
-          this.setState({loadingFileInfo: false});
-        }
-      })
-      .catch(() => {
-        this.setState({loadingFileInfo: false});
-      });
-  }
-
-  refreshFileVectors() {
-    if (!this.state.fileInfo) {
-      return;
-    }
-    FileBackend.refreshFileVectors(this.state.fileInfo)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
-          setTimeout(() => this.loadFileInfo(this.state.fileFilter), 1000);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
-        }
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
-      });
   }
 
   newVector() {
@@ -179,6 +132,102 @@ class VectorListPage extends BaseListPage {
       });
   }
 
+  getFileDetailFromVectors() {
+    if (!this.state.data || this.state.data.length === 0) {
+      return null;
+    }
+    const firstVectorWithDetail = this.state.data.find(v => v.fileStateDetail);
+    return firstVectorWithDetail?.fileStateDetail || null;
+  }
+
+  getFileRecord() {
+    if (!this.state.fileFilter || !this.state.data || this.state.data.length === 0) {
+      return null;
+    }
+    const v = this.state.data[0];
+    return {
+      owner: v.owner,
+      name: `${v.store}_${this.state.fileFilter}`,
+      store: v.store,
+    };
+  }
+
+  refreshFileVectors() {
+    const fileRecord = this.getFileRecord();
+    if (!fileRecord) {
+      return;
+    }
+    FileBackend.refreshFileVectors(fileRecord)
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          setTimeout(() => this.fetch({pagination: this.state.pagination}), 1500);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
+        }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
+      });
+  }
+
+  renderFileStatusCard() {
+    if (!this.state.fileFilter) {
+      return null;
+    }
+    const detail = this.getFileDetailFromVectors();
+    const isProcessing = detail?.state === "Parsing" || detail?.state === "Vectorizing";
+
+    return (
+      <Card
+        size="small"
+        style={{marginBottom: "16px", borderRadius: "10px"}}
+        title={
+          <span>
+            {i18next.t("store:File")}: <code style={{color: "var(--ant-color-text-secondary)"}}>{this.state.fileFilter}</code>
+            &nbsp;&nbsp;
+            <Tag color={detail?.labelColor || "default"}>{detail?.label || "-"}</Tag>
+          </span>
+        }
+        extra={
+          Setting.isLocalAdminUser(this.props.account) ? (
+            <Tooltip title={detail?.canRetry ? i18next.t("general:Refresh Vectors") : detail?.label || ""}>
+              <Button
+                type="primary"
+                size="small"
+                icon={<ReloadOutlined />}
+                disabled={!detail?.canRetry}
+                loading={isProcessing}
+                onClick={() => this.refreshFileVectors()}
+              >
+                {i18next.t("general:Refresh Vectors")}
+              </Button>
+            </Tooltip>
+          ) : null
+        }
+      >
+        {isProcessing && detail?.totalSections > 0 && (
+          <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
+        )}
+        {detail?.errorText && (
+          <div style={{color: "var(--ant-color-error)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("general:Error")}: {detail.errorText}
+          </div>
+        )}
+        {detail?.vectorError && !detail?.errorText && (
+          <div style={{color: "var(--ant-color-warning)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("vector:Vector error")}: {detail.vectorError}
+          </div>
+        )}
+        {this.state.data.length > 0 && (
+          <div style={{color: "var(--ant-color-text-secondary)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("vector:Vector count")}: {this.state.data.length}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
   renderTable(vectors) {
     const columns = [
       {
@@ -211,13 +260,6 @@ class VectorListPage extends BaseListPage {
           );
         },
       },
-      // {
-      //   title: i18next.t("general:Display name"),
-      //   dataIndex: "displayName",
-      //   key: "displayName",
-      //   width: "200px",
-      //   sorter: (a, b) => a.displayName.localeCompare(b.displayName),
-      // },
       {
         title: i18next.t("general:Provider"),
         dataIndex: "provider",
@@ -240,6 +282,31 @@ class VectorListPage extends BaseListPage {
         width: "200px",
         sorter: (a, b) => a.file.localeCompare(b.file),
         ...this.getColumnSearchProps("file"),
+      },
+      {
+        title: i18next.t("general:File Status"),
+        dataIndex: "fileStateDetail",
+        key: "fileStatus",
+        width: "150px",
+        render: (text, record) => {
+          const detail = record.fileStateDetail || {};
+          const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
+          return (
+            <div>
+              <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
+              {isProcessing && detail.totalSections > 0 && (
+                <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
+              )}
+              {detail.errorText && (
+                <Tooltip title={detail.errorText}>
+                  <div style={{color: "var(--ant-color-error)", fontSize: "12px", marginTop: "4px"}}>
+                    {Setting.getShortText(detail.errorText, 30)}
+                  </div>
+                </Tooltip>
+              )}
+            </div>
+          );
+        },
       },
       {
         title: i18next.t("vector:Index"),
@@ -366,6 +433,21 @@ class VectorListPage extends BaseListPage {
     );
   }
 
+  render() {
+    if (!this.state.isAuthorized) {
+      return super.render();
+    }
+    if (this.state.loading && this.state.data === null) {
+      return super.render();
+    }
+    return (
+      <div>
+        {this.renderFileStatusCard()}
+        {this.renderTable(this.state.data)}
+      </div>
+    );
+  }
+
   fetch = (params = {}) => {
     const field = "searchedColumn" in params ? params.searchedColumn : this.state.searchedColumn;
     const value = "searchText" in params ? params.searchText : this.state.searchText;
@@ -386,9 +468,6 @@ class VectorListPage extends BaseListPage {
             searchText: params.searchText,
             searchedColumn: params.searchedColumn,
           });
-          if (this.state.fileFilter) {
-            this.loadFileInfo(this.state.fileFilter);
-          }
         } else {
           if (Setting.isResponseDenied(res)) {
             this.setState({
@@ -400,79 +479,6 @@ class VectorListPage extends BaseListPage {
         }
       });
   };
-
-  renderFileStatusCard() {
-    if (!this.state.fileFilter) {
-      return null;
-    }
-    const fileInfo = this.state.fileInfo;
-    const detail = fileInfo?.stateDetail || {};
-    const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
-
-    return (
-      <Card
-        size="small"
-        style={{marginBottom: "16px", borderRadius: "10px"}}
-        title={
-          <span>
-            {i18next.t("store:File")}: <code style={{color: "var(--ant-color-text-secondary)"}}>{this.state.fileFilter}</code>
-            &nbsp;&nbsp;
-            <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
-          </span>
-        }
-        extra={
-          Setting.isLocalAdminUser(this.props.account) ? (
-            <Tooltip title={detail.canRetry ? i18next.t("general:Refresh Vectors") : detail.label || ""}>
-              <Button
-                type="primary"
-                size="small"
-                icon={<ReloadOutlined />}
-                disabled={!detail.canRetry}
-                loading={isProcessing}
-                onClick={() => this.refreshFileVectors()}
-              >
-                {i18next.t("general:Refresh Vectors")}
-              </Button>
-            </Tooltip>
-          ) : null
-        }
-      >
-        {isProcessing && detail.totalSections > 0 && (
-          <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
-        )}
-        {detail.errorText && (
-          <div style={{color: "var(--ant-color-error)", fontSize: "13px", marginTop: "8px"}}>
-            {i18next.t("general:Error")}: {detail.errorText}
-          </div>
-        )}
-        {detail.vectorError && !detail.errorText && (
-          <div style={{color: "var(--ant-color-warning)", fontSize: "13px", marginTop: "8px"}}>
-            {i18next.t("vector:Vector error")}: {detail.vectorError}
-          </div>
-        )}
-        {fileInfo?.tokenCount > 0 && (
-          <div style={{color: "var(--ant-color-text-secondary)", fontSize: "13px", marginTop: "8px"}}>
-            {i18next.t("general:Tokens")}: {fileInfo.tokenCount}
-          </div>
-        )}
-      </Card>
-    );
-  }
-
-  render() {
-    if (!this.state.isAuthorized) {
-      return super.render();
-    }
-    if (this.state.loading && this.state.data === null) {
-      return super.render();
-    }
-    return (
-      <div>
-        {this.renderFileStatusCard()}
-        {this.renderTable(this.state.data)}
-      </div>
-    );
-  }
 }
 
 export default VectorListPage;

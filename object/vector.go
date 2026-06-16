@@ -39,6 +39,8 @@ type Vector struct {
 
 	Data      []float32 `xorm:"mediumtext" json:"data"`
 	Dimension int       `json:"dimension"`
+
+	StateDetail *FileStateDetail `xorm:"-" json:"fileStateDetail,omitempty"`
 }
 
 func GetGlobalVectors() ([]*Vector, error) {
@@ -48,7 +50,8 @@ func GetGlobalVectors() ([]*Vector, error) {
 		return vectors, err
 	}
 
-	return vectors, nil
+	err = populateVectorFileStateDetails(vectors)
+	return vectors, err
 }
 
 func GetVectors(owner string) ([]*Vector, error) {
@@ -58,7 +61,8 @@ func GetVectors(owner string) ([]*Vector, error) {
 		return vectors, err
 	}
 
-	return vectors, nil
+	err = populateVectorFileStateDetails(vectors)
+	return vectors, err
 }
 
 func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, error) {
@@ -68,7 +72,8 @@ func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, e
 		return vectors, err
 	}
 
-	return vectors, nil
+	err = populateVectorFileStateDetails(vectors)
+	return vectors, err
 }
 
 func getVector(owner string, name string) (*Vector, error) {
@@ -225,7 +230,8 @@ func GetPaginationVectors(owner string, storeName string, offset, limit int, fie
 		return vectors, err
 	}
 
-	return vectors, nil
+	err = populateVectorFileStateDetails(vectors)
+	return vectors, err
 }
 
 func GetPaginationVectorsByStoreNames(storeNames []string, offset, limit int, field, value, sortField, sortOrder string) ([]*Vector, error) {
@@ -239,5 +245,52 @@ func GetPaginationVectorsByStoreNames(storeNames []string, offset, limit int, fi
 	if err != nil {
 		return vectors, err
 	}
-	return vectors, nil
+
+	err = populateVectorFileStateDetails(vectors)
+	return vectors, err
+}
+
+func populateVectorFileStateDetails(vectors []*Vector) error {
+	if len(vectors) == 0 {
+		return nil
+	}
+
+	type fileKey struct {
+		owner     string
+		storeName string
+	}
+	fileKeyMap := make(map[fileKey][]string)
+	for _, v := range vectors {
+		if v.File == "" {
+			continue
+		}
+		k := fileKey{owner: v.Owner, storeName: v.Store}
+		fileKeyMap[k] = append(fileKeyMap[k], v.File)
+	}
+
+	for k, fileKeys := range fileKeyMap {
+		files, err := GetFilesByStore(k.owner, k.storeName)
+		if err != nil {
+			continue
+		}
+
+		stateMap := make(map[string]*FileStateDetail, len(files))
+		for _, f := range files {
+			objectKey := f.getObjectKey()
+			if objectKey != "" {
+				stateMap[objectKey] = f.StateDetail
+			}
+		}
+
+		for _, v := range vectors {
+			if v.Owner != k.owner || v.Store != k.storeName || v.File == "" {
+				continue
+			}
+			if detail, ok := stateMap[v.File]; ok {
+				v.StateDetail = detail
+			}
+		}
+	}
+
+	return nil
 }
