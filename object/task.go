@@ -125,31 +125,23 @@ func GetMaskedTasks(tasks []*Task, isMaskEnabled bool) []*Task {
 }
 
 func GetGlobalTasks(owner string) ([]*Task, error) {
-	tasks := []*Task{}
-	session := adapter.engine.Asc("owner").Desc("created_time")
-	if owner != "" {
-		session = session.Where("owner = ?", owner)
+	opts := ListQueryOptions{
+		SortFields: []SortItem{
+			{Field: "owner", Order: OrderAscend},
+			{Field: "created_time", Order: OrderDescend},
+		},
+		Owner: owner,
 	}
-	err := session.Find(&tasks)
-	if err != nil {
-		return tasks, err
-	}
-
-	return tasks, nil
+	return ListTasks(opts)
 }
 
 func GetTasks(owner string) ([]*Task, error) {
-	tasks := []*Task{}
-	session := adapter.engine.Desc("created_time")
-	if owner != "" {
-		session = session.Where("owner = ?", owner)
+	opts := ListQueryOptions{
+		SortField: "created_time",
+		SortOrder: OrderDescend,
+		Owner:     owner,
 	}
-	err := session.Find(&tasks)
-	if err != nil {
-		return tasks, err
-	}
-
-	return tasks, nil
+	return ListTasks(opts)
 }
 
 func getTask(owner string, name string) (*Task, error) {

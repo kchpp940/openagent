@@ -76,15 +76,22 @@ func GetMaskedTools(tools []*Tool, isMaskEnabled bool, user *auth.User) []*Tool 
 }
 
 func GetGlobalTools() ([]*Tool, error) {
-	tools := []*Tool{}
-	err := adapter.engine.Asc("owner").Desc("created_time").Find(&tools)
-	return tools, err
+	opts := ListQueryOptions{
+		SortFields: []SortItem{
+			{Field: "owner", Order: OrderAscend},
+			{Field: "created_time", Order: OrderDescend},
+		},
+	}
+	return ListTools(opts)
 }
 
 func GetTools(owner string) ([]*Tool, error) {
-	tools := []*Tool{}
-	err := adapter.engine.Desc("created_time").Find(&tools, &Tool{Owner: owner})
-	return tools, err
+	opts := ListQueryOptions{
+		SortField: "created_time",
+		SortOrder: OrderDescend,
+		Owner:     owner,
+	}
+	return ListTools(opts)
 }
 
 func getTool(owner string, name string) (*Tool, error) {

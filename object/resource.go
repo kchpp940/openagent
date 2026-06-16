@@ -46,32 +46,24 @@ func (resource *Resource) GetId() string {
 }
 
 func GetGlobalResources(owner string) ([]*Resource, error) {
-	resources := []*Resource{}
-	session := adapter.engine.Asc("owner").Desc("created_time")
-	if owner != "" {
-		session = session.Where("owner = ?", owner)
+	opts := ListQueryOptions{
+		SortFields: []SortItem{
+			{Field: "owner", Order: OrderAscend},
+			{Field: "created_time", Order: OrderDescend},
+		},
+		Owner: owner,
 	}
-	err := session.Find(&resources)
-	if err != nil {
-		return resources, err
-	}
-	return resources, nil
+	return ListResources(opts)
 }
 
 func GetResources(owner, user string) ([]*Resource, error) {
-	resources := []*Resource{}
-	session := adapter.engine.Desc("created_time")
-	if owner != "" {
-		session = session.Where("owner = ?", owner)
+	opts := ListQueryOptions{
+		SortField: "created_time",
+		SortOrder: OrderDescend,
+		Owner:     owner,
+		User:      user,
 	}
-	if user != "" {
-		session = session.And("user = ?", user)
-	}
-	err := session.Find(&resources)
-	if err != nil {
-		return resources, err
-	}
-	return resources, nil
+	return ListResources(opts)
 }
 
 func getResource(owner, name string) (*Resource, error) {
@@ -150,27 +142,29 @@ func DeleteResource(resource *Resource) (bool, error) {
 
 func GetResourceCount(owner, user, field, value string) (int64, error) {
 	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
-	return CountResources(opts, user)
+	opts.User = user
+	return CountResources(opts)
 }
 
 func GetPaginationResources(owner, user string, offset, limit int, field, value, sortField, sortOrder string) ([]*Resource, error) {
 	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
-	return ListResources(opts, user)
+	opts.User = user
+	return ListResources(opts)
 }
 
-func CountResources(opts ListQueryOptions, user string) (int64, error) {
+func CountResources(opts ListQueryOptions) (int64, error) {
 	session := BuildCountSession(opts)
-	if user != "" {
-		session = session.And("user = ?", user)
+	if opts.User != "" {
+		session = session.And("user = ?", opts.User)
 	}
 	return session.Count(&Resource{})
 }
 
-func ListResources(opts ListQueryOptions, user string) ([]*Resource, error) {
+func ListResources(opts ListQueryOptions) ([]*Resource, error) {
 	resources := []*Resource{}
 	session := BuildListSession(opts)
-	if user != "" {
-		session = session.And("user = ?", user)
+	if opts.User != "" {
+		session = session.And("user = ?", opts.User)
 	}
 	err := session.Find(&resources)
 	return resources, err

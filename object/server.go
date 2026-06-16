@@ -56,12 +56,12 @@ func (s *Server) GetId() string {
 }
 
 func GetServers(owner string) ([]*Server, error) {
-	servers := []*Server{}
-	err := adapter.engine.Desc("created_time").Find(&servers, &Server{Owner: owner})
-	if err != nil {
-		return servers, err
+	opts := ListQueryOptions{
+		SortField: "created_time",
+		SortOrder: OrderDescend,
+		Owner:     owner,
 	}
-	return servers, nil
+	return ListServers(opts)
 }
 
 func getServer(owner, name string) (*Server, error) {

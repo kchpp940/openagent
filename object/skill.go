@@ -232,15 +232,22 @@ func LoadSkill(dir string) (*Skill, error) {
 // ---------------------------------------------------------------------------
 
 func GetGlobalSkills() ([]*Skill, error) {
-	skills := []*Skill{}
-	err := adapter.engine.Asc("owner").Desc("created_time").Find(&skills)
-	return skills, err
+	opts := ListQueryOptions{
+		SortFields: []SortItem{
+			{Field: "owner", Order: OrderAscend},
+			{Field: "created_time", Order: OrderDescend},
+		},
+	}
+	return ListSkills(opts)
 }
 
 func GetSkills(owner string) ([]*Skill, error) {
-	skills := []*Skill{}
-	err := adapter.engine.Desc("created_time").Find(&skills, &Skill{Owner: owner})
-	return skills, err
+	opts := ListQueryOptions{
+		SortField: "created_time",
+		SortOrder: OrderDescend,
+		Owner:     owner,
+	}
+	return ListSkills(opts)
 }
 
 func getSkill(owner string, name string) (*Skill, error) {

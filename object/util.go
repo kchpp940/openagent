@@ -17,6 +17,7 @@ package object
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/sashabaranov/go-openai"
@@ -27,31 +28,70 @@ import (
 type ScopeType string
 
 const (
-	ScopeAll      ScopeType = "all"
-	ScopePublic   ScopeType = "public"
-	ScopePrivate  ScopeType = "private"
-	ScopeMine     ScopeType = "mine"
+	ScopeAll     ScopeType = "all"
+	ScopePublic  ScopeType = "public"
+	ScopePrivate ScopeType = "private"
+	ScopeMine    ScopeType = "mine"
 )
 
+const (
+	OrderAscend  = "ascend"
+	OrderDescend = "descend"
+)
+
+type SortItem struct {
+	Field string
+	Order string
+}
+
 type ListQueryOptions struct {
-	Owner      string
-	Owners     []string
-	Name       string
-	Offset     int
-	Limit      int
-	SortField  string
-	SortOrder  string
-	Field      string
-	Value      string
-	Keyword    string
+	Owner        string
+	Owners       []string
+	User         string
+	Name         string
+	Names        []string
+	Offset       int
+	Limit        int
+	SortField    string
+	SortOrder    string
+	SortFields   []SortItem
+	Field        string
+	Value        string
+	Keyword      string
 	SearchFields []string
-	Scope      ScopeType
-	State      string
+	Scope        ScopeType
+	State        string
+	PublishState string
+	Cols         []string
 }
 
 type PaginationResult[T any] struct {
 	Data  []*T  `json:"data"`
 	Total int64 `json:"total"`
+}
+
+var safeFieldNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func isSafeDbFieldName(name string) bool {
+	return safeFieldNameRe.MatchString(name)
+}
+
+func safeSnakeField(field string) (string, bool) {
+	if !util.FilterField(field) {
+		return "", false
+	}
+	snake := util.SnakeString(field)
+	if !isSafeDbFieldName(snake) {
+		return "", false
+	}
+	return snake, true
+}
+
+func normalizeSortOrder(order string) string {
+	if order == OrderAscend {
+		return OrderAscend
+	}
+	return OrderDescend
 }
 
 func (o *ListQueryOptions) normalize() {
@@ -61,7 +101,7 @@ func (o *ListQueryOptions) normalize() {
 	if o.Limit < 0 {
 		o.Limit = -1
 	}
-	if o.SortField == "" {
+	if len(o.SortFields) == 0 && o.SortField == "" {
 		o.SortField = "created_time"
 	}
 }
@@ -72,6 +112,18 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 
 	if opts.Offset != -1 && opts.Limit != -1 {
 		session.Limit(opts.Limit, opts.Offset)
+	}
+
+	if len(opts.Cols) > 0 {
+		safeCols := make([]string, 0, len(opts.Cols))
+		for _, c := range opts.Cols {
+			if snake, ok := safeSnakeField(c); ok {
+				safeCols = append(safeCols, snake)
+			}
+		}
+		if len(safeCols) > 0 {
+			session.Cols(safeCols...)
+		}
 	}
 
 	if opts.Owner != "" {
@@ -88,10 +140,17 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 	if opts.Name != "" {
 		session = session.And("name = ?", opts.Name)
 	}
+	if len(opts.Names) > 0 {
+		args := make([]interface{}, len(opts.Names))
+		for i, n := range opts.Names {
+			args[i] = n
+		}
+		session = session.In("name", args...)
+	}
 
 	if opts.Field != "" && opts.Value != "" {
-		if util.FilterField(opts.Field) {
-			session = session.And(fmt.Sprintf("%s like ?", util.SnakeString(opts.Field)), fmt.Sprintf("%%%s%%", opts.Value))
+		if snake, ok := safeSnakeField(opts.Field); ok {
+			session = session.And(fmt.Sprintf("%s like ?", snake), fmt.Sprintf("%%%s%%", opts.Value))
 		}
 	}
 
@@ -99,8 +158,8 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 		var conditions []string
 		var args []interface{}
 		for _, f := range opts.SearchFields {
-			if util.FilterField(f) {
-				conditions = append(conditions, fmt.Sprintf("%s like ?", util.SnakeString(f)))
+			if snake, ok := safeSnakeField(f); ok {
+				conditions = append(conditions, fmt.Sprintf("%s like ?", snake))
 				args = append(args, fmt.Sprintf("%%%s%%", opts.Keyword))
 			}
 		}
@@ -113,11 +172,32 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 		session = session.And("state = ?", opts.State)
 	}
 
-	snakeSortField := util.SnakeString(opts.SortField)
-	if opts.SortOrder == "ascend" {
-		session = session.Asc(snakeSortField)
+	if opts.PublishState != "" {
+		session = session.And("publish_state = ?", opts.PublishState)
+	}
+
+	if len(opts.SortFields) > 0 {
+		for _, si := range opts.SortFields {
+			if snake, ok := safeSnakeField(si.Field); ok {
+				order := normalizeSortOrder(si.Order)
+				if order == OrderAscend {
+					session = session.Asc(snake)
+				} else {
+					session = session.Desc(snake)
+				}
+			}
+		}
 	} else {
-		session = session.Desc(snakeSortField)
+		if snake, ok := safeSnakeField(opts.SortField); ok {
+			order := normalizeSortOrder(opts.SortOrder)
+			if order == OrderAscend {
+				session = session.Asc(snake)
+			} else {
+				session = session.Desc(snake)
+			}
+		} else {
+			session = session.Desc("created_time")
+		}
 	}
 
 	return session
@@ -126,6 +206,10 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 func BuildCountSession(opts ListQueryOptions) *xorm.Session {
 	opts.Offset = -1
 	opts.Limit = -1
+	opts.Cols = nil
+	opts.SortFields = nil
+	opts.SortField = ""
+	opts.SortOrder = ""
 	return BuildListSession(opts)
 }
 
