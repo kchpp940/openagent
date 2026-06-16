@@ -19,7 +19,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
-import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
+import {CapabilityInfo} from "./CapabilityStatus";
 
 const {Option} = Select;
 
@@ -32,8 +32,6 @@ class ToolEditPage extends React.Component {
       tool: null,
       originalTool: null,
       isNewTool: props.location?.state?.isNewTool || false,
-      recheckButtonLoading: false,
-      recheckError: null,
     };
   }
 
@@ -52,41 +50,6 @@ class ToolEditPage extends React.Component {
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
-      });
-  }
-
-  runCapabilityRecheck() {
-    this.setState({recheckButtonLoading: true});
-    ToolBackend.runToolCapabilityCheck(this.state.tool.owner, this.state.tool.name)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully got"));
-          const decision = res.data;
-          const tool = {...this.state.tool,
-            lastCapabilityCheck: decision?.checkedAt,
-            lastCapabilityStatus: decision?.state,
-            lastCapabilityError: decision?.blockReason,
-            lastCapabilityHash: decision?.configHash,
-          };
-          tool.capabilityDecision = decision;
-          tool.capabilityInfo = decision ? {
-            state: decision.state,
-            canMount: decision.canMount,
-            needsRecheck: decision.needsRecheck,
-            reason: decision.blockReason,
-          } : null;
-          this.setState({tool, recheckError: null});
-        } else {
-          const recheckError = extractCapabilityError(res);
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({recheckError});
-        }
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState({recheckButtonLoading: false});
       });
   }
 
@@ -166,7 +129,9 @@ class ToolEditPage extends React.Component {
           </div>
         </div>
 
-        <CapabilityErrorAlert error={this.state.recheckError} />
+        <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <CapabilityInfo capability={tool.capability} />
+        </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -312,26 +277,14 @@ class ToolEditPage extends React.Component {
               </Col>
             ) : null}
             {this.renderToolField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("tool:Computed from latest capability check result - Tooltip")),
-              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                {tool.capabilityInfo ? Setting.renderCapabilityState(tool.capabilityInfo.state) : Setting.renderCapabilityState(tool.lastCapabilityStatus || "Pending")}
-                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
-                  {i18next.t("general:Recheck")}
-                </Button>
-              </div>,
+              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
+              <Select virtual={false} style={{width: "100%"}} value={tool.state}
+                onChange={value => this.updateToolField("state", value)}
+                options={[
+                  {value: "Active", label: i18next.t("general:Active")},
+                  {value: "Inactive", label: i18next.t("general:Inactive")},
+                ].map(item => Setting.getOption(item.label, item.value))} />,
               8
-            )}
-            {tool.lastCapabilityCheck && (
-              <Col span={24} style={{marginTop: "4px"}}>
-                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                  {`${i18next.t("general:Last checked")}: ${tool.lastCapabilityCheck}`}
-                </span>
-                {(tool.capabilityInfo?.reason || tool.lastCapabilityError) && (
-                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                    {`${i18next.t("general:Reason")}: ${tool.capabilityInfo?.reason || tool.lastCapabilityError}`}
-                  </span>
-                )}
-              </Col>
             )}
           </Row>
         </Card>

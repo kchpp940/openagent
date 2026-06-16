@@ -28,22 +28,8 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 	}
 
 	if len(store.Skills) > 0 {
-		var activeSkills []string
-		for _, sname := range store.Skills {
-			id := util.GetIdFromOwnerAndName(store.Owner, sname)
-			s, err := GetSkill(id)
-			if err != nil || s == nil {
-				continue
-			}
-			d, _ := GetSkillCapabilityDecision(s, false, "")
-			if d != nil && d.CanMount {
-				activeSkills = append(activeSkills, sname)
-			}
-		}
-		if len(activeSkills) > 0 {
-			if bt := tool.NewLoadSkillBuiltin(store.Owner, activeSkills, skillLoader{}); bt != nil {
-				reg.RegisterTool(bt)
-			}
+		if bt := tool.NewLoadSkillBuiltin(store.Owner, store.Skills, skillLoader{}); bt != nil {
+			reg.RegisterTool(bt)
 		}
 	}
 
@@ -53,7 +39,9 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err == nil {
 			toolNames = make([]string, 0, len(allTools))
 			for _, t := range allTools {
-				toolNames = append(toolNames, t.Name)
+				if CheckToolMountable(t) {
+					toolNames = append(toolNames, t.Name)
+				}
 			}
 		}
 	}
@@ -64,8 +52,7 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err != nil || t == nil {
 			continue
 		}
-		d, _ := GetToolCapabilityDecision(t, false, "")
-		if d == nil || !d.CanMount {
+		if !CheckToolMountable(t) {
 			continue
 		}
 		tp, err := tool.New(getToolConfig(t), lang)

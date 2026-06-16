@@ -16,11 +16,10 @@ import React from "react";
 import Loading from "./common/Loading";
 import {Button, Card, Col, Collapse, Input, Row, Select, Space, Tag, Typography} from "antd";
 import * as SkillBackend from "./backend/SkillBackend";
-import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
-import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
+import {CapabilityInfo} from "./CapabilityStatus";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -38,8 +37,6 @@ class SkillEditPage extends React.Component {
       skill: null,
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
-      recheckButtonLoading: false,
-      recheckError: null,
     };
   }
 
@@ -58,41 +55,6 @@ class SkillEditPage extends React.Component {
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
-      });
-  }
-
-  runCapabilityRecheck() {
-    this.setState({recheckButtonLoading: true});
-    ToolBackend.runSkillCapabilityCheck(this.state.skill.owner, this.state.skill.name)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully got"));
-          const decision = res.data;
-          const skill = {...this.state.skill,
-            lastCapabilityCheck: decision?.checkedAt,
-            lastCapabilityStatus: decision?.state,
-            lastCapabilityError: decision?.blockReason,
-            lastCapabilityHash: decision?.configHash,
-          };
-          skill.capabilityDecision = decision;
-          skill.capabilityInfo = decision ? {
-            state: decision.state,
-            canMount: decision.canMount,
-            needsRecheck: decision.needsRecheck,
-            reason: decision.blockReason,
-          } : null;
-          this.setState({skill, recheckError: null});
-        } else {
-          const recheckError = extractCapabilityError(res);
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({recheckError});
-        }
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState({recheckButtonLoading: false});
       });
   }
 
@@ -147,7 +109,9 @@ class SkillEditPage extends React.Component {
           </div>
         </div>
 
-        <CapabilityErrorAlert error={this.state.recheckError} />
+        <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <CapabilityInfo capability={skill.capability} />
+        </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -183,26 +147,15 @@ class SkillEditPage extends React.Component {
               8
             )}
             {this.renderSkillField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("skill:Computed from latest capability check result - Tooltip")),
-              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                {skill.capabilityInfo ? Setting.renderCapabilityState(skill.capabilityInfo.state) : Setting.renderCapabilityState(skill.lastCapabilityStatus || "Pending")}
-                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
-                  {i18next.t("general:Recheck")}
-                </Button>
-              </div>,
+              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
+              <Select virtual={false} style={{width: "100%"}} value={skill.state}
+                onChange={value => this.updateSkillField("state", value)}
+                options={[
+                  {value: "Active", label: i18next.t("general:Active")},
+                  {value: "Inactive", label: i18next.t("general:Inactive")},
+                ].map(item => Setting.getOption(item.label, item.value))}
+              />,
               8
-            )}
-            {skill.lastCapabilityCheck && (
-              <Col span={24} style={{marginTop: "4px"}}>
-                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                  {`${i18next.t("general:Last checked")}: ${skill.lastCapabilityCheck}`}
-                </span>
-                {(skill.capabilityInfo?.reason || skill.lastCapabilityError) && (
-                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                    {`${i18next.t("general:Reason")}: ${skill.capabilityInfo?.reason || skill.lastCapabilityError}`}
-                  </span>
-                )}
-              </Col>
             )}
           </Row>
         </Card>

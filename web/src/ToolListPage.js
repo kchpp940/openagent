@@ -21,6 +21,7 @@ import * as Setting from "./Setting";
 import * as ToolBackend from "./backend/ToolBackend";
 import i18next from "i18next";
 import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
+import {CapabilityInfo} from "./CapabilityStatus";
 
 class ToolListPage extends BaseListPage {
   constructor(props) {
@@ -154,17 +155,16 @@ class ToolListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("general:State"),
-        dataIndex: "state",
-        key: "state",
-        width: "110px",
-        sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
-        render: (text, record) => {
-          if (record.capabilityInfo) {
-            return Setting.renderCapabilityState(record.capabilityInfo.state);
-          }
-          return text;
-        },
+        title: i18next.t("general:Capability"),
+        dataIndex: "capability",
+        key: "capability",
+        width: "280px",
+        sorter: (a, b) => (a.capability?.status || "").localeCompare(b.capability?.status || ""),
+        render: (_, record) => (
+          <div style={{minWidth: "260px"}}>
+            <CapabilityInfo capability={record.capability} showIssues={false} />
+          </div>
+        ),
       },
       {
         title: i18next.t("general:Action"),

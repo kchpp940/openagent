@@ -23,6 +23,7 @@ import i18next from "i18next";
 import {DeleteOutlined, DownloadOutlined, EditOutlined, ShopOutlined} from "@ant-design/icons";
 import LoadSkillModal from "./LoadSkillModal";
 import SkillMarketplaceModal from "./SkillMarketplaceModal";
+import {CapabilityInfo} from "./CapabilityStatus";
 
 const SKILL_TYPES = ["writing", "coding", "analysis", "translation", "reasoning", "search", "custom"];
 
@@ -161,17 +162,16 @@ class SkillListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("general:State"),
-        dataIndex: "state",
-        key: "state",
-        width: "100px",
-        sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
-        render: (text, record) => {
-          if (record.capabilityInfo) {
-            return Setting.renderCapabilityState(record.capabilityInfo.state);
-          }
-          return text;
-        },
+        title: i18next.t("general:Capability"),
+        dataIndex: "capability",
+        key: "capability",
+        width: "280px",
+        sorter: (a, b) => (a.capability?.status || "").localeCompare(b.capability?.status || ""),
+        render: (_, record) => (
+          <div style={{minWidth: "260px"}}>
+            <CapabilityInfo capability={record.capability} showIssues={false} />
+          </div>
+        ),
       },
       {
         title: i18next.t("general:Action"),

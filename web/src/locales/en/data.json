@@ -111,9 +111,6 @@
     "Add": "Add",
     "Admin": "Admin",
     "After": "After",
-    "Error": "Error",
-    "Pending": "Pending",
-    "Stale": "Stale",
     "Auditing Logs": "Auditing Logs",
     "Avatar": "Avatar",
     "Avatar - Tooltip": "Icon URL for visual identification",
@@ -300,9 +297,6 @@
     "Request URI": "Request URI",
     "Request URI - Tooltip": "Full request path",
     "Requires Casdoor to be installed": "Requires Casdoor to be installed",
-    "Recheck": "Recheck",
-    "Last checked": "Last checked",
-    "Reason": "Reason",
     "Reset": "Reset",
     "Reset to Default": "Reset to Default",
     "Resources": "Resources",
@@ -338,6 +332,9 @@
     "Sorry, the page you visited does not exist.": "Sorry, the page you visited does not exist.",
     "Sorry, you do not have permission to access this page or logged in status invalid.": "Sorry, you do not have permission to access this page or logged in status invalid.",
     "Sort": "Sort",
+    "Capability": "Capability",
+    "Capability Status": "Capability Status",
+    "Capability Status desc": "Availability status, issues and usage suggestions for tools/skills",
     "State": "State",
     "State - Tooltip": "Service operational state",
     "Static base URL": "Static base URL",
@@ -408,10 +405,7 @@
     "Website": "Website",
     "empty": "empty",
     "items": "items",
-    "{total} in total": "{total} in total",
-    "Save blocked by capability check": "Save blocked by capability check",
-    "Failed resources": "Failed resources",
-    "Warnings": "Warnings"
+    "{total} in total": "{total} in total"
   },
   "login": {
     "Additional Information": "Additional Information",
@@ -614,8 +608,7 @@
     "Scanned hosts": "Scanned hosts",
     "Select tool...": "Select tool...",
     "Sync tools first using the Sync button above": "Sync tools first using the Sync button above",
-    "This tool takes no arguments": "This tool takes no arguments",
-    "Computed from latest capability check result - Tooltip": "Server capability state is computed automatically from the latest MCP connection check result, config hash and runtime validation. This field is read-only."
+    "This tool takes no arguments": "This tool takes no arguments"
   },
   "setup": {
     "AI Model": "AI Model",
@@ -699,8 +692,7 @@
     "Skill Marketplace": "Skill Marketplace",
     "Skill folder path": "Skill folder path",
     "Skill folder path hint": "The folder must contain a SKILL.md file. An optional references/ sub-directory is also read.",
-    "Skill folder path placeholder": "e.g. /Users/alice/skills/my-skill  or  D:\\skills\\my-skill",
-    "Computed from latest capability check result - Tooltip": "Skill capability state is computed automatically from the latest check result, config hash and runtime validation. This field is read-only."
+    "Skill folder path placeholder": "e.g. /Users/alice/skills/my-skill  or  D:\\skills\\my-skill"
   },
   "store": {
     "Add Permission": "Add Permission",
@@ -842,8 +834,7 @@
     "Welcome title - Tooltip": "Popup welcome window title",
     "Write": "Write",
     "files and": "files and",
-    "folders are checked": "folders are checked",
-    "Computed from latest capability check result - Tooltip": "Agent capability state is computed automatically from the latest transitive check results (Model Provider, MCP Servers, Skills, Tools), config hash and runtime validation. This field is read-only."
+    "folders are checked": "folders are checked"
   },
   "system": {
     "API Latency": "API Latency",
@@ -934,8 +925,7 @@
     "OpenAgent Chrome Extension - Step 4": "Browser Use will now operate your current Chrome tabs.",
     "Prompt examples": "Prompt examples",
     "Prompt examples - Tooltip": "Example prompts that show how to use this tool effectively.",
-    "User Chrome": "User Chrome",
-    "Computed from latest capability check result - Tooltip": "Tool capability state is computed automatically from the latest check result, config hash and runtime provider validation. This field is read-only."
+    "User Chrome": "User Chrome"
   },
   "usage": {
     "Apr": "Apr",

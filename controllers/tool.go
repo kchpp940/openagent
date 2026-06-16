@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -27,7 +26,7 @@ import (
 // @Title GetGlobalTools
 // @Tag Tool API
 // @Description get global tools
-// @Success 200 {array} object.Tool The Response object
+// @Success 200 {array} object.ToolWithCapability The Response object
 // @router /get-global-tools [get]
 func (c *ApiController) GetGlobalTools() {
 	user := c.GetSessionUser()
@@ -37,14 +36,15 @@ func (c *ApiController) GetGlobalTools() {
 		return
 	}
 
-	c.ResponseOk(object.GetMaskedTools(tools, true, user))
+	masked := object.GetMaskedTools(tools, true, user)
+	c.ResponseOk(object.EnrichToolsWithCapability(masked))
 }
 
 // GetTools
 // @Title GetTools
 // @Tag Tool API
 // @Description get tools
-// @Success 200 {array} object.Tool The Response object
+// @Success 200 {array} object.ToolWithCapability The Response object
 // @router /get-tools [get]
 func (c *ApiController) GetTools() {
 	owner := "admin"
@@ -62,7 +62,8 @@ func (c *ApiController) GetTools() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.GetMaskedTools(tools, true, user))
+		masked := object.GetMaskedTools(tools, true, user)
+		c.ResponseOk(object.EnrichToolsWithCapability(masked))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -81,9 +82,8 @@ func (c *ApiController) GetTools() {
 			return
 		}
 
-		maskedTools := object.GetMaskedTools(tools, true, user)
-		object.PopulateToolsCapabilityInfo(tools)
-		c.ResponseOk(maskedTools, paginator.Nums())
+		masked := object.GetMaskedTools(tools, true, user)
+		c.ResponseOk(object.EnrichToolsWithCapability(masked), paginator.Nums())
 	}
 }
 
@@ -92,7 +92,7 @@ func (c *ApiController) GetTools() {
 // @Tag Tool API
 // @Description get tool
 // @Param id query string true "The id of tool"
-// @Success 200 {object} object.Tool The Response object
+// @Success 200 {object} object.ToolWithCapability The Response object
 // @router /get-tool [get]
 func (c *ApiController) GetTool() {
 	id := c.Input().Get("id")
@@ -104,8 +104,8 @@ func (c *ApiController) GetTool() {
 		return
 	}
 
-	object.PopulateToolCapabilityInfo(t)
-	c.ResponseOk(object.GetMaskedTool(t, true, user))
+	masked := object.GetMaskedTool(t, true, user)
+	c.ResponseOk(object.EnrichToolWithCapability(masked))
 }
 
 // UpdateTool
@@ -206,66 +206,4 @@ func (c *ApiController) TestTool() {
 	}
 
 	c.ResponseOk(result)
-}
-
-func (c *ApiController) ValidateStoreCapabilities() {
-	id := c.Input().Get("id")
-
-	store, err := object.GetStore(id)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-	if store == nil {
-		store, err = object.GetStoreForGetApi(id)
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
-	}
-	if store == nil {
-		c.ResponseError(fmt.Sprintf("store: %s not found", id))
-		return
-	}
-
-	infos := object.ValidateStoreCapabilities(store)
-	c.ResponseOk(infos)
-}
-
-// RunToolCapabilityCheck
-// @Title RunToolCapabilityCheck
-// @Tag Tool API
-// @Description run capability check on a tool, persist the result, and return the decision
-// @Param id query string true "The id (owner/name) of the tool"
-// @Success 200 {object} object.CapabilityDecision The computed decision
-// @router /run-tool-capability-check [post]
-func (c *ApiController) RunToolCapabilityCheck() {
-	id := c.Input().Get("id")
-
-	t, err := object.GetTool(id)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-	if t == nil {
-		c.ResponseError(fmt.Sprintf("tool: %s not found", id))
-		return
-	}
-
-	lang := c.GetAcceptLanguage()
-	t, decision, err := object.RunToolCapabilityCheck(t, lang)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-
-	if decision != nil && decision.CheckedAt != "" {
-		_, perr := object.UpdateToolCapabilities(t)
-		if perr != nil {
-			c.HandleError(perr)
-			return
-		}
-	}
-
-	c.ResponseOk(decision)
 }

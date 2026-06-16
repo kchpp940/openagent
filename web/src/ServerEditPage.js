@@ -17,12 +17,11 @@ import Loading from "./common/Loading";
 import {Button, Card, Col, Input, Row, Space} from "antd";
 import {LinkOutlined} from "@ant-design/icons";
 import * as ServerBackend from "./backend/ServerBackend";
-import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import ToolTable from "./table/ToolTable";
 import TestMcpWidget from "./common/TestMcpWidget";
-import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
+import {CapabilityInfo} from "./CapabilityStatus";
 
 class ServerEditPage extends React.Component {
   constructor(props) {
@@ -34,8 +33,6 @@ class ServerEditPage extends React.Component {
       originalServer: null,
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
-      recheckButtonLoading: false,
-      recheckError: null,
     };
   }
 
@@ -109,41 +106,6 @@ class ServerEditPage extends React.Component {
       });
   }
 
-  runCapabilityRecheck() {
-    this.setState({recheckButtonLoading: true});
-    ToolBackend.runServerCapabilityCheck(this.state.originalServer.owner, this.state.originalServer.name)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully got"));
-          const decision = res.data;
-          const server = {...this.state.server,
-            lastCapabilityCheck: decision?.checkedAt,
-            lastCapabilityStatus: decision?.state,
-            lastCapabilityError: decision?.blockReason,
-            lastCapabilityHash: decision?.configHash,
-          };
-          server.capabilityDecision = decision;
-          server.capabilityInfo = decision ? {
-            state: decision.state,
-            canMount: decision.canMount,
-            needsRecheck: decision.needsRecheck,
-            reason: decision.blockReason,
-          } : null;
-          this.setState({server, recheckError: null});
-        } else {
-          const recheckError = extractCapabilityError(res);
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({recheckError});
-        }
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState({recheckButtonLoading: false});
-      });
-  }
-
   renderCardTitle(title, desc) {
     return (
       <div>
@@ -186,7 +148,9 @@ class ServerEditPage extends React.Component {
           </div>
         </div>
 
-        <CapabilityErrorAlert error={this.state.recheckError} />
+        <Card size="small" title={this.renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <CapabilityInfo capability={server.capability} />
+        </Card>
 
         <Card size="small" title={this.renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -209,28 +173,6 @@ class ServerEditPage extends React.Component {
               Setting.getLabel(i18next.t("server:Access token"), i18next.t("server:Access token - Tooltip")),
               <Input.Password placeholder={"***"} value={server.token} onChange={e => this.updateServerField("token", e.target.value)} />,
               16
-            )}
-            {this.renderServerField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("server:Computed from latest capability check result - Tooltip")),
-              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                {server.capabilityInfo ? Setting.renderCapabilityState(server.capabilityInfo.state) : Setting.renderCapabilityState(server.lastCapabilityStatus || "Pending")}
-                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
-                  {i18next.t("general:Recheck")}
-                </Button>
-              </div>,
-              16
-            )}
-            {server.lastCapabilityCheck && (
-              <Col span={24} style={{marginTop: "4px"}}>
-                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                  {`${i18next.t("general:Last checked")}: ${server.lastCapabilityCheck}`}
-                </span>
-                {(server.capabilityInfo?.reason || server.lastCapabilityError) && (
-                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                    {`${i18next.t("general:Reason")}: ${server.capabilityInfo?.reason || server.lastCapabilityError}`}
-                  </span>
-                )}
-              </Col>
             )}
           </Row>
         </Card>

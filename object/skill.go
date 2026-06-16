@@ -57,15 +57,7 @@ type Skill struct {
 	SkillMd     string           `xorm:"mediumtext" json:"skillMd"`
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
-	State string `xorm:"varchar(100)" json:"state,omitempty"`
-
-	LastCapabilityCheck   string `xorm:"varchar(100)" json:"lastCapabilityCheck,omitempty"`
-	LastCapabilityHash    string `xorm:"varchar(100)" json:"lastCapabilityHash,omitempty"`
-	LastCapabilityStatus  string `xorm:"varchar(100)" json:"lastCapabilityStatus,omitempty"`
-	LastCapabilityError   string `xorm:"mediumtext" json:"lastCapabilityError,omitempty"`
-
-	CapabilityInfo     *CapabilityInfo     `xorm:"-" json:"capabilityInfo,omitempty"`
-	CapabilityDecision *CapabilityDecision `xorm:"-" json:"capabilityDecision,omitempty"`
+	State string `xorm:"varchar(100)" json:"state"`
 }
 
 func (s *Skill) GetId() string {
@@ -220,7 +212,7 @@ func LoadSkill(dir string) (*Skill, error) {
 		}
 	}
 
-	return &Skill{
+	skill := &Skill{
 		Name:        name,
 		DisplayName: name,
 		Type:        "built-in",
@@ -232,7 +224,9 @@ func LoadSkill(dir string) (*Skill, error) {
 		SkillMd:     raw,
 		References:  refs,
 		State:       "Active",
-	}, nil
+	}
+	_ = ValidateAndNormalizeSkillState(skill)
+	return skill, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -319,9 +313,8 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 		return false, nil
 	}
 
-	decision, dErr := GetSkillCapabilityDecision(s, true, "")
-	if dErr == nil && decision != nil {
-		applySkillDecisionResult(s, decision)
+	if err := ValidateAndNormalizeSkillState(s); err != nil {
+		return false, err
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(s)
@@ -331,29 +324,11 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 	return true, nil
 }
 
-func UpdateSkillCapabilities(s *Skill) (bool, error) {
-	if s == nil {
-		return false, nil
-	}
-	owner := s.Owner
-	name := s.Name
-	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(
-		"last_capability_check",
-		"last_capability_hash",
-		"last_capability_status",
-		"last_capability_error",
-	).Update(s)
-	if err != nil {
+func AddSkill(s *Skill) (bool, error) {
+	if err := ValidateAndNormalizeSkillState(s); err != nil {
 		return false, err
 	}
-	return true, nil
-}
 
-func AddSkill(s *Skill) (bool, error) {
-	decision, dErr := GetSkillCapabilityDecision(s, true, "")
-	if dErr == nil && decision != nil {
-		applySkillDecisionResult(s, decision)
-	}
 	affected, err := adapter.engine.Insert(s)
 	if err != nil {
 		return false, err
@@ -455,11 +430,7 @@ func GetSkillsCatalog(owner string, skillNames []string) (string, error) {
 
 	var items []string
 	for _, s := range skills {
-		if s == nil {
-			continue
-		}
-		info := GetSkillCapabilityInfo(s)
-		if !info.CanMount {
+		if s == nil || !CheckSkillMountable(s) {
 			continue
 		}
 
@@ -507,9 +478,9 @@ func LoadSkillPromptContent(owner string, skillName string, referenceName string
 	if s == nil {
 		return "", fmt.Errorf("skill not found: %s", skillName)
 	}
-	info := GetSkillCapabilityInfo(s)
-	if !info.CanMount {
-		return "", fmt.Errorf("skill is not mountable: %s: %s", skillName, info.Reason)
+	if !CheckSkillMountable(s) {
+		capResult := CheckSkillCapability(s)
+		return "", fmt.Errorf("skill is not available: %s, reason: %s", skillName, capResult.Summary)
 	}
 
 	buf := strings.TrimSpace(s.Content)

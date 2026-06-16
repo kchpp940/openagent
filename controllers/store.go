@@ -167,7 +167,6 @@ func (c *ApiController) GetStore() {
 		host := c.Ctx.Request.Host
 		origin := getOriginFromHost(host)
 		err = store.Populate(origin, c.GetAcceptLanguage())
-		object.PopulateStoreCapabilityInfo(store)
 		if err != nil {
 			c.ResponseOk(object.GetMaskedStore(store), err.Error())
 			return
@@ -230,7 +229,7 @@ func (c *ApiController) UpdateStore() {
 
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.HandleError(err)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -246,7 +245,7 @@ func (c *ApiController) UpdateStore() {
 				store2.IsDefault = false
 				success, err = object.UpdateStore(store2.GetId(), store2)
 				if err != nil {
-					c.HandleError(err)
+					c.ResponseError(err.Error())
 					return
 				}
 			}
@@ -305,7 +304,7 @@ func (c *ApiController) AddStore() {
 
 	success, err := object.AddStore(&store)
 	if err != nil {
-		c.HandleError(err)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -499,49 +498,4 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
-}
-
-// RunStoreCapabilityCheck
-// @Title RunStoreCapabilityCheck
-// @Tag Store API
-// @Description run transitive capability checks for a store (Server/Skills/Tools), persist the result, and return the decision
-// @Param id query string true "The id (owner/name) of the store"
-// @Success 200 {object} object.CapabilityDecision The computed decision
-// @router /run-store-capability-check [post]
-func (c *ApiController) RunStoreCapabilityCheck() {
-	id := c.Input().Get("id")
-
-	store, err := object.GetStore(id)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-	if store == nil {
-		store, err = object.GetStoreForGetApi(id)
-		if err != nil {
-			c.HandleError(err)
-			return
-		}
-	}
-	if store == nil {
-		c.ResponseError(fmt.Sprintf("store: %s not found", id))
-		return
-	}
-
-	lang := c.GetAcceptLanguage()
-	store, decision, err := object.RunStoreCapabilityCheck(store, lang)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-
-	if decision != nil && decision.CheckedAt != "" {
-		_, perr := object.UpdateStoreCapabilities(store)
-		if perr != nil {
-			c.HandleError(perr)
-			return
-		}
-	}
-
-	c.ResponseOk(decision)
 }

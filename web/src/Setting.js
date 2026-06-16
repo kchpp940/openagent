@@ -550,20 +550,3 @@ export function getToolFunctions(tool) {
   }
   return [];
 }
-
-export function getCapabilityStateInfo(state) {
-  const stateMap = {
-    "Active": {color: "success", text: i18next.t("general:Active")},
-    "Inactive": {color: "default", text: i18next.t("general:Inactive")},
-    "Pending": {color: "processing", text: i18next.t("general:Pending")},
-    "Stale": {color: "warning", text: i18next.t("general:Stale")},
-    "Error": {color: "error", text: i18next.t("general:Error")},
-  };
-  return stateMap[state] || stateMap["Active"];
-}
-
-export function renderCapabilityState(state) {
-  const {Tag} = require("antd");
-  const info = getCapabilityStateInfo(state);
-  return <Tag color={info.color}>{info.text}</Tag>;
-}

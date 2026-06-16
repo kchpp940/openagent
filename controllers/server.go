@@ -31,7 +31,7 @@ import (
 // @Title GetServers
 // @Tag Server API
 // @Description get MCP servers
-// @Success 200 {array} object.Server The Response object
+// @Success 200 {array} object.ServerWithCapability The Response object
 // @router /get-servers [get]
 func (c *ApiController) GetServers() {
 	owner := "admin"
@@ -48,7 +48,7 @@ func (c *ApiController) GetServers() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(servers)
+		c.ResponseOk(object.EnrichServersWithCapability(servers))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -67,8 +67,7 @@ func (c *ApiController) GetServers() {
 			return
 		}
 
-		object.PopulateServersCapabilityInfo(servers)
-		c.ResponseOk(servers, paginator.Nums())
+		c.ResponseOk(object.EnrichServersWithCapability(servers), paginator.Nums())
 	}
 }
 
@@ -77,7 +76,7 @@ func (c *ApiController) GetServers() {
 // @Tag Server API
 // @Description get MCP server
 // @Param id query string true "The id of server"
-// @Success 200 {object} object.Server The Response object
+// @Success 200 {object} object.ServerWithCapability The Response object
 // @router /get-server [get]
 func (c *ApiController) GetServer() {
 	id := c.Input().Get("id")
@@ -88,8 +87,7 @@ func (c *ApiController) GetServer() {
 		return
 	}
 
-	object.PopulateServerCapabilityInfo(server)
-	c.ResponseOk(server)
+	c.ResponseOk(object.EnrichServerWithCapability(server))
 }
 
 // UpdateServer
@@ -284,42 +282,4 @@ func (c *ApiController) SyncIntranetServers() {
 		return
 	}
 	c.ResponseOk(result)
-}
-
-// RunServerCapabilityCheck
-// @Title RunServerCapabilityCheck
-// @Tag Server API
-// @Description run a runtime capability check against the MCP server URL, persist the result, and return the decision
-// @Param id query string true "The id (owner/name) of the server"
-// @Success 200 {object} object.CapabilityDecision The computed decision
-// @router /run-server-capability-check [post]
-func (c *ApiController) RunServerCapabilityCheck() {
-	id := c.Input().Get("id")
-
-	server, err := object.GetServer(id)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-	if server == nil {
-		c.ResponseError(fmt.Sprintf("server: %s not found", id))
-		return
-	}
-
-	lang := c.GetAcceptLanguage()
-	server, decision, err := object.RunServerCapabilityCheck(server, lang)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-
-	if decision != nil && decision.CheckedAt != "" {
-		_, perr := object.UpdateServerCapabilities(server)
-		if perr != nil {
-			c.HandleError(perr)
-			return
-		}
-	}
-
-	c.ResponseOk(decision)
 }

@@ -49,15 +49,7 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
-	State       string     `xorm:"varchar(100)" json:"state,omitempty"`
-
-	LastCapabilityCheck  string `xorm:"varchar(100)" json:"lastCapabilityCheck,omitempty"`
-	LastCapabilityHash   string `xorm:"varchar(100)" json:"lastCapabilityHash,omitempty"`
-	LastCapabilityStatus string `xorm:"varchar(100)" json:"lastCapabilityStatus,omitempty"`
-	LastCapabilityError  string `xorm:"mediumtext" json:"lastCapabilityError,omitempty"`
-
-	CapabilityInfo     *CapabilityInfo     `xorm:"-" json:"capabilityInfo,omitempty"`
-	CapabilityDecision *CapabilityDecision `xorm:"-" json:"capabilityDecision,omitempty"`
+	State       string     `xorm:"varchar(100)" json:"state"`
 }
 
 func (s *Server) GetId() string {
@@ -117,10 +109,12 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 }
 
 func AddServer(server *Server) (bool, error) {
-	decision, dErr := GetServerCapabilityDecision(server, false, "")
-	if dErr == nil && decision != nil {
-		applyServerDecisionResult(server, decision)
+	state, err := ValidateAndNormalizeServerState(server)
+	if err != nil {
+		return false, err
 	}
+	server.State = state
+
 	affected, err := adapter.engine.Insert(server)
 	if err != nil {
 		return false, err
@@ -142,30 +136,13 @@ func UpdateServer(id string, server *Server) (bool, error) {
 		server.Token = oldServer.Token
 	}
 
-	decision, dErr := GetServerCapabilityDecision(server, false, "")
-	if dErr == nil && decision != nil {
-		applyServerDecisionResult(server, decision)
-	}
-
-	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
+	state, err := ValidateAndNormalizeServerState(server)
 	if err != nil {
 		return false, err
 	}
-	return true, nil
-}
+	server.State = state
 
-func UpdateServerCapabilities(server *Server) (bool, error) {
-	if server == nil {
-		return false, nil
-	}
-	owner := server.Owner
-	name := server.Name
-	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(
-		"last_capability_check",
-		"last_capability_hash",
-		"last_capability_status",
-		"last_capability_error",
-	).Update(server)
+	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
 		return false, err
 	}
@@ -180,7 +157,9 @@ func SyncMcpTool(id string, server *Server, isCleared bool) (bool, error) {
 
 	if isCleared {
 		server.Tools = nil
-		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools").Update(server)
+		state, _ := ValidateAndNormalizeServerState(server)
+		server.State = state
+		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools", "state").Update(server)
 		if err != nil {
 			return false, err
 		}
@@ -201,6 +180,9 @@ func SyncMcpTool(id string, server *Server, isCleared bool) (bool, error) {
 	if err = syncServerTools(server); err != nil {
 		return false, err
 	}
+
+	state, _ := ValidateAndNormalizeServerState(server)
+	server.State = state
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
@@ -257,13 +239,14 @@ func DeleteServer(server *Server) (bool, error) {
 // BuildMcpToolSet opens a connection to the server's URL and returns an
 // McpToolSet with the allowed tools and the open connection.
 // The caller must close all connections in McpToolSet.Connections when done.
-func (s *Server) BuildMcpToolSet(lang string) (*mcp.ToolSet, error) {
-	decision, err := GetServerCapabilityDecision(s, true, lang)
-	if err != nil {
-		return nil, err
-	}
-	if !decision.CanMount {
+func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
+	if s.Url == "" {
 		return nil, nil
+	}
+
+	if !CheckServerMountable(s) {
+		capResult := CheckServerCapability(s)
+		return nil, fmt.Errorf("server is not mountable: %s", capResult.Summary)
 	}
 
 	cli, err := mcp.NewClient(s.Url, s.Token)
@@ -322,7 +305,7 @@ func GetServerMcpToolSet(owner, serverName, lang string) (*mcp.ToolSet, error) {
 	if server == nil {
 		return nil, fmt.Errorf(i18n.Translate(lang, "object:The MCP server: %s is not found"), serverName)
 	}
-	return server.BuildMcpToolSet(lang)
+	return server.BuildMcpToolSet()
 }
 
 // TestMcpServer connects to the server URL and calls the tool specified in

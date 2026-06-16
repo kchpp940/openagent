@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -27,7 +26,7 @@ import (
 // @Title GetGlobalSkills
 // @Tag Skill API
 // @Description get global skills
-// @Success 200 {array} object.Skill The Response object
+// @Success 200 {array} object.SkillWithCapability The Response object
 // @router /get-global-skills [get]
 func (c *ApiController) GetGlobalSkills() {
 	skills, err := object.GetGlobalSkills()
@@ -36,14 +35,14 @@ func (c *ApiController) GetGlobalSkills() {
 		return
 	}
 
-	c.ResponseOk(skills)
+	c.ResponseOk(object.EnrichSkillsWithCapability(skills))
 }
 
 // GetSkills
 // @Title GetSkills
 // @Tag Skill API
 // @Description get skills
-// @Success 200 {array} object.Skill The Response object
+// @Success 200 {array} object.SkillWithCapability The Response object
 // @router /get-skills [get]
 func (c *ApiController) GetSkills() {
 	owner := "admin"
@@ -60,7 +59,7 @@ func (c *ApiController) GetSkills() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(skills)
+		c.ResponseOk(object.EnrichSkillsWithCapability(skills))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -79,8 +78,7 @@ func (c *ApiController) GetSkills() {
 			return
 		}
 
-		object.PopulateSkillsCapabilityInfo(skills)
-		c.ResponseOk(skills, paginator.Nums())
+		c.ResponseOk(object.EnrichSkillsWithCapability(skills), paginator.Nums())
 	}
 }
 
@@ -89,7 +87,7 @@ func (c *ApiController) GetSkills() {
 // @Tag Skill API
 // @Description get skill
 // @Param id query string true "The id of skill"
-// @Success 200 {object} object.Skill The Response object
+// @Success 200 {object} object.SkillWithCapability The Response object
 // @router /get-skill [get]
 func (c *ApiController) GetSkill() {
 	id := c.Input().Get("id")
@@ -100,8 +98,7 @@ func (c *ApiController) GetSkill() {
 		return
 	}
 
-	object.PopulateSkillCapabilityInfo(s)
-	c.ResponseOk(s)
+	c.ResponseOk(object.EnrichSkillWithCapability(s))
 }
 
 // UpdateSkill
@@ -201,42 +198,4 @@ func (c *ApiController) LoadSkill() {
 	}
 
 	c.ResponseOk(s)
-}
-
-// RunSkillCapabilityCheck
-// @Title RunSkillCapabilityCheck
-// @Tag Skill API
-// @Description run capability check on a skill, persist the result, and return the decision
-// @Param id query string true "The id (owner/name) of the skill"
-// @Success 200 {object} object.CapabilityDecision The computed decision
-// @router /run-skill-capability-check [post]
-func (c *ApiController) RunSkillCapabilityCheck() {
-	id := c.Input().Get("id")
-
-	s, err := object.GetSkill(id)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-	if s == nil {
-		c.ResponseError(fmt.Sprintf("skill: %s not found", id))
-		return
-	}
-
-	lang := c.GetAcceptLanguage()
-	s, decision, err := object.RunSkillCapabilityCheck(s, lang)
-	if err != nil {
-		c.HandleError(err)
-		return
-	}
-
-	if decision != nil && decision.CheckedAt != "" {
-		_, perr := object.UpdateSkillCapabilities(s)
-		if perr != nil {
-			c.HandleError(perr)
-			return
-		}
-	}
-
-	c.ResponseOk(decision)
 }

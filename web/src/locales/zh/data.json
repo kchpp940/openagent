@@ -111,9 +111,6 @@
     "Add": "添加",
     "Admin": "管理工具",
     "After": "After",
-    "Error": "错误",
-    "Pending": "待处理",
-    "Stale": "已过期",
     "Auditing Logs": "审计日志",
     "Avatar": "图标",
     "Avatar - Tooltip": "图标对应的URL",
@@ -300,9 +297,6 @@
     "Request URI": "请求URI",
     "Request URI - Tooltip": "完整请求路径",
     "Requires Casdoor to be installed": "需要安装Casdoor",
-    "Recheck": "重新检查",
-    "Last checked": "上次检查",
-    "Reason": "原因",
     "Reset": "重置",
     "Reset to Default": "重置为默认",
     "Resources": "资源",
@@ -338,6 +332,9 @@
     "Sorry, the page you visited does not exist.": "抱歉，您访问的页面不存在。",
     "Sorry, you do not have permission to access this page or logged in status invalid.": "抱歉，您无权限访问此页面或登录状态无效。",
     "Sort": "排序",
+    "Capability": "能力状态",
+    "Capability Status": "能力状态",
+    "Capability Status desc": "工具/技能的可用状态、问题列表和使用建议",
     "State": "状态",
     "State - Tooltip": "服务运行状态",
     "Static base URL": "静态资源基础URL",
@@ -408,10 +405,7 @@
     "Website": "网站",
     "empty": "空",
     "items": "项",
-    "{total} in total": "{total} 总计",
-    "Save blocked by capability check": "保存被能力检查拦截",
-    "Failed resources": "失败资源",
-    "Warnings": "警告"
+    "{total} in total": "{total} 总计"
   },
   "login": {
     "Additional Information": "附加信息",
@@ -614,8 +608,7 @@
     "Scanned hosts": "已扫描主机",
     "Select tool...": "选择工具...",
     "Sync tools first using the Sync button above": "请先使用上方同步按钮同步工具",
-    "This tool takes no arguments": "此工具无需参数",
-    "Computed from latest capability check result - Tooltip": "服务器能力状态由最新的MCP连接检查结果、配置哈希和运行时验证自动计算，该字段为只读。"
+    "This tool takes no arguments": "此工具无需参数"
   },
   "setup": {
     "AI Model": "AI模型",
@@ -699,8 +692,7 @@
     "Skill Marketplace": "技能市场",
     "Skill folder path": "技能文件夹路径",
     "Skill folder path hint": "该文件夹必须包含SKILL.md文件，可选地包含references/子目录。",
-    "Skill folder path placeholder": "例如：/Users/alice/skills/my-skill或D:\\skills\\my-skill",
-    "Computed from latest capability check result - Tooltip": "技能能力状态由最新的检查结果、配置哈希和运行时验证自动计算，该字段为只读。"
+    "Skill folder path placeholder": "例如：/Users/alice/skills/my-skill或D:\\skills\\my-skill"
   },
   "store": {
     "Add Permission": "添加权限",
@@ -842,8 +834,7 @@
     "Welcome title - Tooltip": "欢迎弹窗的标题",
     "Write": "写入",
     "files and": "文件及",
-    "folders are checked": "文件夹已选",
-    "Computed from latest capability check result - Tooltip": "智能体能力状态由最新的传递性检查结果（模型提供商、MCP服务器、技能、工具）、配置哈希和运行时验证自动计算，该字段为只读。"
+    "folders are checked": "文件夹已选"
   },
   "system": {
     "API Latency": "API延迟",
@@ -934,8 +925,7 @@
     "OpenAgent Chrome Extension - Step 4": "Browser Use将开始操控您当前的Chrome标签页。",
     "Prompt examples": "提示词示例",
     "Prompt examples - Tooltip": "展示如何有效使用此工具的示例提示词。",
-    "User Chrome": "用户Chrome",
-    "Computed from latest capability check result - Tooltip": "工具能力状态由最新的检查结果、配置哈希和运行时提供商验证自动计算，该字段为只读。"
+    "User Chrome": "用户Chrome"
   },
   "usage": {
     "Apr": "4月",

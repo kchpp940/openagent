@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -203,4 +204,15 @@ func GetRandomString(length int) string {
 
 func GenerateUUID() string {
 	return uuid.New().String()
+}
+
+func IsValidUrl(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme != "" && parsed.Host != ""
 }

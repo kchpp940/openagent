@@ -28,7 +28,6 @@ import i18next from "i18next";
 import FileTree from "./FileTree";
 import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
-import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -57,8 +56,6 @@ class StoreEditPage extends React.Component {
       isNewStore: props.location?.state?.isNewStore || false,
       ownerUsers: [],
       ownerUsersLoading: false,
-      recheckButtonLoading: false,
-      saveError: null,
     };
   }
 
@@ -211,41 +208,6 @@ class StoreEditPage extends React.Component {
       });
   }
 
-  runCapabilityRecheck() {
-    this.setState({recheckButtonLoading: true});
-    ToolBackend.runStoreCapabilityCheck(this.state.store.owner, this.state.store.name)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully got"));
-          const decision = res.data;
-          const store = {...this.state.store,
-            lastCapabilityCheck: decision?.checkedAt,
-            lastCapabilityStatus: decision?.state,
-            lastCapabilityError: decision?.blockReason,
-            lastCapabilityHash: decision?.configHash,
-          };
-          store.capabilityDecision = decision;
-          store.capabilityInfo = decision ? {
-            state: decision.state,
-            canMount: decision.canMount,
-            needsRecheck: decision.needsRecheck,
-            reason: decision.blockReason,
-          } : null;
-          this.setState({store, saveError: null});
-        } else {
-          const saveError = extractCapabilityError(res);
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({saveError});
-        }
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      })
-      .finally(() => {
-        this.setState({recheckButtonLoading: false});
-      });
-  }
-
   parseStoreField(key, value) {
     if (["score"].includes(key)) {
       value = Setting.myParseInt(value);
@@ -363,8 +325,6 @@ class StoreEditPage extends React.Component {
           </div>
         </div>
 
-        <CapabilityErrorAlert error={this.state.saveError} />
-
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
             {this.renderStoreField(
@@ -441,31 +401,15 @@ class StoreEditPage extends React.Component {
               8
             )}
             {this.renderStoreField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("store:Computed from latest capability check result - Tooltip")),
-              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                {store.capabilityInfo ? Setting.renderCapabilityState(store.capabilityInfo.state) : Setting.renderCapabilityState(store.lastCapabilityStatus || "Pending")}
-                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
-                  {i18next.t("general:Recheck")}
-                </Button>
-              </div>,
+              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
+              <Select virtual={false} style={{width: "100%"}} value={store.state} onChange={value => {
+                this.updateStoreField("state", value);
+              }}
+              options={[
+                {value: "Active", label: i18next.t("general:Active")},
+                {value: "Inactive", label: i18next.t("general:Inactive")},
+              ].map(item => Setting.getOption(item.label, item.value))} />,
               8
-            )}
-            {store.lastCapabilityCheck && (
-              <Col span={24} style={{marginTop: "4px"}}>
-                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                  {`${i18next.t("general:Last checked")}: ${store.lastCapabilityCheck}`}
-                </span>
-                {(store.capabilityInfo?.reason || store.lastCapabilityError) && (
-                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
-                    {`${i18next.t("general:Reason")}: ${store.capabilityInfo?.reason || store.lastCapabilityError}`}
-                  </span>
-                )}
-                {store.capabilityDecision?.warnings?.length > 0 && (
-                  <span style={{marginLeft: "16px", color: "#faad14", fontSize: "12px"}}>
-                    {`Warnings: ${store.capabilityDecision.warnings.join("; ")}`}
-                  </span>
-                )}
-              </Col>
             )}
             {this.renderStoreField(
               Setting.getLabel(i18next.t("general:Avatar"), i18next.t("general:Avatar - Tooltip")),
@@ -694,7 +638,7 @@ class StoreEditPage extends React.Component {
                     onChange={(value => {this.updateStoreField("skills", value || []);})}
                   >
                     <Option key="All" value="All">{i18next.t("store:All")}</Option>
-                    {this.state.skills.filter(s => !s.capabilityInfo || s.capabilityInfo.canMount).map((skill, index) => (
+                    {this.state.skills.filter(s => s.state === "Active").map((skill, index) => (
                       <Option key={index} value={skill.name}>
                         {skill.displayName ? `${skill.displayName} (${skill.name})` : skill.name}
                       </Option>
@@ -951,7 +895,6 @@ class StoreEditPage extends React.Component {
           this.setState({
             storeName: this.state.store.name,
             isNewStore: false,
-            saveError: null,
           });
           window.dispatchEvent(new Event("storesChanged"));
           if (exitAfterSave) {
@@ -960,14 +903,11 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
-          const saveError = extractCapabilityError(res);
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-          this.setState({saveError});
         }
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
-        this.setState({saveError: null});
       });
   }
 
