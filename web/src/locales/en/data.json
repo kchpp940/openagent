@@ -840,6 +840,9 @@
     "Write": "Write",
     "files and": "files and",
     "folders are checked": "folders are checked",
+    "Save blocked by capability check": "Save blocked by capability check",
+    "Failed resources": "Failed resources",
+    "Warnings": "Warnings",
     "Computed from latest capability check result - Tooltip": "Agent capability state is computed automatically from the latest transitive check results (Model Provider, MCP Servers, Skills, Tools), config hash and runtime validation. This field is read-only."
   },
   "system": {

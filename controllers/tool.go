@@ -208,10 +208,6 @@ func (c *ApiController) TestTool() {
 	c.ResponseOk(result)
 }
 
-func (c *ApiController) GetCapabilityStateOptions() {
-	c.ResponseOk(object.GetCapabilityStateOptions())
-}
-
 func (c *ApiController) ValidateStoreCapabilities() {
 	id := c.Input().Get("id")
 

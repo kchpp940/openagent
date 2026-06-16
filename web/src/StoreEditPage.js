@@ -15,7 +15,7 @@
 import React from "react";
 import {Link} from "react-router-dom";
 import Loading from "./common/Loading";
-import {Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag} from "antd";
+import {Alert, Avatar, Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Spin, Switch, Tag} from "antd";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
@@ -57,6 +57,7 @@ class StoreEditPage extends React.Component {
       ownerUsers: [],
       ownerUsersLoading: false,
       recheckButtonLoading: false,
+      saveError: null,
     };
   }
 
@@ -358,6 +359,48 @@ class StoreEditPage extends React.Component {
             {this.renderStoreActions()}
           </div>
         </div>
+
+        {this.state.saveError && (
+          <Alert
+            type="error"
+            showIcon
+            style={{marginBottom: "16px", borderRadius: "12px"}}
+            message={i18next.t("store:Save blocked by capability check")}
+            description={
+              <div>
+                {this.state.saveError.blockReason && (
+                  <div style={{marginBottom: "8px"}}>{this.state.saveError.blockReason}</div>
+                )}
+                {this.state.saveError.failedResources && this.state.saveError.failedResources.length > 0 && (
+                  <div style={{marginTop: "8px"}}>
+                    <div style={{fontWeight: 600, marginBottom: "4px"}}>{i18next.t("store:Failed resources")}:</div>
+                    <ul style={{margin: 0, paddingLeft: "20px"}}>
+                      {this.state.saveError.failedResources.map((r, i) => (
+                        <li key={i}>
+                          <Tag color={r.state === "Active" ? "green" : r.state === "Error" ? "red" : "orange"} style={{marginRight: "8px"}}>
+                            {r.kind}
+                          </Tag>
+                          <span style={{fontWeight: 500}}>{r.name}</span>
+                          {r.reason && <span style={{color: "var(--ant-color-text-secondary)", marginLeft: "8px"}}>— {r.reason}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {this.state.saveError.warnings && this.state.saveError.warnings.length > 0 && (
+                  <div style={{marginTop: "8px"}}>
+                    <div style={{fontWeight: 600, marginBottom: "4px", color: "#faad14"}}>{i18next.t("store:Warnings")}:</div>
+                    <ul style={{margin: 0, paddingLeft: "20px", color: "#faad14"}}>
+                      {this.state.saveError.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            }
+          />
+        )}
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -945,6 +988,7 @@ class StoreEditPage extends React.Component {
           this.setState({
             storeName: this.state.store.name,
             isNewStore: false,
+            saveError: null,
           });
           window.dispatchEvent(new Event("storesChanged"));
           if (exitAfterSave) {
@@ -953,11 +997,17 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
+          let saveError = null;
+          if (res.data && typeof res.data === "object" && res.data.canSaveStore === false) {
+            saveError = res.data;
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.setState({saveError});
         }
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        this.setState({saveError: null});
       });
   }
 

@@ -26,15 +26,21 @@ import (
 	"github.com/the-open-agent/openagent/auth"
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/i18n"
+	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
 
 type Response struct {
 	Status string      `json:"status"`
+	Code   string      `json:"code,omitempty"`
 	Msg    string      `json:"msg"`
 	Data   interface{} `json:"data"`
 	Data2  interface{} `json:"data2"`
 }
+
+const (
+	ErrCodeCapabilityCheckFailed = "CAPABILITY_CHECK_FAILED"
+)
 
 func (c *ApiController) ResponseOk(data ...interface{}) {
 	resp := Response{Status: "ok"}
@@ -50,7 +56,11 @@ func (c *ApiController) ResponseOk(data ...interface{}) {
 }
 
 func (c *ApiController) ResponseError(error string, data ...interface{}) {
-	resp := Response{Status: "error", Msg: error}
+	c.ResponseErrorWithCode(error, "", data...)
+}
+
+func (c *ApiController) ResponseErrorWithCode(error string, code string, data ...interface{}) {
+	resp := Response{Status: "error", Code: code, Msg: error}
 	switch len(data) {
 	case 2:
 		resp.Data2 = data[1]
@@ -60,6 +70,17 @@ func (c *ApiController) ResponseError(error string, data ...interface{}) {
 	}
 	c.Data["json"] = resp
 	c.ServeJSON()
+}
+
+func (c *ApiController) HandleError(err error) {
+	if err == nil {
+		return
+	}
+	if capErr, ok := err.(*object.CapabilityError); ok {
+		c.ResponseErrorWithCode(capErr.Error(), ErrCodeCapabilityCheckFailed, capErr.Decision)
+		return
+	}
+	c.ResponseError(err.Error())
 }
 
 func (c *ApiController) T(error string) string {

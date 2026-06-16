@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/util"
@@ -60,6 +58,15 @@ type CapabilityDecision struct {
 	Warnings     []string        `json:"warnings,omitempty"`
 	CheckedAt    string          `json:"checkedAt,omitempty"`
 	ConfigHash   string          `json:"configHash,omitempty"`
+
+	FailedResources []FailedResource `json:"failedResources,omitempty"`
+}
+
+type FailedResource struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Reason string `json:"reason,omitempty"`
+	State  string `json:"state,omitempty"`
 }
 
 // Deprecated: kept for API-compat, reads from corresponding Decision fields.
@@ -433,15 +440,17 @@ func GetToolCapabilityDecision(t *Tool, runRuntime bool, lang string) (*Capabili
 func GetStoreCapabilityDecision(store *Store, runRuntime bool, lang string) (*CapabilityDecision, error) {
 	if store == nil {
 		return &CapabilityDecision{
-			State:        CapabilityStateError,
-			CanMount:     false,
-			CanSaveStore: false,
-			BlockReason:  "store is nil",
+			State:           CapabilityStateError,
+			CanMount:        false,
+			CanSaveStore:    false,
+			BlockReason:     "store is nil",
+			FailedResources: nil,
 		}, nil
 	}
 
 	var blockReasons []string
 	var warnings []string
+	var failedResources []FailedResource
 
 	if strings.TrimSpace(store.Name) == "" {
 		blockReasons = append(blockReasons, "store name is empty")
@@ -454,12 +463,30 @@ func GetStoreCapabilityDecision(store *Store, runRuntime bool, lang string) (*Ca
 		srv, err := GetServerByOwnerAndName(store.Owner, store.McpServer)
 		if err != nil || srv == nil {
 			blockReasons = append(blockReasons, fmt.Sprintf("MCP server not found: %s", store.McpServer))
+			failedResources = append(failedResources, FailedResource{
+				Kind:   "server",
+				Name:   store.McpServer,
+				Reason: "not found",
+				State:  string(CapabilityStateError),
+			})
 		} else {
 			d, derr := GetServerCapabilityDecision(srv, runRuntime, lang)
 			if derr != nil {
 				blockReasons = append(blockReasons, fmt.Sprintf("MCP server check error: %v", derr))
+				failedResources = append(failedResources, FailedResource{
+					Kind:   "server",
+					Name:   srv.Name,
+					Reason: fmt.Sprintf("check error: %v", derr),
+					State:  string(CapabilityStateError),
+				})
 			} else if !d.CanMount {
 				blockReasons = append(blockReasons, fmt.Sprintf("MCP server: %s", firstNonEmpty(d.BlockReason, "not mountable")))
+				failedResources = append(failedResources, FailedResource{
+					Kind:   "server",
+					Name:   srv.Name,
+					Reason: d.BlockReason,
+					State:  string(d.State),
+				})
 			}
 			warnings = append(warnings, d.Warnings...)
 		}
@@ -471,8 +498,20 @@ func GetStoreCapabilityDecision(store *Store, runRuntime bool, lang string) (*Ca
 			d, derr := GetSkillCapabilityDecision(s, runRuntime, lang)
 			if derr != nil {
 				blockReasons = append(blockReasons, fmt.Sprintf("skill %s check error: %v", s.Name, derr))
+				failedResources = append(failedResources, FailedResource{
+					Kind:   "skill",
+					Name:   s.Name,
+					Reason: fmt.Sprintf("check error: %v", derr),
+					State:  string(CapabilityStateError),
+				})
 			} else if !d.CanMount {
 				warnings = append(warnings, fmt.Sprintf("skill %s: %s", s.Name, firstNonEmpty(d.BlockReason, "pending")))
+				failedResources = append(failedResources, FailedResource{
+					Kind:   "skill",
+					Name:   s.Name,
+					Reason: d.BlockReason,
+					State:  string(d.State),
+				})
 			}
 			warnings = append(warnings, d.Warnings...)
 		}
@@ -492,13 +531,31 @@ func GetStoreCapabilityDecision(store *Store, runRuntime bool, lang string) (*Ca
 		t, terr := GetTool(id)
 		if terr != nil || t == nil {
 			warnings = append(warnings, fmt.Sprintf("tool not found: %s", tname))
+			failedResources = append(failedResources, FailedResource{
+				Kind:   "tool",
+				Name:   tname,
+				Reason: "not found",
+				State:  string(CapabilityStateError),
+			})
 			continue
 		}
 		d, derr := GetToolCapabilityDecision(t, runRuntime, lang)
 		if derr != nil {
 			warnings = append(warnings, fmt.Sprintf("tool %s check error: %v", tname, derr))
+			failedResources = append(failedResources, FailedResource{
+				Kind:   "tool",
+				Name:   t.Name,
+				Reason: fmt.Sprintf("check error: %v", derr),
+				State:  string(CapabilityStateError),
+			})
 		} else if !d.CanMount {
 			warnings = append(warnings, fmt.Sprintf("tool %s: %s", tname, firstNonEmpty(d.BlockReason, "pending")))
+			failedResources = append(failedResources, FailedResource{
+				Kind:   "tool",
+				Name:   t.Name,
+				Reason: d.BlockReason,
+				State:  string(d.State),
+			})
 		}
 		warnings = append(warnings, d.Warnings...)
 	}
@@ -526,6 +583,9 @@ func GetStoreCapabilityDecision(store *Store, runRuntime bool, lang string) (*Ca
 	d.CanSaveStore = d.State == CapabilityStateActive
 	if len(warnings) > 0 && d.Warnings == nil {
 		d.Warnings = warnings
+	}
+	if len(failedResources) > 0 {
+		d.FailedResources = failedResources
 	}
 	return d, nil
 }
@@ -808,33 +868,22 @@ func PopulateStoreCapabilityDecision(store *Store, runRuntime bool, lang string)
 }
 
 // ---------------------------------------------------------------------------
-// Frontend helpers
+// Error type
 // ---------------------------------------------------------------------------
 
-func GetCapabilityStateOptions() []map[string]interface{} {
-	return []map[string]interface{}{
-		{"value": string(CapabilityStateActive), "label": "Active", "color": "green", "description": i18n.Translate("en", "The capability has passed all checks and is ready for use")},
-		{"value": string(CapabilityStatePending), "label": "Pending", "color": "orange", "description": i18n.Translate("en", "The capability has not yet been checked, or the result is stale")},
-		{"value": string(CapabilityStateStale), "label": "Stale", "color": "gold", "description": i18n.Translate("en", "The capability's configuration has changed since last check; recheck required")},
-		{"value": string(CapabilityStateError), "label": "Error", "color": "red", "description": i18n.Translate("en", "The capability check failed with an error")},
+type CapabilityError struct {
+	Decision *CapabilityDecision
+}
+
+func (e *CapabilityError) Error() string {
+	if e.Decision == nil {
+		return "capability check failed"
 	}
+	if e.Decision.BlockReason != "" {
+		return e.Decision.BlockReason
+	}
+	return "capability check failed: " + string(e.Decision.State)
 }
 
 // SortCapabilityInfos returns a deterministic ordering for UI display:
 // Active last, Error first.
-func SortCapabilityInfos(infos []CapabilityInfo) {
-	rank := map[CapabilityState]int{
-		CapabilityStateError:   0,
-		CapabilityStatePending: 1,
-		CapabilityStateStale:   2,
-		CapabilityStateActive:  3,
-	}
-	sort.SliceStable(infos, func(i, j int) bool {
-		ri := rank[infos[i].State]
-		rj := rank[infos[j].State]
-		if ri != rj {
-			return ri < rj
-		}
-		return infos[i].Reason < infos[j].Reason
-	})
-}

@@ -115,7 +115,6 @@ func initAPI() {
 	beego.Router("/api/add-tool", &controllers.ApiController{}, "POST:AddTool")
 	beego.Router("/api/delete-tool", &controllers.ApiController{}, "POST:DeleteTool")
 	beego.Router("/api/test-tool", &controllers.ApiController{}, "POST:TestTool")
-	beego.Router("/api/get-capability-state-options", &controllers.ApiController{}, "GET:GetCapabilityStateOptions")
 	beego.Router("/api/validate-store-capabilities", &controllers.ApiController{}, "POST:ValidateStoreCapabilities")
 
 	beego.Router("/api/run-server-capability-check", &controllers.ApiController{}, "POST:RunServerCapabilityCheck")

@@ -330,7 +330,13 @@ func UpdateStore(id string, store *Store) (bool, error) {
 	}
 
 	decision, dErr := GetStoreCapabilityDecision(store, false, "")
-	if dErr == nil && decision != nil {
+	if dErr != nil {
+		return false, dErr
+	}
+	if decision != nil && !decision.CanSaveStore {
+		return false, &CapabilityError{Decision: decision}
+	}
+	if decision != nil {
 		applyStoreDecisionResult(store, decision)
 	}
 
@@ -367,7 +373,13 @@ func AddStore(store *Store) (bool, error) {
 	}
 
 	decision, dErr := GetStoreCapabilityDecision(store, false, "")
-	if dErr == nil && decision != nil {
+	if dErr != nil {
+		return false, dErr
+	}
+	if decision != nil && !decision.CanSaveStore {
+		return false, &CapabilityError{Decision: decision}
+	}
+	if decision != nil {
 		applyStoreDecisionResult(store, decision)
 	}
 

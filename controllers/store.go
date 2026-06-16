@@ -230,7 +230,7 @@ func (c *ApiController) UpdateStore() {
 
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 
@@ -246,7 +246,7 @@ func (c *ApiController) UpdateStore() {
 				store2.IsDefault = false
 				success, err = object.UpdateStore(store2.GetId(), store2)
 				if err != nil {
-					c.ResponseError(err.Error())
+					c.HandleError(err)
 					return
 				}
 			}
@@ -305,7 +305,7 @@ func (c *ApiController) AddStore() {
 
 	success, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 
