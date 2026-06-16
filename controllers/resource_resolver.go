@@ -73,13 +73,15 @@ func (rr *ResolvedResource) Resource() *object.Resource {
 
 func (c *ApiController) ResolveResource(resType ResourceType, id string) *ResolvedResource {
 	if id == "" {
-		c.ResponseError(c.T("resource:Resource id is required"))
+		detail := &ErrorDetail{Code: ErrCodeResourceIdRequired, Key: "resource:Resource id is required", ResourceType: resType, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeResourceIdRequired, c.T("resource:Resource id is required"), detail)
 		return nil
 	}
 
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		c.ResponseError(c.T("resource:Invalid resource id format"))
+		detail := &ErrorDetail{Code: ErrCodeInvalidResourceFormat, Key: "resource:Invalid resource id format", ResourceType: resType, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeInvalidResourceFormat, c.T("resource:Invalid resource id format"), detail)
 		return nil
 	}
 
@@ -97,7 +99,8 @@ func (c *ApiController) ResolveResource(resType ResourceType, id string) *Resolv
 	case ResourceTypeResource:
 		return c.resolveResource(id, owner, name)
 	default:
-		c.ResponseError(fmt.Sprintf("unsupported resource type: %s", resType))
+		detail := &ErrorDetail{Code: ErrCodeBadRequest, Key: "unsupported resource type", ResourceType: resType, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeBadRequest, fmt.Sprintf("unsupported resource type: %s", resType), detail)
 		return nil
 	}
 }
@@ -105,11 +108,13 @@ func (c *ApiController) ResolveResource(resType ResourceType, id string) *Resolv
 func (c *ApiController) resolveTask(id, owner, name string) *ResolvedResource {
 	task, err := object.GetTask(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeTask, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if task == nil {
-		c.ResponseError(c.T("resource:The task does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeTaskNotFound, Key: "resource:The task does not exist", ResourceType: ResourceTypeTask, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeTaskNotFound, c.T("resource:The task does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeTask, Id: id, Owner: owner, Name: name, Object: task}
@@ -118,18 +123,21 @@ func (c *ApiController) resolveTask(id, owner, name string) *ResolvedResource {
 func (c *ApiController) resolveStore(id, _, _ string) *ResolvedResource {
 	store, err := object.GetStore(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeStore, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if store == nil {
 		store, err = object.GetStoreForGetApi(id)
 		if err != nil {
-			c.ResponseError(err.Error())
+			detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeStore, ResourceId: id}
+			c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 			return nil
 		}
 	}
 	if store == nil {
-		c.ResponseError(c.T("resource:The store does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeStoreNotFound, Key: "resource:The store does not exist", ResourceType: ResourceTypeStore, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeStoreNotFound, c.T("resource:The store does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeStore, Id: id, Owner: store.Owner, Name: store.Name, Object: store}
@@ -138,11 +146,13 @@ func (c *ApiController) resolveStore(id, _, _ string) *ResolvedResource {
 func (c *ApiController) resolveServer(id, owner, name string) *ResolvedResource {
 	server, err := object.GetServer(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeServer, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if server == nil {
-		c.ResponseError(c.T("resource:The server does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeServerNotFound, Key: "resource:The server does not exist", ResourceType: ResourceTypeServer, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeServerNotFound, c.T("resource:The server does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeServer, Id: id, Owner: owner, Name: name, Object: server}
@@ -151,11 +161,13 @@ func (c *ApiController) resolveServer(id, owner, name string) *ResolvedResource 
 func (c *ApiController) resolveSkill(id, owner, name string) *ResolvedResource {
 	skill, err := object.GetSkill(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeSkill, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if skill == nil {
-		c.ResponseError(c.T("resource:The skill does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeSkillNotFound, Key: "resource:The skill does not exist", ResourceType: ResourceTypeSkill, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeSkillNotFound, c.T("resource:The skill does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeSkill, Id: id, Owner: owner, Name: name, Object: skill}
@@ -164,11 +176,13 @@ func (c *ApiController) resolveSkill(id, owner, name string) *ResolvedResource {
 func (c *ApiController) resolveTool(id, owner, name string) *ResolvedResource {
 	tool, err := object.GetTool(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeTool, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if tool == nil {
-		c.ResponseError(c.T("resource:The tool does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeToolNotFound, Key: "resource:The tool does not exist", ResourceType: ResourceTypeTool, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeToolNotFound, c.T("resource:The tool does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeTool, Id: id, Owner: owner, Name: name, Object: tool}
@@ -177,11 +191,13 @@ func (c *ApiController) resolveTool(id, owner, name string) *ResolvedResource {
 func (c *ApiController) resolveResource(id, owner, name string) *ResolvedResource {
 	resource, err := object.GetResource(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error(), ResourceType: ResourceTypeResource, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
 		return nil
 	}
 	if resource == nil {
-		c.ResponseError(c.T("resource:The resource does not exist"))
+		detail := &ErrorDetail{Code: ErrCodeResourceNotFound, Key: "resource:The resource does not exist", ResourceType: ResourceTypeResource, ResourceId: id, ResourceOwner: owner, ResourceName: name}
+		c.ResponseErrorWithCode(ErrCodeResourceNotFound, c.T("resource:The resource does not exist"), detail)
 		return nil
 	}
 	return &ResolvedResource{Type: ResourceTypeResource, Id: id, Owner: owner, Name: name, Object: resource}
@@ -202,7 +218,8 @@ func (c *ApiController) CheckAccess(rr *ResolvedResource, level AccessLevel) boo
 	case ResourceTypeResource:
 		return c.checkResourceAccess(rr, level)
 	default:
-		c.ResponseError(c.T("auth:Unauthorized operation"))
+		detail := &ErrorDetail{Code: ErrCodeForbidden, Key: "auth:Unauthorized operation", ResourceType: rr.Type, ResourceId: rr.Id, ResourceOwner: rr.Owner, ResourceName: rr.Name, RequiredAccess: accessLevelString(level), CurrentUser: c.GetSessionUsername()}
+		c.ResponseErrorWithCode(ErrCodeForbidden, c.T("auth:Unauthorized operation"), detail)
 		return false
 	}
 }
@@ -211,17 +228,18 @@ func (c *ApiController) checkTaskAccess(rr *ResolvedResource, _ AccessLevel) boo
 	username := c.GetSessionUsername()
 	task := rr.Task()
 	if task.Owner != username {
-		c.ResponseError(c.T("auth:Unauthorized operation"))
+		detail := &ErrorDetail{Code: ErrCodeNotResourceOwner, Key: "auth:Unauthorized operation", ResourceType: rr.Type, ResourceId: rr.Id, ResourceOwner: rr.Owner, ResourceName: rr.Name, CurrentUser: username}
+		c.ResponseErrorWithCode(ErrCodeNotResourceOwner, c.T("auth:Unauthorized operation"), detail)
 		return false
 	}
 	return true
 }
 
 func (c *ApiController) checkStoreAccess(rr *ResolvedResource, level AccessLevel) bool {
+	username := c.GetSessionUsername()
 	if c.IsAdmin() {
 		if c.IsStoreAdmin() {
 			store := rr.Store()
-			username := c.GetSessionUsername()
 			if store.Owner == username {
 				return true
 			}
@@ -230,13 +248,15 @@ func (c *ApiController) checkStoreAccess(rr *ResolvedResource, level AccessLevel
 			return true
 		}
 	}
-	c.ResponseError(c.T("auth:Unauthorized operation"))
+	detail := &ErrorDetail{Code: ErrCodeStorePermissionDenied, Key: "auth:Unauthorized operation", ResourceType: rr.Type, ResourceId: rr.Id, ResourceOwner: rr.Owner, ResourceName: rr.Name, RequiredAccess: accessLevelString(level), CurrentUser: username}
+	c.ResponseErrorWithCode(ErrCodeStorePermissionDenied, c.T("auth:Unauthorized operation"), detail)
 	return false
 }
 
 func (c *ApiController) checkAdminOnlyAccess(_ *ResolvedResource, _ AccessLevel) bool {
 	if !c.IsAdmin() {
-		c.ResponseError(c.T("auth:this operation requires admin privilege"))
+		detail := &ErrorDetail{Code: ErrCodeAdminRequired, Key: "auth:this operation requires admin privilege", CurrentUser: c.GetSessionUsername()}
+		c.ResponseErrorWithCode(ErrCodeAdminRequired, c.T("auth:this operation requires admin privilege"), detail)
 		return false
 	}
 	return true
@@ -246,7 +266,8 @@ func (c *ApiController) checkResourceAccess(rr *ResolvedResource, _ AccessLevel)
 	username := c.GetSessionUsername()
 	resource := rr.Resource()
 	if resource.User != username {
-		c.ResponseError(c.T("auth:Unauthorized operation"))
+		detail := &ErrorDetail{Code: ErrCodeNotResourceOwner, Key: "auth:Unauthorized operation", ResourceType: rr.Type, ResourceId: rr.Id, ResourceOwner: rr.Owner, ResourceName: rr.Name, CurrentUser: username}
+		c.ResponseErrorWithCode(ErrCodeNotResourceOwner, c.T("auth:Unauthorized operation"), detail)
 		return false
 	}
 	return true
