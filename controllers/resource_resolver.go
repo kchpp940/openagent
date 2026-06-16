@@ -24,12 +24,13 @@ import (
 type ResourceType string
 
 const (
-	ResourceTypeTask     ResourceType = "task"
-	ResourceTypeStore    ResourceType = "store"
-	ResourceTypeServer   ResourceType = "server"
-	ResourceTypeSkill    ResourceType = "skill"
-	ResourceTypeTool     ResourceType = "tool"
-	ResourceTypeResource ResourceType = "resource"
+	ResourceTypeTask          ResourceType = "task"
+	ResourceTypeStore         ResourceType = "store"
+	ResourceTypeServer        ResourceType = "server"
+	ResourceTypeSkill         ResourceType = "skill"
+	ResourceTypeTool          ResourceType = "tool"
+	ResourceTypeResource      ResourceType = "resource"
+	ResourceTypeReportComment ResourceType = "report_comment"
 )
 
 type AccessLevel int
@@ -98,6 +99,10 @@ func (c *ApiController) ResolveResource(resType ResourceType, id string) *Resolv
 		return c.resolveTool(id, owner, name)
 	case ResourceTypeResource:
 		return c.resolveResource(id, owner, name)
+	case ResourceTypeReportComment:
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: "report_comment resource type is not implemented yet", ResourceType: resType, ResourceId: id}
+		c.ResponseErrorWithCode(ErrCodeInternal, "report_comment resource type is not implemented yet", detail)
+		return nil
 	default:
 		detail := &ErrorDetail{Code: ErrCodeBadRequest, Key: "unsupported resource type", ResourceType: resType, ResourceId: id}
 		c.ResponseErrorWithCode(ErrCodeBadRequest, fmt.Sprintf("unsupported resource type: %s", resType), detail)
@@ -217,6 +222,10 @@ func (c *ApiController) CheckAccess(rr *ResolvedResource, level AccessLevel) boo
 		return c.checkAdminOnlyAccess(rr, level)
 	case ResourceTypeResource:
 		return c.checkResourceAccess(rr, level)
+	case ResourceTypeReportComment:
+		detail := &ErrorDetail{Code: ErrCodeInternal, Key: "report_comment resource type access check is not implemented yet", ResourceType: rr.Type, ResourceId: rr.Id, RequiredAccess: accessLevelString(level), CurrentUser: c.GetSessionUsername()}
+		c.ResponseErrorWithCode(ErrCodeInternal, "report_comment resource type access check is not implemented yet", detail)
+		return false
 	default:
 		detail := &ErrorDetail{Code: ErrCodeForbidden, Key: "auth:Unauthorized operation", ResourceType: rr.Type, ResourceId: rr.Id, ResourceOwner: rr.Owner, ResourceName: rr.Name, RequiredAccess: accessLevelString(level), CurrentUser: c.GetSessionUsername()}
 		c.ResponseErrorWithCode(ErrCodeForbidden, c.T("auth:Unauthorized operation"), detail)

@@ -218,6 +218,11 @@ func (c *ApiController) SyncMcpTool() {
 		return
 	}
 
+	rr := c.RequireResource(ResourceTypeServer, id, AccessWrite)
+	if rr == nil {
+		return
+	}
+
 	ok, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
 		c.ResponseError(err.Error())

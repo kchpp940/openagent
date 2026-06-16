@@ -234,7 +234,7 @@ class ToolListPage extends BaseListPage {
             },
           });
         } else {
-          if (res.status === "error" && res.msg === "Unauthorized") {
+          if (Setting.isResponseDenied(res)) {
             this.setState({isAuthorized: false, loading: false});
           } else {
             Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);

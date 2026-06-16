@@ -317,6 +317,11 @@ func (c *ApiController) DeleteStore() {
 		return
 	}
 
+	rr := c.RequireResource(ResourceTypeStore, store.GetId(), AccessWrite)
+	if rr == nil {
+		return
+	}
+
 	if store.IsDefault {
 		c.ResponseError(c.T("store:Cannot delete the default store"))
 		return
@@ -431,8 +436,7 @@ func (c *ApiController) AddSharedStore() {
 	if _, ok := c.RequireSignedIn(); !ok {
 		return
 	}
-	if !c.IsAdmin() {
-		c.ResponseError(c.T("auth:this operation requires admin privilege"))
+	if !c.RequireAdmin() {
 		return
 	}
 
@@ -447,20 +451,12 @@ func (c *ApiController) AddSharedStore() {
 		return
 	}
 
-	src, err := object.GetStore(util.GetIdFromOwnerAndName(form.Owner, form.Name))
-	if err != nil {
-		c.ResponseError(err.Error())
+	srcId := util.GetIdFromOwnerAndName(form.Owner, form.Name)
+	rr := c.RequireResource(ResourceTypeStore, srcId, AccessRead)
+	if rr == nil {
 		return
 	}
-	if src == nil {
-		c.ResponseError("source store not found")
-		return
-	}
-
-	if !c.IsGlobalAdmin() && src.Owner != c.GetSessionUsername() {
-		c.ResponseError(c.T("auth:Unauthorized operation"))
-		return
-	}
+	src := rr.Store()
 
 	accountUser, err := object.GetUserByRuntimeName(form.TargetUser)
 	if err != nil {
