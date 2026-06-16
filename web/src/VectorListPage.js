@@ -14,13 +14,14 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Popconfirm, Popover, Table, Tooltip} from "antd";
+import {Button, Card, Popconfirm, Popover, Progress, Table, Tag, Tooltip} from "antd";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as VectorBackend from "./backend/VectorBackend";
+import * as FileBackend from "./backend/FileBackend";
 import i18next from "i18next";
-import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
+import {DeleteOutlined, EditOutlined, ReloadOutlined} from "@ant-design/icons";
 import Editor from "./common/Editor";
 
 class VectorListPage extends BaseListPage {
@@ -33,6 +34,8 @@ class VectorListPage extends BaseListPage {
         fileFilter,
         searchText: fileFilter,
         searchedColumn: "file",
+        fileInfo: null,
+        loadingFileInfo: false,
       };
     }
   }
@@ -41,10 +44,55 @@ class VectorListPage extends BaseListPage {
     const {pagination} = this.state;
     if (this.state.fileFilter) {
       this.fetch({pagination, searchText: this.state.fileFilter, searchedColumn: "file"});
+      this.loadFileInfo(this.state.fileFilter);
     } else {
       this.fetch({pagination});
     }
     this.getForm();
+  }
+
+  loadFileInfo(filePath) {
+    const storeName = this.getApiStoreName();
+    const owner = this.props.account?.name || "admin";
+    this.setState({loadingFileInfo: true});
+    FileBackend.getFiles(owner, storeName)
+      .then((res) => {
+        if (res.status === "ok" && res.data) {
+          const matchedFile = res.data.find(f => {
+            const name = f.name || "";
+            const prefix = `${storeName}_`;
+            const objectKey = name.startsWith(prefix) ? name.slice(prefix.length) : name;
+            return objectKey === filePath || name === filePath;
+          });
+          this.setState({
+            fileInfo: matchedFile || null,
+            loadingFileInfo: false,
+          });
+        } else {
+          this.setState({loadingFileInfo: false});
+        }
+      })
+      .catch(() => {
+        this.setState({loadingFileInfo: false});
+      });
+  }
+
+  refreshFileVectors() {
+    if (!this.state.fileInfo) {
+      return;
+    }
+    FileBackend.refreshFileVectors(this.state.fileInfo)
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+          setTimeout(() => this.loadFileInfo(this.state.fileFilter), 1000);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
+        }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
+      });
   }
 
   newVector() {
@@ -338,6 +386,9 @@ class VectorListPage extends BaseListPage {
             searchText: params.searchText,
             searchedColumn: params.searchedColumn,
           });
+          if (this.state.fileFilter) {
+            this.loadFileInfo(this.state.fileFilter);
+          }
         } else {
           if (Setting.isResponseDenied(res)) {
             this.setState({
@@ -349,6 +400,79 @@ class VectorListPage extends BaseListPage {
         }
       });
   };
+
+  renderFileStatusCard() {
+    if (!this.state.fileFilter) {
+      return null;
+    }
+    const fileInfo = this.state.fileInfo;
+    const detail = fileInfo?.stateDetail || {};
+    const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
+
+    return (
+      <Card
+        size="small"
+        style={{marginBottom: "16px", borderRadius: "10px"}}
+        title={
+          <span>
+            {i18next.t("store:File")}: <code style={{color: "var(--ant-color-text-secondary)"}}>{this.state.fileFilter}</code>
+            &nbsp;&nbsp;
+            <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
+          </span>
+        }
+        extra={
+          Setting.isLocalAdminUser(this.props.account) ? (
+            <Tooltip title={detail.canRetry ? i18next.t("general:Refresh Vectors") : detail.label || ""}>
+              <Button
+                type="primary"
+                size="small"
+                icon={<ReloadOutlined />}
+                disabled={!detail.canRetry}
+                loading={isProcessing}
+                onClick={() => this.refreshFileVectors()}
+              >
+                {i18next.t("general:Refresh Vectors")}
+              </Button>
+            </Tooltip>
+          ) : null
+        }
+      >
+        {isProcessing && detail.totalSections > 0 && (
+          <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
+        )}
+        {detail.errorText && (
+          <div style={{color: "var(--ant-color-error)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("general:Error")}: {detail.errorText}
+          </div>
+        )}
+        {detail.vectorError && !detail.errorText && (
+          <div style={{color: "var(--ant-color-warning)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("vector:Vector error")}: {detail.vectorError}
+          </div>
+        )}
+        {fileInfo?.tokenCount > 0 && (
+          <div style={{color: "var(--ant-color-text-secondary)", fontSize: "13px", marginTop: "8px"}}>
+            {i18next.t("general:Tokens")}: {fileInfo.tokenCount}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  render() {
+    if (!this.state.isAuthorized) {
+      return super.render();
+    }
+    if (this.state.loading && this.state.data === null) {
+      return super.render();
+    }
+    return (
+      <div>
+        {this.renderFileStatusCard()}
+        {this.renderTable(this.state.data)}
+      </div>
+    );
+  }
 }
 
 export default VectorListPage;

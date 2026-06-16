@@ -34,7 +34,6 @@ class StoreListPage extends BaseListPage {
     super(props);
     this.state = {
       ...this.state,
-      generating: {},
       providers: {},
       hideChat: this.getHideChatFromStorage(),
       shareModalVisible: false,
@@ -231,35 +230,17 @@ class StoreListPage extends BaseListPage {
       });
   }
 
-  refreshStoreVectors(i) {
-    this.setState(prevState => ({
-      generating: {
-        ...prevState.generating,
-        [i]: true,
-      },
-    }));
-    StoreBackend.refreshStoreVectors(this.state.data[i])
+  refreshStoreVectors(record) {
+    StoreBackend.refreshStoreVectors(record)
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
         } else {
           Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
         }
-        this.setState(prevState => ({
-          generating: {
-            ...prevState.generating,
-            [i]: false,
-          },
-        }));
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
-        this.setState(prevState => ({
-          generating: {
-            ...prevState.generating,
-            [i]: false,
-          },
-        }));
       });
   }
 
@@ -508,8 +489,7 @@ class StoreListPage extends BaseListPage {
                         type="text"
                         size="small"
                         icon={<ReloadOutlined />}
-                        disabled={this.state.generating[index]}
-                        onClick={() => this.refreshStoreVectors(index)}
+                        onClick={() => this.refreshStoreVectors(record)}
                         style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
                       />
                     </Tooltip>

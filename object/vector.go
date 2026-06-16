@@ -169,11 +169,24 @@ func DeleteVectorsByStore(owner string, storeName string) (bool, error) {
 		return false, err
 	}
 
+	err = ResetFilesStateByStore(owner, storeName)
+	if err != nil {
+		return false, err
+	}
+
 	return affected != 0, nil
 }
 
 func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, error) {
 	affected, err := adapter.engine.Where("owner = ? AND store = ? AND file = ?", owner, storeName, fileKey).Delete(&Vector{})
+	if err != nil {
+		return false, err
+	}
+
+	err = SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+		FileState:   KnowledgeFileStateUploaded,
+		VectorState: VectorBuildStatePending,
+	})
 	if err != nil {
 		return false, err
 	}

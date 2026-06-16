@@ -130,7 +130,34 @@ func (store *Store) Populate(origin string, lang string) error {
 		// fmt.Printf("%s, %d, %v\n", object.Key, object.Size, object.LastModified)
 	}
 
+	files, err := GetFilesByStore(store.Owner, store.Name)
+	if err == nil && len(files) > 0 {
+		fileStateMap := make(map[string]*FileStateDetail, len(files))
+		for _, f := range files {
+			objectKey := f.getObjectKey()
+			if objectKey != "" {
+				fileStateMap[objectKey] = f.StateDetail
+			}
+		}
+		store.populateTreeFileStates(store.FileTree, fileStateMap)
+	}
+
 	return nil
+}
+
+func (store *Store) populateTreeFileStates(node *TreeFile, fileStateMap map[string]*FileStateDetail) {
+	if node == nil {
+		return
+	}
+	if node.IsLeaf {
+		key := strings.TrimLeft(node.Key, "/")
+		if detail, ok := fileStateMap[key]; ok {
+			node.StateDetail = detail
+		}
+	}
+	for _, child := range node.Children {
+		store.populateTreeFileStates(child, fileStateMap)
+	}
 }
 
 func SyncDefaultProvidersToStore(store *Store) error {
