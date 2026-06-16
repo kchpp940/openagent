@@ -72,7 +72,7 @@ func (c *ApiController) UploadTaskDocument() {
 	fileName := c.GetString("name")
 
 	if taskId == "" || fileBase64 == "" || fileName == "" {
-		c.ResponseError(c.T("application:Missing required parameters"))
+		c.ResponseErrorValidation(c.T("application:Missing required parameters"), "id/file/name")
 		return
 	}
 
@@ -86,13 +86,13 @@ func (c *ApiController) UploadTaskDocument() {
 	typeDetection := txt.DetectTaskDocumentType(fileName, fileType, allowedExtensions)
 
 	if typeDetection.Unsupported {
-		c.ResponseError(typeDetection.UnsupportedReason)
+		c.ResponseErrorValidation(typeDetection.UnsupportedReason, "type")
 		return
 	}
 
 	fileBytes, err := decodeFileBase64(fileBase64)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorValidation(err.Error(), "file")
 		return
 	}
 
@@ -102,7 +102,7 @@ func (c *ApiController) UploadTaskDocument() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(filePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -136,12 +136,12 @@ func (c *ApiController) UploadTaskDocument() {
 
 	success, err := object.UpdateTask(taskId, task)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
 	if !success {
-		c.ResponseError(c.T("general:Failed to update"))
+		c.ResponseErrorInternal(fmt.Errorf("%s", c.T("general:Failed to update")), ResourceTypeTask)
 		return
 	}
 

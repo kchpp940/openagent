@@ -37,7 +37,7 @@ func (c *ApiController) GetGlobalTasks() {
 
 	tasks, err := object.GetGlobalTasks(owner)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (c *ApiController) GetTasks() {
 	if limit == "" || page == "" {
 		tasks, err := object.GetTasks(owner)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTask)
 			return
 		}
 
@@ -83,14 +83,14 @@ func (c *ApiController) GetTasks() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetTaskCount(owner, field, value)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTask)
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		tasks, err := object.GetPaginationTasks(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTask)
 			return
 		}
 		c.ResponseOk(tasks, paginator.Nums())
@@ -140,7 +140,7 @@ func (c *ApiController) UpdateTask() {
 
 	success, err := object.UpdateTask(id, &task)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -164,7 +164,7 @@ func (c *ApiController) AddTask() {
 
 	success, err := object.AddTask(&task)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (c *ApiController) DeleteTask() {
 
 	success, err := object.DeleteTask(&task)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -224,7 +224,7 @@ func (c *ApiController) AnalyzeTask() {
 		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
 			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
 		}
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 
@@ -232,7 +232,7 @@ func (c *ApiController) AnalyzeTask() {
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 	task.Result = string(resultBytes)
@@ -241,7 +241,7 @@ func (c *ApiController) AnalyzeTask() {
 	_, err = object.UpdateTask(id, task)
 	if err != nil {
 		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTask)
 		return
 	}
 

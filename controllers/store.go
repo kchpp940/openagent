@@ -34,7 +34,7 @@ import (
 func (c *ApiController) GetHubStores() {
 	stores, err := object.GetPublishedStoresFromAllDbs()
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 	c.ResponseOk(stores)
@@ -58,7 +58,7 @@ func (c *ApiController) GetGlobalStores() {
 	if limit == "" || page == "" {
 		stores, err := object.GetGlobalStores()
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -78,7 +78,7 @@ func (c *ApiController) GetGlobalStores() {
 		if c.IsGlobalAdmin() {
 			count, err = object.GetStoreCount(name, field, value)
 			if err != nil {
-				c.ResponseError(err.Error())
+				c.ResponseErrorInternal(err, ResourceTypeStore)
 				return
 			}
 			paginator := pagination.SetPaginator(c.Ctx, limit, count)
@@ -86,14 +86,14 @@ func (c *ApiController) GetGlobalStores() {
 		} else {
 			count, err = object.GetStoreCountByOwner(username, field, value)
 			if err != nil {
-				c.ResponseError(err.Error())
+				c.ResponseErrorInternal(err, ResourceTypeStore)
 				return
 			}
 			paginator := pagination.SetPaginator(c.Ctx, limit, count)
 			stores, err = object.GetPaginationStoresByOwner(username, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		}
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -103,7 +103,7 @@ func (c *ApiController) GetGlobalStores() {
 
 		err = object.PopulateStoreCounts(stores)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -133,7 +133,7 @@ func (c *ApiController) GetStores() {
 		stores, err = object.GetStores(username)
 	}
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -162,7 +162,7 @@ func (c *ApiController) GetStore() {
 		store = rr.Store()
 	}
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -214,20 +214,20 @@ func (c *ApiController) UpdateStore() {
 	}
 
 	if oldStore.IsDefault && !store.IsDefault {
-		c.ResponseError(c.T("store:given that there must be one default store in OpenAgent, you cannot set this store to non-default. You can directly set another store as default"))
+		c.ResponseErrorWithCode(ErrCodeBadRequest, c.T("store:given that there must be one default store in OpenAgent, you cannot set this store to non-default. You can directly set another store as default"), &ErrorDetail{Code: ErrCodeBadRequest, Key: "store:given that there must be one default store in OpenAgent, you cannot set this store to non-default. You can directly set another store as default", ResourceType: ResourceTypeStore})
 		return
 	}
 
 	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
 	if !oldStore.IsDefault && store.IsDefault {
 		stores, err := object.GetStores(store.Owner)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -236,7 +236,7 @@ func (c *ApiController) UpdateStore() {
 				store2.IsDefault = false
 				success, err = object.UpdateStore(store2.GetId(), store2)
 				if err != nil {
-					c.ResponseError(err.Error())
+					c.ResponseErrorInternal(err, ResourceTypeStore)
 					return
 				}
 			}
@@ -263,7 +263,7 @@ func (c *ApiController) AddStore() {
 
 	err = object.SyncDefaultProvidersToStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (c *ApiController) AddStore() {
 		var modelProvider *object.Provider
 		modelProvider, err = object.GetDefaultModelProvider()
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -284,7 +284,7 @@ func (c *ApiController) AddStore() {
 		var embeddingProvider *object.Provider
 		embeddingProvider, err = object.GetDefaultEmbeddingProvider()
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeStore)
 			return
 		}
 
@@ -295,7 +295,7 @@ func (c *ApiController) AddStore() {
 
 	success, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -323,13 +323,13 @@ func (c *ApiController) DeleteStore() {
 	}
 
 	if store.IsDefault {
-		c.ResponseError(c.T("store:Cannot delete the default store"))
+		c.ResponseErrorWithCode(ErrCodeBadRequest, c.T("store:Cannot delete the default store"), &ErrorDetail{Code: ErrCodeBadRequest, Key: "store:Cannot delete the default store", ResourceType: ResourceTypeStore})
 		return
 	}
 
 	success, err := object.DeleteStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -348,7 +348,7 @@ func (c *ApiController) ClaimStore() {
 		return
 	}
 	if c.IsGlobalAdmin() {
-		c.ResponseError("global admin does not need to claim a store")
+		c.ResponseErrorWithCode(ErrCodeBadRequest, "global admin does not need to claim a store", &ErrorDetail{Code: ErrCodeBadRequest, Key: "global admin does not need to claim a store", ResourceType: ResourceTypeStore})
 		return
 	}
 
@@ -360,7 +360,7 @@ func (c *ApiController) ClaimStore() {
 	store := rr.Store()
 
 	if store.Owner != "admin" {
-		c.ResponseError("only stores owned by admin can be claimed")
+		c.ResponseErrorWithCode(ErrCodeBadRequest, "only stores owned by admin can be claimed", &ErrorDetail{Code: ErrCodeBadRequest, Key: "only stores owned by admin can be claimed", ResourceType: ResourceTypeStore, ResourceId: id, ResourceOwner: store.Owner, ResourceName: store.Name})
 		return
 	}
 
@@ -368,7 +368,7 @@ func (c *ApiController) ClaimStore() {
 	store.Owner = username
 	_, err := object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -392,7 +392,7 @@ func (c *ApiController) RefreshStoreVectors() {
 
 	ok, err := object.RefreshStoreVectors(&store, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -417,7 +417,7 @@ func (c *ApiController) GetStoreNames() {
 		storeNames, err = object.GetStoresByFields(username, []string{"name", "display_name", "avatar"}...)
 	}
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 
@@ -447,7 +447,7 @@ func (c *ApiController) AddSharedStore() {
 		return
 	}
 	if form.Owner == "" || form.Name == "" || form.TargetUser == "" {
-		c.ResponseError("owner, name and targetUser are required")
+		c.ResponseErrorValidation("owner, name and targetUser are required", "owner/name/targetUser")
 		return
 	}
 
@@ -460,17 +460,17 @@ func (c *ApiController) AddSharedStore() {
 
 	accountUser, err := object.GetUserByRuntimeName(form.TargetUser)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 	if accountUser == nil && !conf.IsCasdoorAvailable() {
-		c.ResponseError(c.T("general:Target user not found"))
+		c.ResponseErrorWithCode(ErrCodeNotFound, c.T("general:Target user not found"), &ErrorDetail{Code: ErrCodeNotFound, Key: "general:Target user not found", Field: "targetUser"})
 		return
 	}
 
 	newStore, err := object.ShareStore(src.Owner, src.Name, form.TargetUser, c.GetSessionUsername())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeStore)
 		return
 	}
 

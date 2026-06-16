@@ -45,7 +45,7 @@ func (c *ApiController) GetServers() {
 	if limit == "" || page == "" {
 		servers, err := object.GetServers(owner)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeServer)
 			return
 		}
 		c.ResponseOk(servers)
@@ -56,14 +56,14 @@ func (c *ApiController) GetServers() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetServerCount(owner, field, value)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeServer)
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		servers, err := object.GetPaginationServers(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeServer)
 			return
 		}
 
@@ -114,7 +114,7 @@ func (c *ApiController) UpdateServer() {
 
 	success, err := object.UpdateServer(id, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 
@@ -139,7 +139,7 @@ func (c *ApiController) AddServer() {
 	server.Owner = "admin"
 	success, err := object.AddServer(&server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (c *ApiController) DeleteServer() {
 
 	success, err := object.DeleteServer(&server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 
@@ -192,7 +192,7 @@ func (c *ApiController) TestMcpServer() {
 
 	result, err := object.TestMcpServer(&server, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 
@@ -225,7 +225,7 @@ func (c *ApiController) SyncMcpTool() {
 
 	ok, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 	c.ResponseOk(ok)
@@ -243,19 +243,19 @@ func (c *ApiController) GetOnlineServers() {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	resp, err := httpClient.Get(onlineServerListURL)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		c.ResponseError(fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode))
+		c.ResponseErrorWithCode(ErrCodeInternal, fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode), &ErrorDetail{Code: ErrCodeInternal, Key: fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode), ResourceType: ResourceTypeServer})
 		return
 	}
 
 	var result interface{}
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 	c.ResponseOk(result)
@@ -291,7 +291,7 @@ func (c *ApiController) SyncIntranetServers() {
 
 	result, err := mcppkg.ScanIntranetServers(req.CIDR, req.Ports, req.Paths)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeServer)
 		return
 	}
 	c.ResponseOk(result)

@@ -31,7 +31,7 @@ import (
 func (c *ApiController) GetGlobalSkills() {
 	skills, err := object.GetGlobalSkills()
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeSkill)
 		return
 	}
 
@@ -56,7 +56,7 @@ func (c *ApiController) GetSkills() {
 	if limit == "" || page == "" {
 		skills, err := object.GetSkills(owner)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeSkill)
 			return
 		}
 		c.ResponseOk(skills)
@@ -67,14 +67,14 @@ func (c *ApiController) GetSkills() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetSkillCount(owner, field, value)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeSkill)
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		skills, err := object.GetPaginationSkills(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeSkill)
 			return
 		}
 
@@ -125,7 +125,7 @@ func (c *ApiController) UpdateSkill() {
 
 	success, err := object.UpdateSkill(id, &s)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeSkill)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (c *ApiController) AddSkill() {
 	s.Owner = "admin"
 	success, err := object.AddSkill(&s)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeSkill)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (c *ApiController) DeleteSkill() {
 
 	success, err := object.DeleteSkill(&s)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeSkill)
 		return
 	}
 
@@ -196,13 +196,13 @@ func (c *ApiController) DeleteSkill() {
 func (c *ApiController) LoadSkill() {
 	path := c.Input().Get("path")
 	if path == "" {
-		c.ResponseError("path is required")
+		c.ResponseErrorValidation("path is required", "path")
 		return
 	}
 
 	s, err := object.LoadSkill(path)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeSkill)
 		return
 	}
 

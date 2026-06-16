@@ -32,7 +32,7 @@ func (c *ApiController) GetGlobalTools() {
 	user := c.GetSessionUser()
 	tools, err := object.GetGlobalTools()
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTool)
 		return
 	}
 
@@ -58,7 +58,7 @@ func (c *ApiController) GetTools() {
 	if limit == "" || page == "" {
 		tools, err := object.GetTools(owner)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTool)
 			return
 		}
 		c.ResponseOk(object.GetMaskedTools(tools, true, user))
@@ -69,14 +69,14 @@ func (c *ApiController) GetTools() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetToolCount(owner, field, value)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTool)
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		tools, err := object.GetPaginationTools(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeTool)
 			return
 		}
 
@@ -128,7 +128,7 @@ func (c *ApiController) UpdateTool() {
 
 	success, err := object.UpdateTool(id, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTool)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (c *ApiController) AddTool() {
 	t.Owner = "admin"
 	success, err := object.AddTool(&t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTool)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (c *ApiController) DeleteTool() {
 
 	success, err := object.DeleteTool(&t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTool)
 		return
 	}
 
@@ -206,7 +206,7 @@ func (c *ApiController) TestTool() {
 
 	result, err := object.TestTool(&t, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeTool)
 		return
 	}
 

@@ -60,7 +60,7 @@ func (c *ApiController) GetGlobalResources() {
 			resources, err = object.GetResources(owner, filterUser)
 		}
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeResource)
 			return
 		}
 		c.ResponseOk(resources)
@@ -68,14 +68,14 @@ func (c *ApiController) GetGlobalResources() {
 		limitInt := util.ParseInt(limit)
 		count, err := object.GetResourceCount(owner, filterUser, field, value)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeResource)
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limitInt, count)
 		resources, err := object.GetPaginationResources(owner, filterUser, paginator.Offset(), limitInt, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.ResponseErrorInternal(err, ResourceTypeResource)
 			return
 		}
 
@@ -126,7 +126,7 @@ func (c *ApiController) UpdateResource() {
 
 	success, err := object.UpdateResource(id, &resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (c *ApiController) AddResource() {
 
 	success, err := object.AddResource(&resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
@@ -179,13 +179,13 @@ func (c *ApiController) DeleteResource() {
 
 	err = object.DeleteResourceFile(rr.Resource(), c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
 	success, err := object.DeleteResource(&resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
@@ -217,7 +217,7 @@ func (c *ApiController) UploadResource() {
 
 	file, header, err := c.GetFile("file")
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 	defer file.Close()
@@ -228,14 +228,14 @@ func (c *ApiController) UploadResource() {
 	fileBytes := make([]byte, fileSize)
 	_, err = file.Read(fileBytes)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
 	ext := strings.ToLower(filepath.Ext(fileName))
 
 	if err = validateFileExtension(fileName, c.GetAcceptLanguage()); err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorValidation(err.Error(), "file")
 		return
 	}
 	mimeType := header.Header.Get("Content-Type")
@@ -254,14 +254,14 @@ func (c *ApiController) UploadResource() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(fullFilePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
 	resource := object.NewResourceFromUpload("admin", userName, category, fileName, fileType, ext, fileUrl, fullFilePath, fileSize, objectType, objectId)
 	_, err = object.AddResource(resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorInternal(err, ResourceTypeResource)
 		return
 	}
 
