@@ -26,7 +26,7 @@ import (
 // @Title GetGlobalSkills
 // @Tag Skill API
 // @Description get global skills
-// @Success 200 {array} object.SkillWithCapability The Response object
+// @Success 200 {array} object.SkillWithDecision The Response object
 // @router /get-global-skills [get]
 func (c *ApiController) GetGlobalSkills() {
 	skills, err := object.GetGlobalSkills()
@@ -35,14 +35,14 @@ func (c *ApiController) GetGlobalSkills() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichSkillsWithCapability(skills))
+	c.ResponseOk(object.EnrichSkillsWithDecision(skills))
 }
 
 // GetSkills
 // @Title GetSkills
 // @Tag Skill API
 // @Description get skills
-// @Success 200 {array} object.SkillWithCapability The Response object
+// @Success 200 {array} object.SkillWithDecision The Response object
 // @router /get-skills [get]
 func (c *ApiController) GetSkills() {
 	owner := "admin"
@@ -59,7 +59,7 @@ func (c *ApiController) GetSkills() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.EnrichSkillsWithCapability(skills))
+		c.ResponseOk(object.EnrichSkillsWithDecision(skills))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -78,7 +78,7 @@ func (c *ApiController) GetSkills() {
 			return
 		}
 
-		c.ResponseOk(object.EnrichSkillsWithCapability(skills), paginator.Nums())
+		c.ResponseOk(object.EnrichSkillsWithDecision(skills), paginator.Nums())
 	}
 }
 
@@ -87,7 +87,7 @@ func (c *ApiController) GetSkills() {
 // @Tag Skill API
 // @Description get skill
 // @Param id query string true "The id of skill"
-// @Success 200 {object} object.SkillWithCapability The Response object
+// @Success 200 {object} object.SkillWithDecision The Response object
 // @router /get-skill [get]
 func (c *ApiController) GetSkill() {
 	id := c.Input().Get("id")
@@ -98,7 +98,7 @@ func (c *ApiController) GetSkill() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichSkillWithCapability(s))
+	c.ResponseOk(object.EnrichSkillWithDecision(s))
 }
 
 // UpdateSkill
@@ -119,9 +119,9 @@ func (c *ApiController) UpdateSkill() {
 		return
 	}
 
-	success, err := object.UpdateSkill(id, &s)
+	success, decision, err := object.UpdateSkill(id, &s)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -144,9 +144,9 @@ func (c *ApiController) AddSkill() {
 	}
 
 	s.Owner = "admin"
-	success, err := object.AddSkill(&s)
+	success, decision, err := object.AddSkill(&s)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 

@@ -15,21 +15,14 @@
 package object
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/util"
-)
-
-type CapabilityStatus string
-
-const (
-	CapabilityStatusPass    CapabilityStatus = "Pass"
-	CapabilityStatusWarning CapabilityStatus = "Warning"
-	CapabilityStatusFail    CapabilityStatus = "Fail"
-	CapabilityStatusPending CapabilityStatus = "Pending"
-	CapabilityStatusStale   CapabilityStatus = "Stale"
 )
 
 type CapabilityEntityType string
@@ -41,265 +34,268 @@ const (
 	EntityTypeStore  CapabilityEntityType = "Store"
 )
 
-type LegacyState string
-
-const (
-	LegacyStateActive   LegacyState = "Active"
-	LegacyStateInactive LegacyState = "Inactive"
-)
-
-type CapabilityIssue struct {
-	Level   CapabilityStatus `json:"level"`
-	Code    string           `json:"code"`
-	Message string           `json:"message"`
-	Field   string           `json:"field,omitempty"`
+type CapabilityError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Field   string `json:"field,omitempty"`
 }
 
-type CapabilityResult struct {
-	EntityType   CapabilityEntityType `json:"entityType"`
-	EntityId     string               `json:"entityId"`
-	EntityName   string               `json:"entityName"`
-	Status       CapabilityStatus     `json:"status"`
-	LegacyState  LegacyState          `json:"legacyState"`
-	CanMount     bool                 `json:"canMount"`
-	CanSaveStore bool                 `json:"canSaveStore"`
-	NeedReview   bool                 `json:"needReview"`
-	Issues       []CapabilityIssue    `json:"issues"`
-	Summary      string               `json:"summary"`
+type FailedResource struct {
+	EntityType CapabilityEntityType `json:"entityType"`
+	EntityId   string               `json:"entityId"`
+	Name       string               `json:"name"`
+	Errors     []CapabilityError    `json:"errors"`
 }
 
-func (s CapabilityStatus) IsAtLeast(target CapabilityStatus) bool {
-	order := map[CapabilityStatus]int{
-		CapabilityStatusPass:    5,
-		CapabilityStatusStale:   4,
-		CapabilityStatusWarning: 3,
-		CapabilityStatusPending: 2,
-		CapabilityStatusFail:    1,
-	}
-	return order[s] >= order[target]
+type CapabilityDecision struct {
+	EntityType       CapabilityEntityType `json:"entityType"`
+	EntityId         string               `json:"entityId"`
+	EntityName       string               `json:"entityName"`
+	ConfigHash       string               `json:"configHash"`
+	LastCheckedAt    string               `json:"lastCheckedAt"`
+	CanMount         bool                 `json:"canMount"`
+	CanSaveStore     bool                 `json:"canSaveStore"`
+	NeedsRecheck     bool                 `json:"needsRecheck"`
+	BlockReason      string               `json:"blockReason,omitempty"`
+	Warnings         []CapabilityError    `json:"warnings,omitempty"`
+	Errors           []CapabilityError    `json:"errors,omitempty"`
+	FailedResources  []FailedResource     `json:"failedResources,omitempty"`
+	RecheckAction    string               `json:"recheckAction,omitempty"`
+	RecheckPayload   string               `json:"recheckPayload,omitempty"`
 }
 
-func (s CapabilityStatus) DisplayText() string {
-	switch s {
-	case CapabilityStatusPass:
-		return "通过"
-	case CapabilityStatusWarning:
-		return "警告"
-	case CapabilityStatusFail:
-		return "失败"
-	case CapabilityStatusPending:
-		return "待检测"
-	case CapabilityStatusStale:
-		return "需刷新"
-	default:
-		return string(s)
-	}
-}
-
-func (s CapabilityStatus) TagColor() string {
-	switch s {
-	case CapabilityStatusPass:
-		return "success"
-	case CapabilityStatusWarning:
-		return "warning"
-	case CapabilityStatusFail:
-		return "error"
-	case CapabilityStatusPending:
-		return "default"
-	case CapabilityStatusStale:
-		return "processing"
-	default:
-		return "default"
-	}
-}
-
-func legacyStateToStatus(state LegacyState) CapabilityStatus {
-	switch state {
-	case LegacyStateActive:
-		return CapabilityStatusPass
-	case LegacyStateInactive:
-		return CapabilityStatusFail
-	default:
-		if state == "" {
-			return CapabilityStatusPending
-		}
-		return CapabilityStatusWarning
-	}
-}
-
-func statusToLegacyState(status CapabilityStatus) LegacyState {
-	switch status {
-	case CapabilityStatusPass, CapabilityStatusStale, CapabilityStatusWarning:
-		return LegacyStateActive
-	case CapabilityStatusFail, CapabilityStatusPending:
-		return LegacyStateInactive
-	default:
-		return LegacyStateInactive
-	}
-}
-
-func (c *CapabilityResult) addIssue(level CapabilityStatus, code, message, field string) {
-	c.Issues = append(c.Issues, CapabilityIssue{
-		Level:   level,
+func (d *CapabilityDecision) addError(code, message, field string) {
+	d.Errors = append(d.Errors, CapabilityError{
 		Code:    code,
 		Message: message,
 		Field:   field,
 	})
 }
 
-func (c *CapabilityResult) finalize() {
-	if len(c.Issues) == 0 {
-		if c.Status == "" {
-			c.Status = CapabilityStatusPass
-		}
-	} else {
-		minStatus := CapabilityStatusPass
-		for _, issue := range c.Issues {
-			if !issue.Level.IsAtLeast(minStatus) {
-				minStatus = issue.Level
-			}
-		}
-		if c.Status == "" || !minStatus.IsAtLeast(c.Status) {
-			c.Status = minStatus
+func (d *CapabilityDecision) addWarning(code, message, field string) {
+	d.Warnings = append(d.Warnings, CapabilityError{
+		Code:    code,
+		Message: message,
+		Field:   field,
+	})
+}
+
+func (d *CapabilityDecision) addFailedResource(entityType CapabilityEntityType, entityId, name string, errors []CapabilityError) {
+	d.FailedResources = append(d.FailedResources, FailedResource{
+		EntityType: entityType,
+		EntityId:   entityId,
+		Name:       name,
+		Errors:     errors,
+	})
+}
+
+func (d *CapabilityDecision) finalize() {
+	if len(d.Errors) > 0 {
+		d.CanMount = false
+		d.CanSaveStore = false
+		if d.BlockReason == "" {
+			d.BlockReason = fmt.Sprintf("%d 个配置错误需要修复", len(d.Errors))
 		}
 	}
 
-	c.LegacyState = statusToLegacyState(c.Status)
-	c.CanMount = c.computeCanMount()
-	c.CanSaveStore = c.computeCanSaveStore()
-	c.NeedReview = c.computeNeedReview()
-	c.Summary = c.buildSummary()
-}
-
-func (c *CapabilityResult) computeCanMount() bool {
-	return c.Status.IsAtLeast(CapabilityStatusWarning)
-}
-
-func (c *CapabilityResult) computeCanSaveStore() bool {
-	return c.Status.IsAtLeast(CapabilityStatusWarning)
-}
-
-func (c *CapabilityResult) computeNeedReview() bool {
-	return c.Status == CapabilityStatusStale || c.Status == CapabilityStatusWarning
-}
-
-func (c *CapabilityResult) buildSummary() string {
-	if len(c.Issues) == 0 {
-		switch c.EntityType {
-		case EntityTypeTool:
-			return "工具配置正常，可挂载到 Agent"
-		case EntityTypeSkill:
-			return "技能配置正常，可挂载到 Agent"
-		case EntityTypeServer:
-			return "MCP 服务器连接正常"
-		case EntityTypeStore:
-			return "Store 配置正常"
-		}
-		return "配置正常"
+	if len(d.Warnings) > 0 && len(d.Errors) == 0 {
+		d.NeedsRecheck = true
 	}
 
-	var warnings, failures int
-	for _, issue := range c.Issues {
-		switch issue.Level {
-		case CapabilityStatusWarning:
-			warnings++
-		case CapabilityStatusFail:
-			failures++
-		}
+	if d.NeedsRecheck && d.RecheckAction == "" {
+		d.RecheckAction = "recheck"
 	}
+}
 
+func (d *CapabilityDecision) HasErrors() bool {
+	return len(d.Errors) > 0
+}
+
+func (d *CapabilityDecision) HasWarnings() bool {
+	return len(d.Warnings) > 0
+}
+
+func (d *CapabilityDecision) ErrorCount() int {
+	return len(d.Errors)
+}
+
+func (d *CapabilityDecision) WarningCount() int {
+	return len(d.Warnings)
+}
+
+func (d *CapabilityDecision) Summary() string {
 	parts := []string{}
-	if failures > 0 {
-		parts = append(parts, fmt.Sprintf("%d 个错误", failures))
+	if len(d.Errors) > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个错误", len(d.Errors)))
 	}
-	if warnings > 0 {
-		parts = append(parts, fmt.Sprintf("%d 个警告", warnings))
+	if len(d.Warnings) > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个警告", len(d.Warnings)))
+	}
+	if len(d.FailedResources) > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个依赖资源不可用", len(d.FailedResources)))
+	}
+	if len(parts) == 0 {
+		return "配置正常"
 	}
 	return strings.Join(parts, "，")
 }
 
-func CheckToolCapability(t *Tool) *CapabilityResult {
-	result := &CapabilityResult{
-		EntityType: EntityTypeTool,
-		EntityId:   t.GetId(),
-		EntityName: t.Name,
-		Status:     legacyStateToStatus(LegacyState(t.State)),
+func ComputeConfigHash(v interface{}) string {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	hash := sha256.Sum256(bytes)
+	return hex.EncodeToString(hash[:])
+}
+
+func ComputeToolConfigHash(t *Tool) string {
+	config := map[string]interface{}{
+		"name":         t.Name,
+		"type":         t.Type,
+		"subType":      t.SubType,
+		"clientId":     t.ClientId,
+		"providerUrl":  t.ProviderUrl,
+		"enableProxy":  t.EnableProxy,
+		"modelProvider": t.ModelProvider,
+		"mode":         t.Mode,
+	}
+	return ComputeConfigHash(config)
+}
+
+func ComputeSkillConfigHash(s *Skill) string {
+	config := map[string]interface{}{
+		"name":        s.Name,
+		"type":        s.Type,
+		"description": s.Description,
+		"content":     s.Content,
+		"metadata":    s.Metadata,
+		"references":  s.References,
+	}
+	return ComputeConfigHash(config)
+}
+
+func ComputeServerConfigHash(s *Server) string {
+	config := map[string]interface{}{
+		"name":  s.Name,
+		"url":   s.Url,
+		"tools": s.Tools,
+	}
+	return ComputeConfigHash(config)
+}
+
+func ComputeStoreConfigHash(store *Store) string {
+	config := map[string]interface{}{
+		"name":            store.Name,
+		"tools":           store.Tools,
+		"skills":          store.Skills,
+		"modelProvider":   store.ModelProvider,
+		"storageProvider": store.StorageProvider,
+		"searchProvider":  store.SearchProvider,
+		"prompt":          store.Prompt,
+		"isDefault":       store.IsDefault,
+	}
+	return ComputeConfigHash(config)
+}
+
+func CheckToolCapability(t *Tool) *CapabilityDecision {
+	decision := &CapabilityDecision{
+		EntityType:    EntityTypeTool,
+		EntityId:      t.GetId(),
+		EntityName:    t.Name,
+		ConfigHash:    ComputeToolConfigHash(t),
+		LastCheckedAt: util.GetCurrentTime(),
+		CanMount:      true,
+		CanSaveStore:  true,
 	}
 
 	if t.Name == "" {
-		result.addIssue(CapabilityStatusFail, "TOOL_NAME_EMPTY", "工具名称不能为空", "name")
+		decision.addError("TOOL_NAME_EMPTY", "工具名称不能为空", "name")
 	}
 	if t.Type == "" {
-		result.addIssue(CapabilityStatusFail, "TOOL_TYPE_EMPTY", "工具类型不能为空", "type")
+		decision.addError("TOOL_TYPE_EMPTY", "工具类型不能为空", "type")
 	}
 
 	switch t.Type {
 	case "web_search":
 		if t.SubType == "Google" {
 			if strings.TrimSpace(t.ClientId) == "" {
-				result.addIssue(CapabilityStatusWarning, "SEARCH_ENGINE_ID_MISSING", "Google 搜索缺少搜索引擎 ID (cx)", "clientId")
+				decision.addWarning("SEARCH_ENGINE_ID_MISSING", "Google 搜索缺少搜索引擎 ID (cx)，可能导致搜索结果为空", "clientId")
 			}
 			if strings.TrimSpace(t.ClientSecret) == "" || t.ClientSecret == "***" {
-				result.addIssue(CapabilityStatusWarning, "GOOGLE_API_KEY_MISSING", "Google 搜索缺少 API Key", "clientSecret")
+				decision.addWarning("GOOGLE_API_KEY_MISSING", "Google 搜索缺少 API Key，可能导致搜索失败", "clientSecret")
 			}
 		}
 	case "web_fetch", "web_browser", "local_file":
 		if t.ProviderUrl != "" && !util.IsValidUrl(t.ProviderUrl) {
-			result.addIssue(CapabilityStatusWarning, "INVALID_PROVIDER_URL", "Provider URL 格式不合法", "providerUrl")
+			decision.addWarning("INVALID_PROVIDER_URL", "Provider URL 格式不合法，请检查是否包含协议头和主机名", "providerUrl")
 		}
 	}
 
-	if LegacyState(t.State) == LegacyStateInactive {
-		result.addIssue(CapabilityStatusFail, "TOOL_INACTIVE", "工具已被标记为未启用", "state")
+	if strings.TrimSpace(t.State) != "" && strings.ToLower(t.State) != "active" && t.State != "1" {
+		decision.addError("TOOL_DISABLED", "工具已被禁用", "state")
+		decision.BlockReason = "工具已被禁用，请先启用"
 	}
 
-	result.finalize()
-	return result
+	decision.finalize()
+	return decision
 }
 
-func CheckSkillCapability(s *Skill) *CapabilityResult {
-	result := &CapabilityResult{
-		EntityType: EntityTypeSkill,
-		EntityId:   s.GetId(),
-		EntityName: s.Name,
-		Status:     legacyStateToStatus(LegacyState(s.State)),
+func CheckSkillCapability(s *Skill) *CapabilityDecision {
+	decision := &CapabilityDecision{
+		EntityType:    EntityTypeSkill,
+		EntityId:      s.GetId(),
+		EntityName:    s.Name,
+		ConfigHash:    ComputeSkillConfigHash(s),
+		LastCheckedAt: util.GetCurrentTime(),
+		CanMount:      true,
+		CanSaveStore:  true,
 	}
 
 	if s.Name == "" {
-		result.addIssue(CapabilityStatusFail, "SKILL_NAME_EMPTY", "技能名称不能为空", "name")
+		decision.addError("SKILL_NAME_EMPTY", "技能名称不能为空", "name")
 	}
 	if strings.TrimSpace(s.Content) == "" {
-		result.addIssue(CapabilityStatusWarning, "SKILL_CONTENT_EMPTY", "技能内容为空，可能无法提供有效指导", "content")
+		decision.addWarning("SKILL_CONTENT_EMPTY", "技能内容为空，可能无法提供有效指导", "content")
 	}
 
-	if LegacyState(s.State) == LegacyStateInactive {
-		result.addIssue(CapabilityStatusFail, "SKILL_INACTIVE", "技能已被标记为未启用", "state")
+	if strings.TrimSpace(s.State) != "" && strings.ToLower(s.State) != "active" && s.State != "1" {
+		decision.addError("SKILL_DISABLED", "技能已被禁用", "state")
+		decision.BlockReason = "技能已被禁用，请先启用"
 	}
 
-	result.finalize()
-	return result
+	decision.finalize()
+	return decision
 }
 
-func CheckServerCapability(s *Server) *CapabilityResult {
-	result := &CapabilityResult{
-		EntityType: EntityTypeServer,
-		EntityId:   s.GetId(),
-		EntityName: s.Name,
+func CheckServerCapability(s *Server) *CapabilityDecision {
+	decision := &CapabilityDecision{
+		EntityType:    EntityTypeServer,
+		EntityId:      s.GetId(),
+		EntityName:    s.Name,
+		ConfigHash:    ComputeServerConfigHash(s),
+		LastCheckedAt: util.GetCurrentTime(),
+		CanMount:      true,
+		CanSaveStore:  true,
 	}
 
 	if s.Name == "" {
-		result.addIssue(CapabilityStatusFail, "SERVER_NAME_EMPTY", "服务器名称不能为空", "name")
+		decision.addError("SERVER_NAME_EMPTY", "服务器名称不能为空", "name")
 	}
 	if strings.TrimSpace(s.Url) == "" {
-		result.addIssue(CapabilityStatusFail, "SERVER_URL_EMPTY", "服务器 URL 不能为空", "url")
-		result.Status = CapabilityStatusFail
+		decision.addError("SERVER_URL_EMPTY", "服务器 URL 不能为空", "url")
+		decision.BlockReason = "缺少服务器 URL"
+		decision.NeedsRecheck = true
+		decision.RecheckAction = "sync"
 	} else if !util.IsValidUrl(s.Url) {
-		result.addIssue(CapabilityStatusWarning, "INVALID_SERVER_URL", "服务器 URL 格式不合法", "url")
+		decision.addWarning("INVALID_SERVER_URL", "服务器 URL 格式不合法，请检查是否包含 http/https 协议", "url")
 	}
 
 	if len(s.Tools) == 0 && strings.TrimSpace(s.Url) != "" {
-		result.addIssue(CapabilityStatusPending, "TOOLS_NOT_SYNCED", "尚未从服务器同步工具列表，请点击同步按钮", "tools")
-		result.Status = CapabilityStatusPending
+		decision.addError("TOOLS_NOT_SYNCED", "尚未从服务器同步工具列表，请点击同步按钮", "tools")
+		decision.BlockReason = "MCP 工具未同步"
+		decision.NeedsRecheck = true
+		decision.RecheckAction = "sync"
 	} else {
 		allowedCount := 0
 		for _, t := range s.Tools {
@@ -308,198 +304,335 @@ func CheckServerCapability(s *Server) *CapabilityResult {
 			}
 		}
 		if len(s.Tools) > 0 && allowedCount == 0 {
-			result.addIssue(CapabilityStatusWarning, "NO_TOOLS_ALLOWED", "所有 MCP 工具均未被允许", "tools")
+			decision.addWarning("NO_TOOLS_ALLOWED", "所有 MCP 工具均未被允许，Agent 将无法使用该服务器的任何功能", "tools")
+			decision.NeedsRecheck = true
 		}
 	}
 
-	if result.Status == "" {
-		result.Status = CapabilityStatusPass
-	}
-
-	result.finalize()
-	return result
+	decision.finalize()
+	return decision
 }
 
-func CheckStoreCapability(store *Store) *CapabilityResult {
-	result := &CapabilityResult{
-		EntityType: EntityTypeStore,
-		EntityId:   store.GetId(),
-		EntityName: store.Name,
-		Status:     legacyStateToStatus(LegacyState(store.State)),
+func CheckStoreCapability(store *Store) *CapabilityDecision {
+	decision := &CapabilityDecision{
+		EntityType:    EntityTypeStore,
+		EntityId:      store.GetId(),
+		EntityName:    store.Name,
+		ConfigHash:    ComputeStoreConfigHash(store),
+		LastCheckedAt: util.GetCurrentTime(),
+		CanMount:      true,
+		CanSaveStore:  true,
 	}
 
 	if store.Name == "" {
-		result.addIssue(CapabilityStatusFail, "STORE_NAME_EMPTY", "Store 名称不能为空", "name")
+		decision.addError("STORE_NAME_EMPTY", "Store 名称不能为空", "name")
 	}
 
-	if LegacyState(store.State) == LegacyStateInactive {
-		result.addIssue(CapabilityStatusFail, "STORE_INACTIVE", "Store 已被标记为未启用", "state")
+	toolNames := store.Tools
+	if len(toolNames) == 1 && toolNames[0] == "All" {
+		allTools, err := GetTools(store.Owner)
+		if err == nil {
+			toolNames = make([]string, 0, len(allTools))
+			for _, t := range allTools {
+				toolNames = append(toolNames, t.Name)
+			}
+		}
 	}
 
-	result.finalize()
+	for _, tname := range toolNames {
+		id := util.GetIdFromOwnerAndName(store.Owner, tname)
+		t, err := GetTool(id)
+		if err != nil || t == nil {
+			decision.addFailedResource(EntityTypeTool, id, tname, []CapabilityError{
+				{Code: "TOOL_NOT_FOUND", Message: fmt.Sprintf("工具不存在: %s", tname)},
+			})
+			continue
+		}
+		toolDecision := CheckToolCapability(t)
+		if toolDecision.HasErrors() {
+			decision.addFailedResource(EntityTypeTool, t.GetId(), t.Name, toolDecision.Errors)
+		}
+	}
+
+	for _, sname := range store.Skills {
+		id := util.GetIdFromOwnerAndName(store.Owner, sname)
+		s, err := GetSkill(id)
+		if err != nil || s == nil {
+			decision.addFailedResource(EntityTypeSkill, id, sname, []CapabilityError{
+				{Code: "SKILL_NOT_FOUND", Message: fmt.Sprintf("技能不存在: %s", sname)},
+			})
+			continue
+		}
+		skillDecision := CheckSkillCapability(s)
+		if skillDecision.HasErrors() {
+			decision.addFailedResource(EntityTypeSkill, s.GetId(), s.Name, skillDecision.Errors)
+		}
+	}
+
+	if strings.TrimSpace(store.State) != "" && strings.ToLower(store.State) != "active" && store.State != "1" {
+		decision.addError("STORE_DISABLED", "Store 已被禁用", "state")
+		decision.BlockReason = "Store 已被禁用，请先启用"
+	}
+
+	if len(decision.FailedResources) > 0 {
+		decision.CanSaveStore = false
+		decision.BlockReason = fmt.Sprintf("%d 个依赖资源存在错误", len(decision.FailedResources))
+	}
+
+	decision.finalize()
+	return decision
+}
+
+func RecheckToolCapability(t *Tool, savedHash string) (*CapabilityDecision, bool) {
+	decision := CheckToolCapability(t)
+	needsRecheck := savedHash != "" && decision.ConfigHash != savedHash
+	decision.NeedsRecheck = decision.NeedsRecheck || needsRecheck
+	if needsRecheck {
+		decision.RecheckAction = "recheck"
+	}
+	return decision, needsRecheck
+}
+
+func RecheckSkillCapability(s *Skill, savedHash string) (*CapabilityDecision, bool) {
+	decision := CheckSkillCapability(s)
+	needsRecheck := savedHash != "" && decision.ConfigHash != savedHash
+	decision.NeedsRecheck = decision.NeedsRecheck || needsRecheck
+	if needsRecheck {
+		decision.RecheckAction = "recheck"
+	}
+	return decision, needsRecheck
+}
+
+func RecheckServerCapability(s *Server, savedHash string) (*CapabilityDecision, bool) {
+	decision := CheckServerCapability(s)
+	needsRecheck := savedHash != "" && decision.ConfigHash != savedHash
+	decision.NeedsRecheck = decision.NeedsRecheck || needsRecheck
+	if needsRecheck {
+		decision.RecheckAction = "recheck"
+	}
+	return decision, needsRecheck
+}
+
+func CheckToolMountable(t *Tool) (bool, *CapabilityDecision) {
+	decision := CheckToolCapability(t)
+	return decision.CanMount, decision
+}
+
+func CheckSkillMountable(s *Skill) (bool, *CapabilityDecision) {
+	decision := CheckSkillCapability(s)
+	return decision.CanMount, decision
+}
+
+func CheckServerMountable(s *Server) (bool, *CapabilityDecision) {
+	decision := CheckServerCapability(s)
+	return decision.CanMount, decision
+}
+
+func CheckStoreSavable(store *Store) (bool, *CapabilityDecision) {
+	decision := CheckStoreCapability(store)
+	return decision.CanSaveStore, decision
+}
+
+func ValidateToolBeforeSave(t *Tool) (*CapabilityDecision, error) {
+	decision := CheckToolCapability(t)
+	if decision.HasErrors() {
+		return decision, fmt.Errorf("tool validation failed: %s", decision.Summary())
+	}
+	t.ConfigHash = decision.ConfigHash
+	return decision, nil
+}
+
+func ValidateSkillBeforeSave(s *Skill) (*CapabilityDecision, error) {
+	decision := CheckSkillCapability(s)
+	if decision.HasErrors() {
+		return decision, fmt.Errorf("skill validation failed: %s", decision.Summary())
+	}
+	s.ConfigHash = decision.ConfigHash
+	return decision, nil
+}
+
+func ValidateServerBeforeSave(s *Server) (*CapabilityDecision, error) {
+	decision := CheckServerCapability(s)
+	s.ConfigHash = decision.ConfigHash
+	return decision, nil
+}
+
+func ValidateStoreBeforeSave(store *Store) (*CapabilityDecision, error) {
+	decision := CheckStoreCapability(store)
+	if !decision.CanSaveStore {
+		return decision, fmt.Errorf("store validation failed: %s", decision.Summary())
+	}
+	store.ConfigHash = decision.ConfigHash
+	return decision, nil
+}
+
+func FilterMountableTools(tools []*Tool) []*Tool {
+	result := make([]*Tool, 0, len(tools))
+	for _, t := range tools {
+		if mountable, _ := CheckToolMountable(t); mountable {
+			result = append(result, t)
+		}
+	}
 	return result
 }
 
-func CheckToolMountable(t *Tool) bool {
-	return CheckToolCapability(t).CanMount
-}
-
-func CheckSkillMountable(s *Skill) bool {
-	return CheckSkillCapability(s).CanMount
-}
-
-func CheckServerMountable(s *Server) bool {
-	return CheckServerCapability(s).CanMount
-}
-
-func CheckStoreSavable(store *Store) bool {
-	return CheckStoreCapability(store).CanSaveStore
-}
-
-func ValidateAndNormalizeToolState(t *Tool) error {
-	result := CheckToolCapability(t)
-	if t.State == "" {
-		t.State = string(result.LegacyState)
-	}
-	if LegacyState(t.State) != LegacyStateActive && LegacyState(t.State) != LegacyStateInactive {
-		t.State = string(result.LegacyState)
-	}
-	return nil
-}
-
-func ValidateAndNormalizeSkillState(s *Skill) error {
-	result := CheckSkillCapability(s)
-	if s.State == "" {
-		s.State = string(result.LegacyState)
-	}
-	if LegacyState(s.State) != LegacyStateActive && LegacyState(s.State) != LegacyStateInactive {
-		s.State = string(result.LegacyState)
-	}
-	return nil
-}
-
-func ValidateAndNormalizeServerState(s *Server) (string, error) {
-	result := CheckServerCapability(s)
-	return string(result.LegacyState), nil
-}
-
-func ValidateAndNormalizeStoreState(store *Store) error {
-	result := CheckStoreCapability(store)
-	if store.State == "" {
-		store.State = string(result.LegacyState)
-	}
-	if LegacyState(store.State) != LegacyStateActive && LegacyState(store.State) != LegacyStateInactive {
-		store.State = string(result.LegacyState)
-	}
-	return nil
-}
-
-func GetToolCapabilityList(tools []*Tool) []*CapabilityResult {
-	results := make([]*CapabilityResult, 0, len(tools))
-	for _, t := range tools {
-		results = append(results, CheckToolCapability(t))
-	}
-	return results
-}
-
-func GetSkillCapabilityList(skills []*Skill) []*CapabilityResult {
-	results := make([]*CapabilityResult, 0, len(skills))
+func FilterMountableSkills(skills []*Skill) []*Skill {
+	result := make([]*Skill, 0, len(skills))
 	for _, s := range skills {
-		results = append(results, CheckSkillCapability(s))
-	}
-	return results
-}
-
-func GetServerCapabilityList(servers []*Server) []*CapabilityResult {
-	results := make([]*CapabilityResult, 0, len(servers))
-	for _, s := range servers {
-		results = append(results, CheckServerCapability(s))
-	}
-	return results
-}
-
-func FormatStateForDisplay(state string, lang string) string {
-	switch LegacyState(state) {
-	case LegacyStateActive:
-		return i18n.Translate(lang, "general:Active")
-	case LegacyStateInactive:
-		return i18n.Translate(lang, "general:Inactive")
-	default:
-		if state == "" {
-			return i18n.Translate(lang, "general:Pending")
+		if mountable, _ := CheckSkillMountable(s); mountable {
+			result = append(result, s)
 		}
-		return state
 	}
+	return result
 }
 
-type ToolWithCapability struct {
+type ToolWithDecision struct {
 	*Tool
-	Capability *CapabilityResult `json:"capability"`
+	Decision *CapabilityDecision `json:"decision"`
 }
 
-type SkillWithCapability struct {
+type SkillWithDecision struct {
 	*Skill
-	Capability *CapabilityResult `json:"capability"`
+	Decision *CapabilityDecision `json:"decision"`
 }
 
-type ServerWithCapability struct {
+type ServerWithDecision struct {
 	*Server
-	State      string            `json:"state"`
-	Capability *CapabilityResult `json:"capability"`
+	ConfigHash string             `json:"configHash"`
+	State      string             `json:"state"`
+	Decision   *CapabilityDecision `json:"decision"`
 }
 
-func EnrichToolWithCapability(t *Tool) *ToolWithCapability {
+func EnrichToolWithDecision(t *Tool) *ToolWithDecision {
 	if t == nil {
 		return nil
 	}
-	return &ToolWithCapability{
-		Tool:       t,
-		Capability: CheckToolCapability(t),
+	return &ToolWithDecision{
+		Tool:     t,
+		Decision: CheckToolCapability(t),
 	}
 }
 
-func EnrichSkillWithCapability(s *Skill) *SkillWithCapability {
+func EnrichSkillWithDecision(s *Skill) *SkillWithDecision {
 	if s == nil {
 		return nil
 	}
-	return &SkillWithCapability{
-		Skill:      s,
-		Capability: CheckSkillCapability(s),
+	return &SkillWithDecision{
+		Skill:    s,
+		Decision: CheckSkillCapability(s),
 	}
 }
 
-func EnrichServerWithCapability(s *Server) *ServerWithCapability {
+func EnrichServerWithDecision(s *Server) *ServerWithDecision {
 	if s == nil {
 		return nil
 	}
-	cap := CheckServerCapability(s)
-	return &ServerWithCapability{
+	decision := CheckServerCapability(s)
+	state := "Active"
+	if !decision.CanMount {
+		state = "Inactive"
+	}
+	return &ServerWithDecision{
 		Server:     s,
-		State:      string(cap.LegacyState),
-		Capability: cap,
+		ConfigHash: decision.ConfigHash,
+		State:      state,
+		Decision:   decision,
 	}
 }
 
-func EnrichToolsWithCapability(tools []*Tool) []*ToolWithCapability {
-	result := make([]*ToolWithCapability, 0, len(tools))
+func EnrichToolsWithDecision(tools []*Tool) []*ToolWithDecision {
+	result := make([]*ToolWithDecision, 0, len(tools))
 	for _, t := range tools {
-		result = append(result, EnrichToolWithCapability(t))
+		result = append(result, EnrichToolWithDecision(t))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Decision.CanMount != result[j].Decision.CanMount {
+			return result[i].Decision.CanMount
+		}
+		if result[i].Decision.HasErrors() != result[j].Decision.HasErrors() {
+			return !result[i].Decision.HasErrors()
+		}
+		return result[i].Tool.Name < result[j].Tool.Name
+	})
 	return result
 }
 
-func EnrichSkillsWithCapability(skills []*Skill) []*SkillWithCapability {
-	result := make([]*SkillWithCapability, 0, len(skills))
+func EnrichSkillsWithDecision(skills []*Skill) []*SkillWithDecision {
+	result := make([]*SkillWithDecision, 0, len(skills))
 	for _, s := range skills {
-		result = append(result, EnrichSkillWithCapability(s))
+		result = append(result, EnrichSkillWithDecision(s))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Decision.CanMount != result[j].Decision.CanMount {
+			return result[i].Decision.CanMount
+		}
+		if result[i].Decision.HasErrors() != result[j].Decision.HasErrors() {
+			return !result[i].Decision.HasErrors()
+		}
+		return result[i].Skill.Name < result[j].Skill.Name
+	})
 	return result
 }
 
-func EnrichServersWithCapability(servers []*Server) []*ServerWithCapability {
-	result := make([]*ServerWithCapability, 0, len(servers))
+func EnrichServersWithDecision(servers []*Server) []*ServerWithDecision {
+	result := make([]*ServerWithDecision, 0, len(servers))
 	for _, s := range servers {
-		result = append(result, EnrichServerWithCapability(s))
+		result = append(result, EnrichServerWithDecision(s))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Decision.CanMount != result[j].Decision.CanMount {
+			return result[i].Decision.CanMount
+		}
+		if result[i].Decision.HasErrors() != result[j].Decision.HasErrors() {
+			return !result[i].Decision.HasErrors()
+		}
+		return result[i].Server.Name < result[j].Server.Name
+	})
 	return result
+}
+
+type CapabilityCheckRequest struct {
+	EntityType CapabilityEntityType `json:"entityType"`
+	EntityId   string               `json:"entityId"`
+	Force      bool                 `json:"force"`
+}
+
+type CapabilityCheckResponse struct {
+	Decision *CapabilityDecision `json:"decision"`
+	Changed  bool                `json:"changed"`
+}
+
+func HandleCapabilityCheck(req *CapabilityCheckRequest) (*CapabilityCheckResponse, error) {
+	switch req.EntityType {
+	case EntityTypeTool:
+		t, err := GetTool(req.EntityId)
+		if err != nil {
+			return nil, err
+		}
+		decision, changed := RecheckToolCapability(t, t.ConfigHash)
+		return &CapabilityCheckResponse{Decision: decision, Changed: changed}, nil
+	case EntityTypeSkill:
+		s, err := GetSkill(req.EntityId)
+		if err != nil {
+			return nil, err
+		}
+		decision, changed := RecheckSkillCapability(s, s.ConfigHash)
+		return &CapabilityCheckResponse{Decision: decision, Changed: changed}, nil
+	case EntityTypeServer:
+		s, err := GetServer(req.EntityId)
+		if err != nil {
+			return nil, err
+		}
+		decision, changed := RecheckServerCapability(s, s.ConfigHash)
+		return &CapabilityCheckResponse{Decision: decision, Changed: changed}, nil
+	case EntityTypeStore:
+		store, err := GetStore(req.EntityId)
+		if err != nil {
+			return nil, err
+		}
+		decision := CheckStoreCapability(store)
+		return &CapabilityCheckResponse{Decision: decision, Changed: false}, nil
+	default:
+		return nil, fmt.Errorf("unknown entity type: %s", req.EntityType)
+	}
 }

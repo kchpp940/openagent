@@ -227,9 +227,9 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
-	success, err := object.UpdateStore(id, &store)
+	success, decision, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (c *ApiController) UpdateStore() {
 		for _, store2 := range stores {
 			if store2.Owner == store.Owner && store2.GetId() != store.GetId() && store2.IsDefault {
 				store2.IsDefault = false
-				success, err = object.UpdateStore(store2.GetId(), store2)
+				success, _, err = object.UpdateStore(store2.GetId(), store2)
 				if err != nil {
 					c.ResponseError(err.Error())
 					return
@@ -302,9 +302,9 @@ func (c *ApiController) AddStore() {
 		}
 	}
 
-	success, err := object.AddStore(&store)
+	success, decision, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -380,7 +380,7 @@ func (c *ApiController) ClaimStore() {
 
 	username := c.GetSessionUsername()
 	store.Owner = username
-	_, err = object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
+	_, _, err = object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

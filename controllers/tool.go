@@ -26,7 +26,7 @@ import (
 // @Title GetGlobalTools
 // @Tag Tool API
 // @Description get global tools
-// @Success 200 {array} object.ToolWithCapability The Response object
+// @Success 200 {array} object.ToolWithDecision The Response object
 // @router /get-global-tools [get]
 func (c *ApiController) GetGlobalTools() {
 	user := c.GetSessionUser()
@@ -37,14 +37,14 @@ func (c *ApiController) GetGlobalTools() {
 	}
 
 	masked := object.GetMaskedTools(tools, true, user)
-	c.ResponseOk(object.EnrichToolsWithCapability(masked))
+	c.ResponseOk(object.EnrichToolsWithDecision(masked))
 }
 
 // GetTools
 // @Title GetTools
 // @Tag Tool API
 // @Description get tools
-// @Success 200 {array} object.ToolWithCapability The Response object
+// @Success 200 {array} object.ToolWithDecision The Response object
 // @router /get-tools [get]
 func (c *ApiController) GetTools() {
 	owner := "admin"
@@ -63,7 +63,7 @@ func (c *ApiController) GetTools() {
 			return
 		}
 		masked := object.GetMaskedTools(tools, true, user)
-		c.ResponseOk(object.EnrichToolsWithCapability(masked))
+		c.ResponseOk(object.EnrichToolsWithDecision(masked))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -83,7 +83,7 @@ func (c *ApiController) GetTools() {
 		}
 
 		masked := object.GetMaskedTools(tools, true, user)
-		c.ResponseOk(object.EnrichToolsWithCapability(masked), paginator.Nums())
+		c.ResponseOk(object.EnrichToolsWithDecision(masked), paginator.Nums())
 	}
 }
 
@@ -92,7 +92,7 @@ func (c *ApiController) GetTools() {
 // @Tag Tool API
 // @Description get tool
 // @Param id query string true "The id of tool"
-// @Success 200 {object} object.ToolWithCapability The Response object
+// @Success 200 {object} object.ToolWithDecision The Response object
 // @router /get-tool [get]
 func (c *ApiController) GetTool() {
 	id := c.Input().Get("id")
@@ -105,7 +105,7 @@ func (c *ApiController) GetTool() {
 	}
 
 	masked := object.GetMaskedTool(t, true, user)
-	c.ResponseOk(object.EnrichToolWithCapability(masked))
+	c.ResponseOk(object.EnrichToolWithDecision(masked))
 }
 
 // UpdateTool
@@ -126,9 +126,9 @@ func (c *ApiController) UpdateTool() {
 		return
 	}
 
-	success, err := object.UpdateTool(id, &t)
+	success, decision, err := object.UpdateTool(id, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -151,13 +151,39 @@ func (c *ApiController) AddTool() {
 	}
 
 	t.Owner = "admin"
-	success, err := object.AddTool(&t)
+	success, decision, err := object.AddTool(&t)
+	if err != nil {
+		c.ResponseError(err.Error(), decision)
+		return
+	}
+
+	c.ResponseOk(success)
+}
+
+// CheckToolCapability
+// @Title CheckToolCapability
+// @Tag Tool API
+// @Description check tool capability
+// @Param entityType query string true "The entity type"
+// @Param entityId query string true "The entity id"
+// @Param force query bool false "Force recheck"
+// @Success 200 {object} object.CapabilityCheckResponse The Response object
+// @router /check-tool-capability [post]
+func (c *ApiController) CheckToolCapability() {
+	var req object.CapabilityCheckRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(success)
+	resp, err := object.HandleCapabilityCheck(&req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(resp)
 }
 
 // DeleteTool

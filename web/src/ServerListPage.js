@@ -22,7 +22,7 @@ import * as ServerBackend from "./backend/ServerBackend";
 import i18next from "i18next";
 import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
 import ScanServerModal from "./common/modal/ScanServerModal";
-import {CapabilityInfo} from "./CapabilityStatus";
+import {CapabilityListStatus} from "./CapabilityError";
 
 class ServerListPage extends BaseListPage {
   constructor(props) {
@@ -181,14 +181,17 @@ class ServerListPage extends BaseListPage {
       },
       {
         title: i18next.t("general:Capability"),
-        dataIndex: "capability",
-        key: "capability",
+        dataIndex: "decision",
+        key: "decision",
         width: "280px",
-        sorter: (a, b) => (a.capability?.status || "").localeCompare(b.capability?.status || ""),
+        sorter: (a, b) => {
+          const aErr = a.decision?.errors?.length || 0;
+          const bErr = b.decision?.errors?.length || 0;
+          if (aErr !== bErr) {return aErr - bErr;}
+          return (a.decision?.canMount === b.decision?.canMount) ? 0 : (a.decision?.canMount ? -1 : 1);
+        },
         render: (_, record) => (
-          <div style={{minWidth: "260px"}}>
-            <CapabilityInfo capability={record.capability} showIssues={false} />
-          </div>
+          <CapabilityListStatus decision={record.decision} compact />
         ),
       },
       {

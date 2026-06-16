@@ -57,7 +57,8 @@ type Skill struct {
 	SkillMd     string           `xorm:"mediumtext" json:"skillMd"`
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
-	State string `xorm:"varchar(100)" json:"state"`
+	State      string `xorm:"varchar(100)" json:"state"`
+	ConfigHash string `xorm:"varchar(100)" json:"configHash"`
 }
 
 func (s *Skill) GetId() string {
@@ -225,7 +226,7 @@ func LoadSkill(dir string) (*Skill, error) {
 		References:  refs,
 		State:       "Active",
 	}
-	_ = ValidateAndNormalizeSkillState(skill)
+	_, _ = ValidateSkillBeforeSave(skill)
 	return skill, nil
 }
 
@@ -300,40 +301,42 @@ func GetPaginationSkills(owner string, offset, limit int, field, value, sortFiel
 	return skills, err
 }
 
-func UpdateSkill(id string, s *Skill) (bool, error) {
+func UpdateSkill(id string, s *Skill) (bool, *CapabilityDecision, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	skillDb, err := getSkill(owner, name)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if s == nil || skillDb == nil {
-		return false, nil
+		return false, nil, nil
 	}
 
-	if err := ValidateAndNormalizeSkillState(s); err != nil {
-		return false, err
+	decision, err := ValidateSkillBeforeSave(s)
+	if err != nil {
+		return false, decision, err
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(s)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	return true, nil
+	return true, decision, nil
 }
 
-func AddSkill(s *Skill) (bool, error) {
-	if err := ValidateAndNormalizeSkillState(s); err != nil {
-		return false, err
+func AddSkill(s *Skill) (bool, *CapabilityDecision, error) {
+	decision, err := ValidateSkillBeforeSave(s)
+	if err != nil {
+		return false, decision, err
 	}
 
 	affected, err := adapter.engine.Insert(s)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	return affected != 0, nil
+	return affected != 0, decision, nil
 }
 
 func addSkills(skills []*Skill) (int64, error) {
@@ -430,7 +433,11 @@ func GetSkillsCatalog(owner string, skillNames []string) (string, error) {
 
 	var items []string
 	for _, s := range skills {
-		if s == nil || !CheckSkillMountable(s) {
+		if s == nil {
+			continue
+		}
+		mountable, _ := CheckSkillMountable(s)
+		if !mountable {
 			continue
 		}
 
@@ -478,9 +485,9 @@ func LoadSkillPromptContent(owner string, skillName string, referenceName string
 	if s == nil {
 		return "", fmt.Errorf("skill not found: %s", skillName)
 	}
-	if !CheckSkillMountable(s) {
-		capResult := CheckSkillCapability(s)
-		return "", fmt.Errorf("skill is not available: %s, reason: %s", skillName, capResult.Summary)
+	mountable, decision := CheckSkillMountable(s)
+	if !mountable {
+		return "", fmt.Errorf("skill is not available: %s, reason: %s", skillName, decision.Summary())
 	}
 
 	buf := strings.TrimSpace(s.Content)

@@ -19,7 +19,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
-import {CapabilityInfo} from "./CapabilityStatus";
+import {CapabilityError} from "./CapabilityError";
 
 const {Option} = Select;
 
@@ -130,7 +130,16 @@ class ToolEditPage extends React.Component {
         </div>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityInfo capability={tool.capability} />
+          <CapabilityError
+            decision={tool.decision}
+            entityType="tool"
+            entityId={tool.owner + "/" + tool.name}
+            onRecheck={(newDecision) => {
+              this.setState({
+                tool: {...this.state.tool, decision: newDecision},
+              });
+            }}
+          />
         </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>

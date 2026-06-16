@@ -19,7 +19,7 @@ import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
-import {CapabilityInfo} from "./CapabilityStatus";
+import {CapabilityError} from "./CapabilityError";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -110,7 +110,16 @@ class SkillEditPage extends React.Component {
         </div>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityInfo capability={skill.capability} />
+          <CapabilityError
+            decision={skill.decision}
+            entityType="skill"
+            entityId={skill.owner + "/" + skill.name}
+            onRecheck={(newDecision) => {
+              this.setState({
+                skill: {...this.state.skill, decision: newDecision},
+              });
+            }}
+          />
         </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>

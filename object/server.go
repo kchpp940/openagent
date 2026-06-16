@@ -50,6 +50,7 @@ type Server struct {
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
 	State       string     `xorm:"varchar(100)" json:"state"`
+	ConfigHash  string     `xorm:"varchar(100)" json:"configHash"`
 }
 
 func (s *Server) GetId() string {
@@ -108,87 +109,100 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 	return nil, nil
 }
 
-func AddServer(server *Server) (bool, error) {
-	state, err := ValidateAndNormalizeServerState(server)
+func AddServer(server *Server) (bool, *CapabilityDecision, error) {
+	decision, err := ValidateServerBeforeSave(server)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	server.State = state
+	server.State = "Active"
+	if !decision.CanMount {
+		server.State = "Inactive"
+	}
 
 	affected, err := adapter.engine.Insert(server)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	return affected != 0, nil
+	return affected != 0, decision, nil
 }
 
-func UpdateServer(id string, server *Server) (bool, error) {
+func UpdateServer(id string, server *Server) (bool, *CapabilityDecision, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	oldServer, err := getServer(owner, name)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if oldServer != nil && server.Token == "" {
 		server.Token = oldServer.Token
 	}
 
-	state, err := ValidateAndNormalizeServerState(server)
+	decision, err := ValidateServerBeforeSave(server)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	server.State = state
+	server.State = "Active"
+	if !decision.CanMount {
+		server.State = "Inactive"
+	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	return true, nil
+	return true, decision, nil
 }
 
-func SyncMcpTool(id string, server *Server, isCleared bool) (bool, error) {
+func SyncMcpTool(id string, server *Server, isCleared bool) (bool, *CapabilityDecision, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	if isCleared {
 		server.Tools = nil
-		state, _ := ValidateAndNormalizeServerState(server)
-		server.State = state
-		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools", "state").Update(server)
-		if err != nil {
-			return false, err
+		decision, _ := ValidateServerBeforeSave(server)
+		server.State = "Active"
+		if !decision.CanMount {
+			server.State = "Inactive"
 		}
-		return true, nil
+		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools", "state", "config_hash").Update(server)
+		if err != nil {
+			return false, decision, err
+		}
+		return true, decision, nil
 	}
 
 	oldServer, err := getServer(owner, name)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if oldServer == nil {
-		return false, nil
+		return false, nil, nil
 	}
 	if server.Token == "" {
 		server.Token = oldServer.Token
 	}
 
 	if err = syncServerTools(server); err != nil {
-		return false, err
+		decision := CheckServerCapability(server)
+		return false, decision, err
 	}
 
-	state, _ := ValidateAndNormalizeServerState(server)
-	server.State = state
+	decision, _ := ValidateServerBeforeSave(server)
+	server.State = "Active"
+	if !decision.CanMount {
+		server.State = "Inactive"
+	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
-	return true, nil
+	return true, decision, nil
 }
 
 func syncServerTools(server *Server) error {
@@ -244,9 +258,9 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 		return nil, nil
 	}
 
-	if !CheckServerMountable(s) {
-		capResult := CheckServerCapability(s)
-		return nil, fmt.Errorf("server is not mountable: %s", capResult.Summary)
+	mountable, decision := CheckServerMountable(s)
+	if !mountable {
+		return nil, fmt.Errorf("server is not mountable: %s", decision.Summary())
 	}
 
 	cli, err := mcp.NewClient(s.Url, s.Token)

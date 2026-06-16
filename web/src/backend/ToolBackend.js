@@ -91,3 +91,18 @@ export function testTool(tool) {
     body: JSON.stringify(newTool),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function checkCapability(entityType, entityId, force = false) {
+  return fetch(`${Setting.ServerUrl}/api/check-tool-capability`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({
+      entityType,
+      entityId,
+      force,
+    }),
+  }).then(res => Setting.handleFetchResponse(res));
+}

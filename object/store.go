@@ -100,6 +100,7 @@ type Store struct {
 	EnableExtraOptions     bool              `json:"enableExtraOptions"`
 	IsDefault              bool              `json:"isDefault"`
 	State                  string            `xorm:"varchar(100)" json:"state"`
+	ConfigHash             string            `xorm:"varchar(100)" json:"configHash"`
 	SharedBy               string            `xorm:"varchar(100)" json:"sharedBy"`
 
 	Author      string `xorm:"varchar(100)" json:"author"`
@@ -207,7 +208,8 @@ func GetDefaultStore(owner string) (*Store, error) {
 
 	// GetStores orders by created_time DESC — first Active row is the newest active store.
 	for _, store := range stores {
-		if CheckStoreSavable(store) {
+		savable, _ := CheckStoreSavable(store)
+		if savable {
 			return store, nil
 		}
 	}
@@ -304,61 +306,53 @@ func GetStoreForGetApi(id string) (*Store, error) {
 	return resolveStoreWhenAdminIdMisses(id)
 }
 
-func UpdateStore(id string, store *Store) (bool, error) {
+func UpdateStore(id string, store *Store) (bool, *CapabilityDecision, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	_, err = getStore(owner, name)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if store == nil {
-		return false, nil
+		return false, nil, nil
 	}
 
 	if store.ApiKey == "" {
 		store.ApiKey = generateStoreApiKey()
 	}
 
-	if err := ValidateAndNormalizeStoreState(store); err != nil {
-		return false, err
-	}
-
-	if !CheckStoreSavable(store) {
-		capResult := CheckStoreCapability(store)
-		return false, fmt.Errorf("store cannot be saved: %s", capResult.Summary)
+	decision, err := ValidateStoreBeforeSave(store)
+	if err != nil {
+		return false, decision, err
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(store)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
 
 	// return affected != 0
-	return true, nil
+	return true, decision, nil
 }
 
-func AddStore(store *Store) (bool, error) {
+func AddStore(store *Store) (bool, *CapabilityDecision, error) {
 	if store.ApiKey == "" {
 		store.ApiKey = generateStoreApiKey()
 	}
 
-	if err := ValidateAndNormalizeStoreState(store); err != nil {
-		return false, err
-	}
-
-	if !CheckStoreSavable(store) {
-		capResult := CheckStoreCapability(store)
-		return false, fmt.Errorf("store cannot be saved: %s", capResult.Summary)
+	decision, err := ValidateStoreBeforeSave(store)
+	if err != nil {
+		return false, decision, err
 	}
 
 	affected, err := adapter.engine.Insert(store)
 	if err != nil {
-		return false, err
+		return false, decision, err
 	}
 
-	return affected != 0, nil
+	return affected != 0, decision, nil
 }
 
 func DeleteStore(store *Store) (bool, error) {

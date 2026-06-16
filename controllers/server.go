@@ -48,7 +48,7 @@ func (c *ApiController) GetServers() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.EnrichServersWithCapability(servers))
+		c.ResponseOk(object.EnrichServersWithDecision(servers))
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -67,7 +67,7 @@ func (c *ApiController) GetServers() {
 			return
 		}
 
-		c.ResponseOk(object.EnrichServersWithCapability(servers), paginator.Nums())
+		c.ResponseOk(object.EnrichServersWithDecision(servers), paginator.Nums())
 	}
 }
 
@@ -87,7 +87,7 @@ func (c *ApiController) GetServer() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichServerWithCapability(server))
+	c.ResponseOk(object.EnrichServerWithDecision(server))
 }
 
 // UpdateServer
@@ -108,9 +108,9 @@ func (c *ApiController) UpdateServer() {
 		return
 	}
 
-	success, err := object.UpdateServer(id, &server)
+	success, decision, err := object.UpdateServer(id, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -133,9 +133,9 @@ func (c *ApiController) AddServer() {
 	}
 
 	server.Owner = "admin"
-	success, err := object.AddServer(&server)
+	success, decision, err := object.AddServer(&server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 
@@ -209,9 +209,9 @@ func (c *ApiController) SyncMcpTool() {
 		return
 	}
 
-	ok, err := object.SyncMcpTool(id, &server, isCleared)
+	ok, decision, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseError(err.Error(), decision)
 		return
 	}
 	c.ResponseOk(ok)

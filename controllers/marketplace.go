@@ -76,7 +76,7 @@ func (c *ApiController) InstallMarketplaceSkill() {
 	skill.Owner = "admin"
 	skill.CreatedTime = time.Now().Format(time.RFC3339)
 
-	_, err = object.AddSkill(skill)
+	_, _, err = object.AddSkill(skill)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
