@@ -92,13 +92,12 @@ func (c *ApiController) GetSkills() {
 func (c *ApiController) GetSkill() {
 	id := c.Input().Get("id")
 
-	s, err := object.GetSkill(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.ResolveResource(ResourceTypeSkill, id)
+	if rr == nil {
 		return
 	}
 
-	c.ResponseOk(s)
+	c.ResponseOk(rr.Skill())
 }
 
 // UpdateSkill
@@ -116,6 +115,11 @@ func (c *ApiController) UpdateSkill() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeSkill, id, AccessWrite)
+	if rr == nil {
 		return
 	}
 
@@ -165,6 +169,11 @@ func (c *ApiController) DeleteSkill() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeSkill, s.GetId(), AccessWrite)
+	if rr == nil {
 		return
 	}
 

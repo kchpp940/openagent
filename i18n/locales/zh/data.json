@@ -175,7 +175,15 @@
   },
   "resource": {
     "Invalid file data format": "无效的文件数据格式",
-    "Only docx and pdf files are allowed": "仅允许 docx 和 pdf 文件"
+    "Invalid resource id format": "无效的资源 ID 格式",
+    "Only docx and pdf files are allowed": "仅允许 docx 和 pdf 文件",
+    "Resource id is required": "资源 ID 不能为空",
+    "The resource does not exist": "资源不存在",
+    "The server does not exist": "服务器不存在",
+    "The skill does not exist": "技能不存在",
+    "The store does not exist": "存储不存在",
+    "The task does not exist": "任务不存在",
+    "The tool does not exist": "工具不存在"
   },
   "storage": {
     "storage provider name: [%s] doesn't exist": "存储提供商名称：[%s] 不存在"

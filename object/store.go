@@ -28,14 +28,13 @@ import (
 )
 
 type TreeFile struct {
-	Key         string           `xorm:"varchar(100)" json:"key"`
-	Title       string           `xorm:"varchar(100)" json:"title"`
-	Size        int64            `json:"size"`
-	CreatedTime string           `xorm:"varchar(100)" json:"createdTime"`
-	IsLeaf      bool             `json:"isLeaf"`
-	Url         string           `xorm:"varchar(255)" json:"url"`
-	Children    []*TreeFile      `xorm:"varchar(1000)" json:"children"`
-	StateDetail *FileStateDetail `xorm:"-" json:"stateDetail,omitempty"`
+	Key         string      `xorm:"varchar(100)" json:"key"`
+	Title       string      `xorm:"varchar(100)" json:"title"`
+	Size        int64       `json:"size"`
+	CreatedTime string      `xorm:"varchar(100)" json:"createdTime"`
+	IsLeaf      bool        `json:"isLeaf"`
+	Url         string      `xorm:"varchar(255)" json:"url"`
+	Children    []*TreeFile `xorm:"varchar(1000)" json:"children"`
 
 	ChildrenMap map[string]*TreeFile `xorm:"-" json:"-"`
 }
@@ -464,7 +463,7 @@ func RefreshStoreVectors(store *Store, lang string) (bool, error) {
 		return false, err
 	}
 
-	err = ResetFilesStateByStore(store.Owner, store.Name)
+	err = UpdateFilesStatusByStore(store.Owner, store.Name, FileStatusPending)
 	if err != nil {
 		return false, err
 	}
@@ -500,7 +499,9 @@ func AddVectorsForFile(store *Store, fileName string, fileUrl string, lang strin
 		return false, err
 	}
 
-	ok, _, err := addVectorsForFileWithOwner(store.Owner, embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
+	ok, err := withFileStatus(store.Owner, store.Name, fileName, func() (bool, int, error) {
+		return addVectorsForFile(embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
+	})
 
 	return ok, err
 }

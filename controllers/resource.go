@@ -93,23 +93,12 @@ func (c *ApiController) GetGlobalResources() {
 func (c *ApiController) GetResource() {
 	id := c.Input().Get("id")
 
-	userName, ok := c.RequireSignedIn()
-	if !ok {
+	rr := c.RequireResource(ResourceTypeResource, id, AccessRead)
+	if rr == nil {
 		return
 	}
 
-	resource, err := object.GetResource(id)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	if resource != nil && !c.IsAdmin() && resource.User != userName {
-		c.ResponseError(c.T("auth:Unauthorized operation"))
-		return
-	}
-
-	c.ResponseOk(resource)
+	c.ResponseOk(rr.Resource())
 }
 
 // UpdateResource
@@ -127,6 +116,11 @@ func (c *ApiController) UpdateResource() {
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeResource, id, AccessWrite)
+	if rr == nil {
 		return
 	}
 
@@ -171,11 +165,6 @@ func (c *ApiController) AddResource() {
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-resource [post]
 func (c *ApiController) DeleteResource() {
-	userName, ok := c.RequireSignedIn()
-	if !ok {
-		return
-	}
-
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
@@ -183,12 +172,12 @@ func (c *ApiController) DeleteResource() {
 		return
 	}
 
-	if !c.IsAdmin() && resource.User != userName {
-		c.ResponseError(c.T("auth:Unauthorized operation"))
+	rr := c.RequireResource(ResourceTypeResource, resource.GetId(), AccessWrite)
+	if rr == nil {
 		return
 	}
 
-	err = object.DeleteResourceFile(&resource, c.GetAcceptLanguage())
+	err = object.DeleteResourceFile(rr.Resource(), c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -243,7 +232,6 @@ func (c *ApiController) UploadResource() {
 		return
 	}
 
-	// Detect MIME type and file type category
 	ext := strings.ToLower(filepath.Ext(fileName))
 
 	if err = validateFileExtension(fileName, c.GetAcceptLanguage()); err != nil {

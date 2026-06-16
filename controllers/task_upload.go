@@ -76,22 +76,11 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	task, err := object.GetTask(taskId)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.RequireResource(ResourceTypeTask, taskId, AccessWrite)
+	if rr == nil {
 		return
 	}
-	if task == nil {
-		c.ResponseError(c.T("general:The task does not exist"))
-		return
-	}
-
-	if !c.IsAdmin() {
-		if task.Owner != userName {
-			c.ResponseError(c.T("auth:Unauthorized operation"))
-			return
-		}
-	}
+	task := rr.Task()
 
 	allowedExtensions := []string{".docx", ".pdf"}
 	typeDetection := txt.DetectTaskDocumentType(fileName, fileType, allowedExtensions)

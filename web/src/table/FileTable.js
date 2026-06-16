@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from "react";
-import {Button, Popconfirm, Progress, Table, Tag, Tooltip} from "antd";
+import {Button, Popconfirm, Table} from "antd";
 import {DeleteOutlined, DownloadOutlined, FileDoneOutlined} from "@ant-design/icons";
 import * as Setting from "../Setting";
 import i18next from "i18next";
@@ -150,34 +150,6 @@ class FileTable extends React.Component {
           }
 
           return Setting.getFriendlyFileSize(text);
-        },
-      },
-      {
-        title: i18next.t("general:Status"),
-        dataIndex: "stateDetail",
-        key: "status",
-        width: "170px",
-        render: (text, record) => {
-          if (!record.isLeaf) {
-            return null;
-          }
-          const detail = record.stateDetail || {};
-          const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
-          return (
-            <div>
-              <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
-              {isProcessing && detail.totalSections > 0 && (
-                <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
-              )}
-              {detail.errorText && (
-                <Tooltip title={detail.errorText}>
-                  <div style={{color: "var(--ant-color-error)", fontSize: "12px", marginTop: "4px"}}>
-                    {Setting.getShortText(detail.errorText, 30)}
-                  </div>
-                </Tooltip>
-              )}
-            </div>
-          );
         },
       },
       {

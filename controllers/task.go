@@ -64,7 +64,6 @@ func (c *ApiController) GetTasks() {
 		owner = ""
 	}
 
-	// For non-admins, filter by their username
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
 		if username != "" {
@@ -108,28 +107,12 @@ func (c *ApiController) GetTasks() {
 func (c *ApiController) GetTask() {
 	id := c.Input().Get("id")
 
-	task, err := object.GetTask(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.RequireResource(ResourceTypeTask, id, AccessRead)
+	if rr == nil {
 		return
 	}
 
-	// Check if task exists
-	if task == nil {
-		c.ResponseError(c.T("general:The task does not exist"))
-		return
-	}
-
-	// Check ownership for non-admins
-	if !c.IsAdmin() {
-		username := c.GetSessionUsername()
-		if task.Owner != username {
-			c.ResponseError(c.T("auth:Unauthorized operation"))
-			return
-		}
-	}
-
-	c.ResponseOk(task)
+	c.ResponseOk(rr.Task())
 }
 
 // UpdateTask
@@ -150,23 +133,9 @@ func (c *ApiController) UpdateTask() {
 		return
 	}
 
-	existingTask, err := object.GetTask(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.RequireResource(ResourceTypeTask, id, AccessWrite)
+	if rr == nil {
 		return
-	}
-	if existingTask == nil {
-		c.ResponseError(c.T("general:The task does not exist"))
-		return
-	}
-
-	// Check ownership for non-admins
-	if !c.IsAdmin() {
-		username := c.GetSessionUsername()
-		if existingTask.Owner != username {
-			c.ResponseError(c.T("auth:Unauthorized operation"))
-			return
-		}
 	}
 
 	success, err := object.UpdateTask(id, &task)
@@ -217,24 +186,9 @@ func (c *ApiController) DeleteTask() {
 		return
 	}
 
-	// Check ownership for non-admins
-	if !c.IsAdmin() {
-		username := c.GetSessionUsername()
-		// Fetch task from database to verify ownership
-		id := task.GetId()
-		existingTask, err := object.GetTask(id)
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
-		if existingTask == nil {
-			c.ResponseError(c.T("general:The task does not exist"))
-			return
-		}
-		if existingTask.Owner != username {
-			c.ResponseError(c.T("auth:Unauthorized operation"))
-			return
-		}
+	rr := c.RequireResource(ResourceTypeTask, task.GetId(), AccessWrite)
+	if rr == nil {
+		return
 	}
 
 	success, err := object.DeleteTask(&task)
@@ -257,25 +211,11 @@ func (c *ApiController) AnalyzeTask() {
 	id := c.Input().Get("id")
 	logs.Info("[analyze-task] HTTP request id=%s user=%s", id, c.GetSessionUsername())
 
-	task, err := object.GetTask(id)
-	if err != nil {
-		logs.Error("[analyze-task] GetTask failed id=%s: %v", id, err)
-		c.ResponseError(err.Error())
+	rr := c.RequireResource(ResourceTypeTask, id, AccessWrite)
+	if rr == nil {
 		return
 	}
-	if task == nil {
-		c.ResponseError(c.T("general:The task does not exist"))
-		return
-	}
-
-	if !c.IsAdmin() {
-		username := c.GetSessionUsername()
-		if task.Owner != username {
-			logs.Warn("[analyze-task] forbidden id=%s taskOwner=%s user=%s", id, task.Owner, username)
-			c.ResponseError(c.T("auth:Unauthorized operation"))
-			return
-		}
-	}
+	task := rr.Task()
 
 	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
 	if err != nil {

@@ -84,7 +84,6 @@ func (c *ApiController) GetGlobalStores() {
 			paginator := pagination.SetPaginator(c.Ctx, limit, count)
 			stores, err = object.GetPaginationStores(paginator.Offset(), limit, name, field, value, sortField, sortOrder)
 		} else {
-			// Store admin: only their own stores
 			count, err = object.GetStoreCountByOwner(username, field, value)
 			if err != nil {
 				c.ResponseError(err.Error())
@@ -156,7 +155,11 @@ func (c *ApiController) GetStore() {
 	if id == "admin/_default_store_" {
 		store, err = object.GetDefaultStore(c.defaultStoreOwner())
 	} else {
-		store, err = object.GetStoreForGetApi(id)
+		rr := c.ResolveResource(ResourceTypeStore, id)
+		if rr == nil {
+			return
+		}
+		store = rr.Store()
 	}
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -194,22 +197,11 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
-	oldStore, err := object.GetStore(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.RequireResource(ResourceTypeStore, id, AccessWrite)
+	if rr == nil {
 		return
 	}
-	if oldStore == nil {
-		oldStore, err = object.GetStoreForGetApi(id)
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
-	}
-	if oldStore == nil {
-		c.ResponseError(fmt.Sprintf("store: %s not found", id))
-		return
-	}
+	oldStore := rr.Store()
 
 	if store.ApiKey == "***" {
 		store.ApiKey = oldStore.ApiKey
@@ -217,7 +209,6 @@ func (c *ApiController) UpdateStore() {
 
 	store.SharedBy = oldStore.SharedBy
 
-	// Store admin cannot change the Owner field
 	if !c.IsGlobalAdmin() && c.IsStoreAdmin() {
 		store.Owner = oldStore.Owner
 	}
@@ -357,22 +348,12 @@ func (c *ApiController) ClaimStore() {
 	}
 
 	id := c.Input().Get("id")
-	store, err := object.GetStore(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.ResolveResource(ResourceTypeStore, id)
+	if rr == nil {
 		return
 	}
-	if store == nil {
-		store, err = object.GetStoreForGetApi(id)
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
-	}
-	if store == nil {
-		c.ResponseError(fmt.Sprintf("store: %s not found", id))
-		return
-	}
+	store := rr.Store()
+
 	if store.Owner != "admin" {
 		c.ResponseError("only stores owned by admin can be claimed")
 		return
@@ -380,7 +361,7 @@ func (c *ApiController) ClaimStore() {
 
 	username := c.GetSessionUsername()
 	store.Owner = username
-	_, err = object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
+	_, err := object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

@@ -175,7 +175,15 @@
   },
   "resource": {
     "Invalid file data format": "Invalid file data format",
-    "Only docx and pdf files are allowed": "Only docx and pdf files are allowed"
+    "Invalid resource id format": "Invalid resource id format",
+    "Only docx and pdf files are allowed": "Only docx and pdf files are allowed",
+    "Resource id is required": "Resource id is required",
+    "The resource does not exist": "The resource does not exist",
+    "The server does not exist": "The server does not exist",
+    "The skill does not exist": "The skill does not exist",
+    "The store does not exist": "The store does not exist",
+    "The task does not exist": "The task does not exist",
+    "The tool does not exist": "The tool does not exist"
   },
   "storage": {
     "storage provider name: [%s] doesn't exist": "storage provider name: [%s] doesn't exist"

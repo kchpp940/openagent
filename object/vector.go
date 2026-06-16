@@ -39,8 +39,6 @@ type Vector struct {
 
 	Data      []float32 `xorm:"mediumtext" json:"data"`
 	Dimension int       `json:"dimension"`
-
-	StateDetail *FileStateDetail `xorm:"-" json:"fileStateDetail,omitempty"`
 }
 
 func GetGlobalVectors() ([]*Vector, error) {
@@ -50,8 +48,7 @@ func GetGlobalVectors() ([]*Vector, error) {
 		return vectors, err
 	}
 
-	err = populateVectorFileStateDetails(vectors)
-	return vectors, err
+	return vectors, nil
 }
 
 func GetVectors(owner string) ([]*Vector, error) {
@@ -61,8 +58,7 @@ func GetVectors(owner string) ([]*Vector, error) {
 		return vectors, err
 	}
 
-	err = populateVectorFileStateDetails(vectors)
-	return vectors, err
+	return vectors, nil
 }
 
 func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, error) {
@@ -72,8 +68,7 @@ func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, e
 		return vectors, err
 	}
 
-	err = populateVectorFileStateDetails(vectors)
-	return vectors, err
+	return vectors, nil
 }
 
 func getVector(owner string, name string) (*Vector, error) {
@@ -174,24 +169,11 @@ func DeleteVectorsByStore(owner string, storeName string) (bool, error) {
 		return false, err
 	}
 
-	err = ResetFilesStateByStore(owner, storeName)
-	if err != nil {
-		return false, err
-	}
-
 	return affected != 0, nil
 }
 
 func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, error) {
 	affected, err := adapter.engine.Where("owner = ? AND store = ? AND file = ?", owner, storeName, fileKey).Delete(&Vector{})
-	if err != nil {
-		return false, err
-	}
-
-	err = SetFileState(owner, storeName, fileKey, SetFileStateOptions{
-		FileState:   KnowledgeFileStateUploaded,
-		VectorState: VectorBuildStatePending,
-	})
 	if err != nil {
 		return false, err
 	}
@@ -230,8 +212,7 @@ func GetPaginationVectors(owner string, storeName string, offset, limit int, fie
 		return vectors, err
 	}
 
-	err = populateVectorFileStateDetails(vectors)
-	return vectors, err
+	return vectors, nil
 }
 
 func GetPaginationVectorsByStoreNames(storeNames []string, offset, limit int, field, value, sortField, sortOrder string) ([]*Vector, error) {
@@ -245,52 +226,5 @@ func GetPaginationVectorsByStoreNames(storeNames []string, offset, limit int, fi
 	if err != nil {
 		return vectors, err
 	}
-
-	err = populateVectorFileStateDetails(vectors)
-	return vectors, err
-}
-
-func populateVectorFileStateDetails(vectors []*Vector) error {
-	if len(vectors) == 0 {
-		return nil
-	}
-
-	type fileKey struct {
-		owner     string
-		storeName string
-	}
-	fileKeyMap := make(map[fileKey][]string)
-	for _, v := range vectors {
-		if v.File == "" {
-			continue
-		}
-		k := fileKey{owner: v.Owner, storeName: v.Store}
-		fileKeyMap[k] = append(fileKeyMap[k], v.File)
-	}
-
-	for k, fileKeys := range fileKeyMap {
-		files, err := GetFilesByStore(k.owner, k.storeName)
-		if err != nil {
-			continue
-		}
-
-		stateMap := make(map[string]*FileStateDetail, len(files))
-		for _, f := range files {
-			objectKey := f.getObjectKey()
-			if objectKey != "" {
-				stateMap[objectKey] = f.StateDetail
-			}
-		}
-
-		for _, v := range vectors {
-			if v.Owner != k.owner || v.Store != k.storeName || v.File == "" {
-				continue
-			}
-			if detail, ok := stateMap[v.File]; ok {
-				v.StateDetail = detail
-			}
-		}
-	}
-
-	return nil
+	return vectors, nil
 }

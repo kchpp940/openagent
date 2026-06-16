@@ -14,7 +14,7 @@
 
 import React from "react";
 import {withRouter} from "react-router-dom";
-import {Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Radio, Result, Row, Spin, Tag, Tooltip, Tree, Upload} from "antd";
+import {Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Radio, Result, Row, Spin, Tooltip, Tree, Upload} from "antd";
 import {CloudUploadOutlined, DeleteOutlined, DownloadOutlined, FileDoneOutlined, FolderAddOutlined, InfoCircleTwoTone, UploadOutlined} from "@ant-design/icons";
 import moment from "moment";
 import * as Setting from "./Setting";
@@ -562,8 +562,6 @@ class FileTree extends React.Component {
           };
 
           if (file.isLeaf) {
-            const detail = file.stateDetail || {};
-            const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
             return (
               <Tooltip color={"rgb(255,255,255,0.8)"} placement="right" title={
                 <div>
@@ -605,25 +603,11 @@ class FileTree extends React.Component {
                       e.stopPropagation();
                     }} />
                   </Tooltip>
-                  {detail.errorText && (
-                    <div style={{color: "var(--ant-color-error)", fontSize: "12px", marginTop: "4px"}}>
-                      {i18next.t("general:Error")}: {Setting.getShortText(detail.errorText, 40)}
-                    </div>
-                  )}
-                  {isProcessing && detail.totalSections > 0 && (
-                    <div style={{marginTop: "6px", minWidth: "150px"}}>
-                      <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
-                    </div>
-                  )}
                 </div>
               }>
                 <span style={tagStyle}>
                   {`${file.title} (${Setting.getFriendlyFileSize(file.size)})`}
                 </span>
-                &nbsp;
-                <Tag color={detail.labelColor || "default"} style={{marginLeft: 0, marginRight: 0}}>
-                  {detail.label || ""}
-                </Tag>
                 &nbsp;
                 &nbsp;
                 {
@@ -924,16 +908,15 @@ class FileTree extends React.Component {
       return null;
     }
 
-    const detail = file.stateDetail || {};
-    const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
-
     return (
       <div ref={this.filePane}>
         <Descriptions
           style={{backgroundColor: "white"}}
           labelStyle={{backgroundColor: "rgb(245,245,245)"}}
           bordered
+          // title="Custom Size"
           size="small"
+          // extra={<Button type="primary">Edit</Button>}
         >
           <Descriptions.Item label={i18next.t("store:File name")}>
             {file.title}
@@ -944,21 +927,6 @@ class FileTree extends React.Component {
           <Descriptions.Item label={i18next.t("general:Created time")}>
             {Setting.getFormattedDate(file.createdTime)}
           </Descriptions.Item>
-          {file.isLeaf && (
-            <Descriptions.Item label={i18next.t("general:Status")}>
-              <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
-            </Descriptions.Item>
-          )}
-          {file.isLeaf && isProcessing && detail.totalSections > 0 && (
-            <Descriptions.Item label={i18next.t("store:Progress")} span={3}>
-              <Progress percent={Math.round((detail.progress / detail.totalSections) * 100)} size="small" />
-            </Descriptions.Item>
-          )}
-          {file.isLeaf && detail.errorText && (
-            <Descriptions.Item label={i18next.t("general:Error")} span={3}>
-              <span style={{color: "var(--ant-color-error)"}}>{detail.errorText}</span>
-            </Descriptions.Item>
-          )}
         </Descriptions>
       </div>
     );

@@ -14,7 +14,7 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Image, Popconfirm, Progress, Table, Tag, Tooltip, Upload} from "antd";
+import {Button, Image, Popconfirm, Table, Tooltip, Upload} from "antd";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as Conf from "./Conf";
@@ -29,6 +29,7 @@ class FileListPage extends BaseListPage {
     super(props);
     this.state = {
       ...this.state,
+      refreshing: {},
       providers: {},
     };
     this.uploadedFileIdMap = {};
@@ -109,8 +110,14 @@ class FileListPage extends BaseListPage {
       });
   }
 
-  refreshFileVectors(record) {
-    FileBackend.refreshFileVectors(record)
+  refreshFileVectors(index) {
+    this.setState(prevState => ({
+      refreshing: {
+        ...prevState.refreshing,
+        [index]: true,
+      },
+    }));
+    FileBackend.refreshFileVectors(this.state.data[index])
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
@@ -118,9 +125,21 @@ class FileListPage extends BaseListPage {
         } else {
           Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
         }
+        this.setState(prevState => ({
+          refreshing: {
+            ...prevState.refreshing,
+            [index]: false,
+          },
+        }));
       })
       .catch(error => {
         Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
+        this.setState(prevState => ({
+          refreshing: {
+            ...prevState.refreshing,
+            [index]: false,
+          },
+        }));
       });
   }
 
@@ -250,46 +269,6 @@ class FileListPage extends BaseListPage {
         sorter: (a, b) => a.tokenCount - b.tokenCount,
       },
       {
-        title: i18next.t("general:Status"),
-        dataIndex: "stateDetail",
-        key: "status",
-        width: "160px",
-        sorter: (a, b) => {
-          const sa = a.stateDetail?.state || "";
-          const sb = b.stateDetail?.state || "";
-          return sa.localeCompare(sb);
-        },
-        render: (text, record) => {
-          const detail = record.stateDetail || {};
-          const isProcessing = detail.state === "Parsing" || detail.state === "Vectorizing";
-          const hasError = detail.state === "Failed" || detail.state === "PartialFailed";
-          const errorText = detail.errorText || detail.vectorError || "";
-
-          const tagContent = (
-            <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-              <Tag color={detail.labelColor || "default"}>{detail.label || "-"}</Tag>
-              {isProcessing && detail.totalSections > 0 && (
-                <Progress
-                  percent={Math.round((detail.progress / detail.totalSections) * 100)}
-                  size="small"
-                  style={{margin: 0, minWidth: "100px"}}
-                />
-              )}
-            </div>
-          );
-
-          if (hasError && errorText) {
-            return (
-              <Tooltip title={errorText} placement="topLeft">
-                {tagContent}
-              </Tooltip>
-            );
-          }
-
-          return tagContent;
-        },
-      },
-      {
         title: i18next.t("general:Preview"),
         dataIndex: "url",
         key: "preview",
@@ -354,15 +333,14 @@ class FileListPage extends BaseListPage {
                 </Tooltip>
               </Popconfirm>
               {!Setting.isLocalAdminUser(this.props.account) ? null : (
-                <Tooltip title={record.stateDetail?.canRetry ? i18next.t("general:Refresh Vectors") : record.stateDetail?.label || ""}>
+                <Tooltip title={i18next.t("general:Refresh Vectors")}>
                   <Button
                     type="text"
                     size="small"
                     icon={<ReloadOutlined />}
                     style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}}
-                    disabled={!record.stateDetail?.canRetry}
-                    loading={record.stateDetail?.state === "Parsing" || record.stateDetail?.state === "Vectorizing"}
-                    onClick={() => this.refreshFileVectors(record)}
+                    loading={this.state.refreshing[index]}
+                    onClick={() => this.refreshFileVectors(index)}
                   />
                 </Tooltip>
               )}

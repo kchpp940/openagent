@@ -81,13 +81,12 @@ func (c *ApiController) GetServers() {
 func (c *ApiController) GetServer() {
 	id := c.Input().Get("id")
 
-	server, err := object.GetServer(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.ResolveResource(ResourceTypeServer, id)
+	if rr == nil {
 		return
 	}
 
-	c.ResponseOk(server)
+	c.ResponseOk(rr.Server())
 }
 
 // UpdateServer
@@ -105,6 +104,11 @@ func (c *ApiController) UpdateServer() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeServer, id, AccessWrite)
+	if rr == nil {
 		return
 	}
 
@@ -154,6 +158,11 @@ func (c *ApiController) DeleteServer() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeServer, server.GetId(), AccessWrite)
+	if rr == nil {
 		return
 	}
 
@@ -269,7 +278,6 @@ func (c *ApiController) SyncIntranetServers() {
 		return
 	}
 
-	// Also accept a single cidr string
 	if len(req.CIDR) == 0 {
 		if cidrStr := strings.TrimSpace(c.Input().Get("cidr")); cidrStr != "" {
 			req.CIDR = []string{cidrStr}

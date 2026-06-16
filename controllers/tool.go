@@ -95,13 +95,12 @@ func (c *ApiController) GetTool() {
 	id := c.Input().Get("id")
 	user := c.GetSessionUser()
 
-	t, err := object.GetTool(id)
-	if err != nil {
-		c.ResponseError(err.Error())
+	rr := c.ResolveResource(ResourceTypeTool, id)
+	if rr == nil {
 		return
 	}
 
-	c.ResponseOk(object.GetMaskedTool(t, true, user))
+	c.ResponseOk(object.GetMaskedTool(rr.Tool(), true, user))
 }
 
 // UpdateTool
@@ -119,6 +118,11 @@ func (c *ApiController) UpdateTool() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeTool, id, AccessWrite)
+	if rr == nil {
 		return
 	}
 
@@ -168,6 +172,11 @@ func (c *ApiController) DeleteTool() {
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
 		c.ResponseError(err.Error())
+		return
+	}
+
+	rr := c.RequireResource(ResourceTypeTool, t.GetId(), AccessWrite)
+	if rr == nil {
 		return
 	}
 
