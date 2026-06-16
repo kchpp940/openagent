@@ -37,22 +37,12 @@ class SkillEditPage extends React.Component {
       skill: null,
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
-      capabilityStateOptions: [],
+      recheckButtonLoading: false,
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getSkill();
-    this.getCapabilityStateOptions();
-  }
-
-  getCapabilityStateOptions() {
-    ToolBackend.getCapabilityStateOptions()
-      .then((res) => {
-        if (res.status === "ok") {
-          this.setState({capabilityStateOptions: res.data || []});
-        }
-      });
   }
 
   getSkill() {
@@ -66,6 +56,39 @@ class SkillEditPage extends React.Component {
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
+      });
+  }
+
+  runCapabilityRecheck() {
+    this.setState({recheckButtonLoading: true});
+    ToolBackend.runSkillCapabilityCheck(this.state.skill.owner, this.state.skill.name)
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully got"));
+          const decision = res.data;
+          const skill = {...this.state.skill,
+            lastCapabilityCheck: decision?.checkedAt,
+            lastCapabilityStatus: decision?.state,
+            lastCapabilityError: decision?.blockReason,
+            lastCapabilityHash: decision?.configHash,
+          };
+          skill.capabilityDecision = decision;
+          skill.capabilityInfo = decision ? {
+            state: decision.state,
+            canMount: decision.canMount,
+            needsRecheck: decision.needsRecheck,
+            reason: decision.blockReason,
+          } : null;
+          this.setState({skill});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState({recheckButtonLoading: false});
       });
   }
 
@@ -154,17 +177,25 @@ class SkillEditPage extends React.Component {
               8
             )}
             {this.renderSkillField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
-              <Select virtual={false} style={{width: "100%"}} value={skill.state}
-                onChange={value => this.updateSkillField("state", value)}
-                options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))}
-              />,
+              Setting.getLabel(i18next.t("general:State"), i18next.t("skill:Computed from latest capability check result - Tooltip")),
+              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                {skill.capabilityInfo ? Setting.renderCapabilityState(skill.capabilityInfo.state) : Setting.renderCapabilityState(skill.lastCapabilityStatus || "Pending")}
+                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
+                  {i18next.t("general:Recheck")}
+                </Button>
+              </div>,
               8
             )}
-            {skill.capabilityInfo && !skill.capabilityInfo.canMount && (
+            {skill.lastCapabilityCheck && (
               <Col span={24} style={{marginTop: "4px"}}>
-                {Setting.renderCapabilityState(skill.capabilityInfo.state)}
-                {skill.capabilityInfo.reason && <span style={{marginLeft: "8px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>{skill.capabilityInfo.reason}</span>}
+                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                  {`${i18next.t("general:Last checked")}: ${skill.lastCapabilityCheck}`}
+                </span>
+                {(skill.capabilityInfo?.reason || skill.lastCapabilityError) && (
+                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                    {`${i18next.t("general:Reason")}: ${skill.capabilityInfo?.reason || skill.lastCapabilityError}`}
+                  </span>
+                )}
               </Col>
             )}
           </Row>

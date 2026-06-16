@@ -235,3 +235,41 @@ func (c *ApiController) ValidateStoreCapabilities() {
 	infos := object.ValidateStoreCapabilities(store)
 	c.ResponseOk(infos)
 }
+
+// RunToolCapabilityCheck
+// @Title RunToolCapabilityCheck
+// @Tag Tool API
+// @Description run capability check on a tool, persist the result, and return the decision
+// @Param id query string true "The id (owner/name) of the tool"
+// @Success 200 {object} object.CapabilityDecision The computed decision
+// @router /run-tool-capability-check [post]
+func (c *ApiController) RunToolCapabilityCheck() {
+	id := c.Input().Get("id")
+
+	t, err := object.GetTool(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if t == nil {
+		c.ResponseError(fmt.Sprintf("tool: %s not found", id))
+		return
+	}
+
+	lang := c.GetAcceptLanguage()
+	t, decision, err := object.RunToolCapabilityCheck(t, lang)
+	if err != nil && decision == nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if decision != nil && decision.CheckedAt != "" {
+		_, perr := object.UpdateToolCapabilities(t)
+		if perr != nil {
+			c.ResponseError(perr.Error())
+			return
+		}
+	}
+
+	c.ResponseOk(decision)
+}

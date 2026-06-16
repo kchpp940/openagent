@@ -99,7 +99,7 @@ type Store struct {
 	EnableExperienceReview bool              `json:"enableExperienceReview"`
 	EnableExtraOptions     bool              `json:"enableExtraOptions"`
 	IsDefault              bool              `json:"isDefault"`
-	State                  string            `xorm:"varchar(100)" json:"state"`
+	State                  string            `xorm:"varchar(100)" json:"state,omitempty"`
 	SharedBy               string            `xorm:"varchar(100)" json:"sharedBy"`
 
 	Author      string `xorm:"varchar(100)" json:"author"`
@@ -124,7 +124,13 @@ type Store struct {
 	FileTree      *TreeFile              `xorm:"mediumtext" json:"fileTree"`
 	PropertiesMap map[string]*Properties `xorm:"mediumtext" json:"propertiesMap"`
 
-	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
+	LastCapabilityCheck   string `xorm:"varchar(100)" json:"lastCapabilityCheck,omitempty"`
+	LastCapabilityHash    string `xorm:"varchar(100)" json:"lastCapabilityHash,omitempty"`
+	LastCapabilityStatus  string `xorm:"varchar(100)" json:"lastCapabilityStatus,omitempty"`
+	LastCapabilityError   string `xorm:"mediumtext" json:"lastCapabilityError,omitempty"`
+
+	CapabilityInfo     *CapabilityInfo     `xorm:"-" json:"capabilityInfo,omitempty"`
+	CapabilityDecision *CapabilityDecision `xorm:"-" json:"capabilityDecision,omitempty"`
 }
 
 // GetGlobalStores loads every row in the store table (admin UI / init). Not for hot per-request paths.
@@ -323,6 +329,11 @@ func UpdateStore(id string, store *Store) (bool, error) {
 		store.ApiKey = generateStoreApiKey()
 	}
 
+	decision, dErr := GetStoreCapabilityDecision(store, false, "")
+	if dErr == nil && decision != nil {
+		applyStoreDecisionResult(store, decision)
+	}
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(store)
 	if err != nil {
 		return false, err
@@ -332,9 +343,32 @@ func UpdateStore(id string, store *Store) (bool, error) {
 	return true, nil
 }
 
+func UpdateStoreCapabilities(store *Store) (bool, error) {
+	if store == nil {
+		return false, nil
+	}
+	owner := store.Owner
+	name := store.Name
+	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(
+		"last_capability_check",
+		"last_capability_hash",
+		"last_capability_status",
+		"last_capability_error",
+	).Update(store)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func AddStore(store *Store) (bool, error) {
 	if store.ApiKey == "" {
 		store.ApiKey = generateStoreApiKey()
+	}
+
+	decision, dErr := GetStoreCapabilityDecision(store, false, "")
+	if dErr == nil && decision != nil {
+		applyStoreDecisionResult(store, decision)
 	}
 
 	affected, err := adapter.engine.Insert(store)

@@ -500,3 +500,48 @@ func (c *ApiController) AddSharedStore() {
 
 	c.ResponseOk(newStore)
 }
+
+// RunStoreCapabilityCheck
+// @Title RunStoreCapabilityCheck
+// @Tag Store API
+// @Description run transitive capability checks for a store (Server/Skills/Tools), persist the result, and return the decision
+// @Param id query string true "The id (owner/name) of the store"
+// @Success 200 {object} object.CapabilityDecision The computed decision
+// @router /run-store-capability-check [post]
+func (c *ApiController) RunStoreCapabilityCheck() {
+	id := c.Input().Get("id")
+
+	store, err := object.GetStore(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if store == nil {
+		store, err = object.GetStoreForGetApi(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+	}
+	if store == nil {
+		c.ResponseError(fmt.Sprintf("store: %s not found", id))
+		return
+	}
+
+	lang := c.GetAcceptLanguage()
+	store, decision, err := object.RunStoreCapabilityCheck(store, lang)
+	if err != nil && decision == nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if decision != nil && decision.CheckedAt != "" {
+		_, perr := object.UpdateStoreCapabilities(store)
+		if perr != nil {
+			c.ResponseError(perr.Error())
+			return
+		}
+	}
+
+	c.ResponseOk(decision)
+}

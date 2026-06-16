@@ -56,7 +56,7 @@ class StoreEditPage extends React.Component {
       isNewStore: props.location?.state?.isNewStore || false,
       ownerUsers: [],
       ownerUsersLoading: false,
-      capabilityStateOptions: [],
+      recheckButtonLoading: false,
     };
   }
 
@@ -68,7 +68,6 @@ class StoreEditPage extends React.Component {
     this.getMcpServers();
     this.getSkills();
     this.getTools();
-    this.getCapabilityStateOptions();
   }
 
   loadOwnerUsers() {
@@ -210,12 +209,36 @@ class StoreEditPage extends React.Component {
       });
   }
 
-  getCapabilityStateOptions() {
-    ToolBackend.getCapabilityStateOptions()
+  runCapabilityRecheck() {
+    this.setState({recheckButtonLoading: true});
+    ToolBackend.runStoreCapabilityCheck(this.state.store.owner, this.state.store.name)
       .then((res) => {
         if (res.status === "ok") {
-          this.setState({capabilityStateOptions: res.data || []});
+          Setting.showMessage("success", i18next.t("general:Successfully got"));
+          const decision = res.data;
+          const store = {...this.state.store,
+            lastCapabilityCheck: decision?.checkedAt,
+            lastCapabilityStatus: decision?.state,
+            lastCapabilityError: decision?.blockReason,
+            lastCapabilityHash: decision?.configHash,
+          };
+          store.capabilityDecision = decision;
+          store.capabilityInfo = decision ? {
+            state: decision.state,
+            canMount: decision.canMount,
+            needsRecheck: decision.needsRecheck,
+            reason: decision.blockReason,
+          } : null;
+          this.setState({store});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState({recheckButtonLoading: false});
       });
   }
 
@@ -412,12 +435,31 @@ class StoreEditPage extends React.Component {
               8
             )}
             {this.renderStoreField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
-              <Select virtual={false} style={{width: "100%"}} value={store.state} onChange={value => {
-                this.updateStoreField("state", value);
-              }}
-              options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))} />,
+              Setting.getLabel(i18next.t("general:State"), i18next.t("store:Computed from latest capability check result - Tooltip")),
+              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                {store.capabilityInfo ? Setting.renderCapabilityState(store.capabilityInfo.state) : Setting.renderCapabilityState(store.lastCapabilityStatus || "Pending")}
+                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
+                  {i18next.t("general:Recheck")}
+                </Button>
+              </div>,
               8
+            )}
+            {store.lastCapabilityCheck && (
+              <Col span={24} style={{marginTop: "4px"}}>
+                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                  {`${i18next.t("general:Last checked")}: ${store.lastCapabilityCheck}`}
+                </span>
+                {(store.capabilityInfo?.reason || store.lastCapabilityError) && (
+                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                    {`${i18next.t("general:Reason")}: ${store.capabilityInfo?.reason || store.lastCapabilityError}`}
+                  </span>
+                )}
+                {store.capabilityDecision?.warnings?.length > 0 && (
+                  <span style={{marginLeft: "16px", color: "#faad14", fontSize: "12px"}}>
+                    {`Warnings: ${store.capabilityDecision.warnings.join("; ")}`}
+                  </span>
+                )}
+              </Col>
             )}
             {this.renderStoreField(
               Setting.getLabel(i18next.t("general:Avatar"), i18next.t("general:Avatar - Tooltip")),

@@ -300,6 +300,9 @@
     "Request URI": "Request URI",
     "Request URI - Tooltip": "Full request path",
     "Requires Casdoor to be installed": "Requires Casdoor to be installed",
+    "Recheck": "Recheck",
+    "Last checked": "Last checked",
+    "Reason": "Reason",
     "Reset": "Reset",
     "Reset to Default": "Reset to Default",
     "Resources": "Resources",
@@ -608,7 +611,8 @@
     "Scanned hosts": "Scanned hosts",
     "Select tool...": "Select tool...",
     "Sync tools first using the Sync button above": "Sync tools first using the Sync button above",
-    "This tool takes no arguments": "This tool takes no arguments"
+    "This tool takes no arguments": "This tool takes no arguments",
+    "Computed from latest capability check result - Tooltip": "Server capability state is computed automatically from the latest MCP connection check result, config hash and runtime validation. This field is read-only."
   },
   "setup": {
     "AI Model": "AI Model",
@@ -692,7 +696,8 @@
     "Skill Marketplace": "Skill Marketplace",
     "Skill folder path": "Skill folder path",
     "Skill folder path hint": "The folder must contain a SKILL.md file. An optional references/ sub-directory is also read.",
-    "Skill folder path placeholder": "e.g. /Users/alice/skills/my-skill  or  D:\\skills\\my-skill"
+    "Skill folder path placeholder": "e.g. /Users/alice/skills/my-skill  or  D:\\skills\\my-skill",
+    "Computed from latest capability check result - Tooltip": "Skill capability state is computed automatically from the latest check result, config hash and runtime validation. This field is read-only."
   },
   "store": {
     "Add Permission": "Add Permission",
@@ -834,7 +839,8 @@
     "Welcome title - Tooltip": "Popup welcome window title",
     "Write": "Write",
     "files and": "files and",
-    "folders are checked": "folders are checked"
+    "folders are checked": "folders are checked",
+    "Computed from latest capability check result - Tooltip": "Agent capability state is computed automatically from the latest transitive check results (Model Provider, MCP Servers, Skills, Tools), config hash and runtime validation. This field is read-only."
   },
   "system": {
     "API Latency": "API Latency",
@@ -925,7 +931,8 @@
     "OpenAgent Chrome Extension - Step 4": "Browser Use will now operate your current Chrome tabs.",
     "Prompt examples": "Prompt examples",
     "Prompt examples - Tooltip": "Example prompts that show how to use this tool effectively.",
-    "User Chrome": "User Chrome"
+    "User Chrome": "User Chrome",
+    "Computed from latest capability check result - Tooltip": "Tool capability state is computed automatically from the latest check result, config hash and runtime provider validation. This field is read-only."
   },
   "usage": {
     "Apr": "Apr",

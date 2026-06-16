@@ -14,7 +14,7 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Select, Space} from "antd";
+import {Button, Card, Col, Input, Row, Space} from "antd";
 import {LinkOutlined} from "@ant-design/icons";
 import * as ServerBackend from "./backend/ServerBackend";
 import * as ToolBackend from "./backend/ToolBackend";
@@ -33,22 +33,12 @@ class ServerEditPage extends React.Component {
       originalServer: null,
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
-      capabilityStateOptions: [],
+      recheckButtonLoading: false,
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getServer();
-    this.getCapabilityStateOptions();
-  }
-
-  getCapabilityStateOptions() {
-    ToolBackend.getCapabilityStateOptions()
-      .then((res) => {
-        if (res.status === "ok") {
-          this.setState({capabilityStateOptions: res.data || []});
-        }
-      });
   }
 
   getServer() {
@@ -117,6 +107,39 @@ class ServerEditPage extends React.Component {
       });
   }
 
+  runCapabilityRecheck() {
+    this.setState({recheckButtonLoading: true});
+    ToolBackend.runServerCapabilityCheck(this.state.originalServer.owner, this.state.originalServer.name)
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully got"));
+          const decision = res.data;
+          const server = {...this.state.server,
+            lastCapabilityCheck: decision?.checkedAt,
+            lastCapabilityStatus: decision?.state,
+            lastCapabilityError: decision?.blockReason,
+            lastCapabilityHash: decision?.configHash,
+          };
+          server.capabilityDecision = decision;
+          server.capabilityInfo = decision ? {
+            state: decision.state,
+            canMount: decision.canMount,
+            needsRecheck: decision.needsRecheck,
+            reason: decision.blockReason,
+          } : null;
+          this.setState({server});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+      })
+      .finally(() => {
+        this.setState({recheckButtonLoading: false});
+      });
+  }
+
   renderCardTitle(title, desc) {
     return (
       <div>
@@ -182,16 +205,25 @@ class ServerEditPage extends React.Component {
               16
             )}
             {this.renderServerField(
-              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
-              <Select virtual={false} style={{width: "100%"}} value={server.state || "Active"}
-                onChange={value => this.updateServerField("state", value)}
-                options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))} />,
-              8
+              Setting.getLabel(i18next.t("general:State"), i18next.t("server:Computed from latest capability check result - Tooltip")),
+              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                {server.capabilityInfo ? Setting.renderCapabilityState(server.capabilityInfo.state) : Setting.renderCapabilityState(server.lastCapabilityStatus || "Pending")}
+                <Button size="small" loading={this.state.recheckButtonLoading} onClick={() => this.runCapabilityRecheck()}>
+                  {i18next.t("general:Recheck")}
+                </Button>
+              </div>,
+              16
             )}
-            {server.capabilityInfo && !server.capabilityInfo.canMount && (
+            {server.lastCapabilityCheck && (
               <Col span={24} style={{marginTop: "4px"}}>
-                {Setting.renderCapabilityState(server.capabilityInfo.state)}
-                {server.capabilityInfo.reason && <span style={{marginLeft: "8px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>{server.capabilityInfo.reason}</span>}
+                <span style={{color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                  {`${i18next.t("general:Last checked")}: ${server.lastCapabilityCheck}`}
+                </span>
+                {(server.capabilityInfo?.reason || server.lastCapabilityError) && (
+                  <span style={{marginLeft: "16px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>
+                    {`${i18next.t("general:Reason")}: ${server.capabilityInfo?.reason || server.lastCapabilityError}`}
+                  </span>
+                )}
               </Col>
             )}
           </Row>

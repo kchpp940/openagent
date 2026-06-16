@@ -48,9 +48,15 @@ type Tool struct {
 	ResultSummary  string   `xorm:"varchar(500)" json:"resultSummary"`
 	PromptExamples []string `xorm:"mediumtext" json:"promptExamples"`
 
-	State string `xorm:"varchar(100)" json:"state"`
+	State string `xorm:"varchar(100)" json:"state,omitempty"`
 
-	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
+	LastCapabilityCheck   string `xorm:"varchar(100)" json:"lastCapabilityCheck,omitempty"`
+	LastCapabilityHash    string `xorm:"varchar(100)" json:"lastCapabilityHash,omitempty"`
+	LastCapabilityStatus  string `xorm:"varchar(100)" json:"lastCapabilityStatus,omitempty"`
+	LastCapabilityError   string `xorm:"mediumtext" json:"lastCapabilityError,omitempty"`
+
+	CapabilityInfo     *CapabilityInfo     `xorm:"-" json:"capabilityInfo,omitempty"`
+	CapabilityDecision *CapabilityDecision `xorm:"-" json:"capabilityDecision,omitempty"`
 }
 
 func (t *Tool) GetId() string {
@@ -161,6 +167,11 @@ func UpdateTool(id string, t *Tool) (bool, error) {
 		t.ClientSecret = toolDb.ClientSecret
 	}
 
+	decision, dErr := GetToolCapabilityDecision(t, true, "")
+	if dErr == nil && decision != nil {
+		applyToolDecisionResult(t, decision)
+	}
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(t)
 	if err != nil {
 		return false, err
@@ -168,7 +179,29 @@ func UpdateTool(id string, t *Tool) (bool, error) {
 	return true, nil
 }
 
+func UpdateToolCapabilities(t *Tool) (bool, error) {
+	if t == nil {
+		return false, nil
+	}
+	owner := t.Owner
+	name := t.Name
+	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(
+		"last_capability_check",
+		"last_capability_hash",
+		"last_capability_status",
+		"last_capability_error",
+	).Update(t)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func AddTool(t *Tool) (bool, error) {
+	decision, dErr := GetToolCapabilityDecision(t, true, "")
+	if dErr == nil && decision != nil {
+		applyToolDecisionResult(t, decision)
+	}
 	affected, err := adapter.engine.Insert(t)
 	if err != nil {
 		return false, err

@@ -300,6 +300,9 @@
     "Request URI": "请求URI",
     "Request URI - Tooltip": "完整请求路径",
     "Requires Casdoor to be installed": "需要安装Casdoor",
+    "Recheck": "重新检查",
+    "Last checked": "上次检查",
+    "Reason": "原因",
     "Reset": "重置",
     "Reset to Default": "重置为默认",
     "Resources": "资源",
@@ -608,7 +611,8 @@
     "Scanned hosts": "已扫描主机",
     "Select tool...": "选择工具...",
     "Sync tools first using the Sync button above": "请先使用上方同步按钮同步工具",
-    "This tool takes no arguments": "此工具无需参数"
+    "This tool takes no arguments": "此工具无需参数",
+    "Computed from latest capability check result - Tooltip": "服务器能力状态由最新的MCP连接检查结果、配置哈希和运行时验证自动计算，该字段为只读。"
   },
   "setup": {
     "AI Model": "AI模型",
@@ -692,7 +696,8 @@
     "Skill Marketplace": "技能市场",
     "Skill folder path": "技能文件夹路径",
     "Skill folder path hint": "该文件夹必须包含SKILL.md文件，可选地包含references/子目录。",
-    "Skill folder path placeholder": "例如：/Users/alice/skills/my-skill或D:\\skills\\my-skill"
+    "Skill folder path placeholder": "例如：/Users/alice/skills/my-skill或D:\\skills\\my-skill",
+    "Computed from latest capability check result - Tooltip": "技能能力状态由最新的检查结果、配置哈希和运行时验证自动计算，该字段为只读。"
   },
   "store": {
     "Add Permission": "添加权限",
@@ -834,7 +839,8 @@
     "Welcome title - Tooltip": "欢迎弹窗的标题",
     "Write": "写入",
     "files and": "文件及",
-    "folders are checked": "文件夹已选"
+    "folders are checked": "文件夹已选",
+    "Computed from latest capability check result - Tooltip": "智能体能力状态由最新的传递性检查结果（模型提供商、MCP服务器、技能、工具）、配置哈希和运行时验证自动计算，该字段为只读。"
   },
   "system": {
     "API Latency": "API延迟",
@@ -925,7 +931,8 @@
     "OpenAgent Chrome Extension - Step 4": "Browser Use将开始操控您当前的Chrome标签页。",
     "Prompt examples": "提示词示例",
     "Prompt examples - Tooltip": "展示如何有效使用此工具的示例提示词。",
-    "User Chrome": "用户Chrome"
+    "User Chrome": "用户Chrome",
+    "Computed from latest capability check result - Tooltip": "工具能力状态由最新的检查结果、配置哈希和运行时提供商验证自动计算，该字段为只读。"
   },
   "usage": {
     "Apr": "4月",

@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -200,4 +201,42 @@ func (c *ApiController) LoadSkill() {
 	}
 
 	c.ResponseOk(s)
+}
+
+// RunSkillCapabilityCheck
+// @Title RunSkillCapabilityCheck
+// @Tag Skill API
+// @Description run capability check on a skill, persist the result, and return the decision
+// @Param id query string true "The id (owner/name) of the skill"
+// @Success 200 {object} object.CapabilityDecision The computed decision
+// @router /run-skill-capability-check [post]
+func (c *ApiController) RunSkillCapabilityCheck() {
+	id := c.Input().Get("id")
+
+	s, err := object.GetSkill(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if s == nil {
+		c.ResponseError(fmt.Sprintf("skill: %s not found", id))
+		return
+	}
+
+	lang := c.GetAcceptLanguage()
+	s, decision, err := object.RunSkillCapabilityCheck(s, lang)
+	if err != nil && decision == nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if decision != nil && decision.CheckedAt != "" {
+		_, perr := object.UpdateSkillCapabilities(s)
+		if perr != nil {
+			c.ResponseError(perr.Error())
+			return
+		}
+	}
+
+	c.ResponseOk(decision)
 }

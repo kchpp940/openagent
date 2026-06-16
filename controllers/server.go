@@ -285,3 +285,41 @@ func (c *ApiController) SyncIntranetServers() {
 	}
 	c.ResponseOk(result)
 }
+
+// RunServerCapabilityCheck
+// @Title RunServerCapabilityCheck
+// @Tag Server API
+// @Description run a runtime capability check against the MCP server URL, persist the result, and return the decision
+// @Param id query string true "The id (owner/name) of the server"
+// @Success 200 {object} object.CapabilityDecision The computed decision
+// @router /run-server-capability-check [post]
+func (c *ApiController) RunServerCapabilityCheck() {
+	id := c.Input().Get("id")
+
+	server, err := object.GetServer(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if server == nil {
+		c.ResponseError(fmt.Sprintf("server: %s not found", id))
+		return
+	}
+
+	lang := c.GetAcceptLanguage()
+	server, decision, err := object.RunServerCapabilityCheck(server, lang)
+	if err != nil && decision == nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if decision != nil && decision.CheckedAt != "" {
+		_, perr := object.UpdateServerCapabilities(server)
+		if perr != nil {
+			c.ResponseError(perr.Error())
+			return
+		}
+	}
+
+	c.ResponseOk(decision)
+}

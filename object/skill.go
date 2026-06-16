@@ -57,9 +57,15 @@ type Skill struct {
 	SkillMd     string           `xorm:"mediumtext" json:"skillMd"`
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
-	State string `xorm:"varchar(100)" json:"state"`
+	State string `xorm:"varchar(100)" json:"state,omitempty"`
 
-	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
+	LastCapabilityCheck   string `xorm:"varchar(100)" json:"lastCapabilityCheck,omitempty"`
+	LastCapabilityHash    string `xorm:"varchar(100)" json:"lastCapabilityHash,omitempty"`
+	LastCapabilityStatus  string `xorm:"varchar(100)" json:"lastCapabilityStatus,omitempty"`
+	LastCapabilityError   string `xorm:"mediumtext" json:"lastCapabilityError,omitempty"`
+
+	CapabilityInfo     *CapabilityInfo     `xorm:"-" json:"capabilityInfo,omitempty"`
+	CapabilityDecision *CapabilityDecision `xorm:"-" json:"capabilityDecision,omitempty"`
 }
 
 func (s *Skill) GetId() string {
@@ -313,6 +319,11 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 		return false, nil
 	}
 
+	decision, dErr := GetSkillCapabilityDecision(s, true, "")
+	if dErr == nil && decision != nil {
+		applySkillDecisionResult(s, decision)
+	}
+
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(s)
 	if err != nil {
 		return false, err
@@ -320,7 +331,29 @@ func UpdateSkill(id string, s *Skill) (bool, error) {
 	return true, nil
 }
 
+func UpdateSkillCapabilities(s *Skill) (bool, error) {
+	if s == nil {
+		return false, nil
+	}
+	owner := s.Owner
+	name := s.Name
+	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(
+		"last_capability_check",
+		"last_capability_hash",
+		"last_capability_status",
+		"last_capability_error",
+	).Update(s)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func AddSkill(s *Skill) (bool, error) {
+	decision, dErr := GetSkillCapabilityDecision(s, true, "")
+	if dErr == nil && decision != nil {
+		applySkillDecisionResult(s, decision)
+	}
 	affected, err := adapter.engine.Insert(s)
 	if err != nil {
 		return false, err

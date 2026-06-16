@@ -111,3 +111,43 @@ export function validateStoreCapabilities(owner, storeName) {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function runServerCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-server-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function runSkillCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-skill-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function runToolCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-tool-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function runStoreCapabilityCheck(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/run-store-capability-check?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
