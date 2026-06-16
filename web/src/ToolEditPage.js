@@ -19,6 +19,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
+import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
 
 const {Option} = Select;
 
@@ -32,6 +33,7 @@ class ToolEditPage extends React.Component {
       originalTool: null,
       isNewTool: props.location?.state?.isNewTool || false,
       recheckButtonLoading: false,
+      recheckError: null,
     };
   }
 
@@ -73,9 +75,11 @@ class ToolEditPage extends React.Component {
             needsRecheck: decision.needsRecheck,
             reason: decision.blockReason,
           } : null;
-          this.setState({tool});
+          this.setState({tool, recheckError: null});
         } else {
+          const recheckError = extractCapabilityError(res);
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+          this.setState({recheckError});
         }
       })
       .catch(error => {
@@ -161,6 +165,8 @@ class ToolEditPage extends React.Component {
             </Space>
           </div>
         </div>
+
+        <CapabilityErrorAlert error={this.state.recheckError} />
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>

@@ -244,7 +244,7 @@ func (c *ApiController) RunToolCapabilityCheck() {
 
 	t, err := object.GetTool(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 	if t == nil {
@@ -254,15 +254,15 @@ func (c *ApiController) RunToolCapabilityCheck() {
 
 	lang := c.GetAcceptLanguage()
 	t, decision, err := object.RunToolCapabilityCheck(t, lang)
-	if err != nil && decision == nil {
-		c.ResponseError(err.Error())
+	if err != nil {
+		c.HandleError(err)
 		return
 	}
 
 	if decision != nil && decision.CheckedAt != "" {
 		_, perr := object.UpdateToolCapabilities(t)
 		if perr != nil {
-			c.ResponseError(perr.Error())
+			c.HandleError(perr)
 			return
 		}
 	}

@@ -215,7 +215,7 @@ func (c *ApiController) RunSkillCapabilityCheck() {
 
 	s, err := object.GetSkill(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 	if s == nil {
@@ -225,15 +225,15 @@ func (c *ApiController) RunSkillCapabilityCheck() {
 
 	lang := c.GetAcceptLanguage()
 	s, decision, err := object.RunSkillCapabilityCheck(s, lang)
-	if err != nil && decision == nil {
-		c.ResponseError(err.Error())
+	if err != nil {
+		c.HandleError(err)
 		return
 	}
 
 	if decision != nil && decision.CheckedAt != "" {
 		_, perr := object.UpdateSkillCapabilities(s)
 		if perr != nil {
-			c.ResponseError(perr.Error())
+			c.HandleError(perr)
 			return
 		}
 	}

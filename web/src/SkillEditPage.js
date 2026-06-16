@@ -20,6 +20,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
+import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -38,6 +39,7 @@ class SkillEditPage extends React.Component {
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
       recheckButtonLoading: false,
+      recheckError: null,
     };
   }
 
@@ -79,9 +81,11 @@ class SkillEditPage extends React.Component {
             needsRecheck: decision.needsRecheck,
             reason: decision.blockReason,
           } : null;
-          this.setState({skill});
+          this.setState({skill, recheckError: null});
         } else {
+          const recheckError = extractCapabilityError(res);
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+          this.setState({recheckError});
         }
       })
       .catch(error => {
@@ -142,6 +146,8 @@ class SkillEditPage extends React.Component {
             </Space>
           </div>
         </div>
+
+        <CapabilityErrorAlert error={this.state.recheckError} />
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>

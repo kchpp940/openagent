@@ -408,7 +408,10 @@
     "Website": "网站",
     "empty": "空",
     "items": "项",
-    "{total} in total": "{total} 总计"
+    "{total} in total": "{total} 总计",
+    "Save blocked by capability check": "保存被能力检查拦截",
+    "Failed resources": "失败资源",
+    "Warnings": "警告"
   },
   "login": {
     "Additional Information": "附加信息",
@@ -840,9 +843,6 @@
     "Write": "写入",
     "files and": "文件及",
     "folders are checked": "文件夹已选",
-    "Save blocked by capability check": "保存被能力检查拦截",
-    "Failed resources": "失败资源",
-    "Warnings": "警告",
     "Computed from latest capability check result - Tooltip": "智能体能力状态由最新的传递性检查结果（模型提供商、MCP服务器、技能、工具）、配置哈希和运行时验证自动计算，该字段为只读。"
   },
   "system": {

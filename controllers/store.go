@@ -513,13 +513,13 @@ func (c *ApiController) RunStoreCapabilityCheck() {
 
 	store, err := object.GetStore(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 	if store == nil {
 		store, err = object.GetStoreForGetApi(id)
 		if err != nil {
-			c.ResponseError(err.Error())
+			c.HandleError(err)
 			return
 		}
 	}
@@ -530,15 +530,15 @@ func (c *ApiController) RunStoreCapabilityCheck() {
 
 	lang := c.GetAcceptLanguage()
 	store, decision, err := object.RunStoreCapabilityCheck(store, lang)
-	if err != nil && decision == nil {
-		c.ResponseError(err.Error())
+	if err != nil {
+		c.HandleError(err)
 		return
 	}
 
 	if decision != nil && decision.CheckedAt != "" {
 		_, perr := object.UpdateStoreCapabilities(store)
 		if perr != nil {
-			c.ResponseError(perr.Error())
+			c.HandleError(perr)
 			return
 		}
 	}

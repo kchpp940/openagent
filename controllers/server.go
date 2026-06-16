@@ -298,7 +298,7 @@ func (c *ApiController) RunServerCapabilityCheck() {
 
 	server, err := object.GetServer(id)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.HandleError(err)
 		return
 	}
 	if server == nil {
@@ -308,15 +308,15 @@ func (c *ApiController) RunServerCapabilityCheck() {
 
 	lang := c.GetAcceptLanguage()
 	server, decision, err := object.RunServerCapabilityCheck(server, lang)
-	if err != nil && decision == nil {
-		c.ResponseError(err.Error())
+	if err != nil {
+		c.HandleError(err)
 		return
 	}
 
 	if decision != nil && decision.CheckedAt != "" {
 		_, perr := object.UpdateServerCapabilities(server)
 		if perr != nil {
-			c.ResponseError(perr.Error())
+			c.HandleError(perr)
 			return
 		}
 	}

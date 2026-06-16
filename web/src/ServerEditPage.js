@@ -22,6 +22,7 @@ import * as Setting from "./Setting";
 import i18next from "i18next";
 import ToolTable from "./table/ToolTable";
 import TestMcpWidget from "./common/TestMcpWidget";
+import {CapabilityErrorAlert, extractCapabilityError} from "./common/CapabilityErrorAlert";
 
 class ServerEditPage extends React.Component {
   constructor(props) {
@@ -34,6 +35,7 @@ class ServerEditPage extends React.Component {
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
       recheckButtonLoading: false,
+      recheckError: null,
     };
   }
 
@@ -127,9 +129,11 @@ class ServerEditPage extends React.Component {
             needsRecheck: decision.needsRecheck,
             reason: decision.blockReason,
           } : null;
-          this.setState({server});
+          this.setState({server, recheckError: null});
         } else {
+          const recheckError = extractCapabilityError(res);
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+          this.setState({recheckError});
         }
       })
       .catch(error => {
@@ -181,6 +185,8 @@ class ServerEditPage extends React.Component {
             </Space>
           </div>
         </div>
+
+        <CapabilityErrorAlert error={this.state.recheckError} />
 
         <Card size="small" title={this.renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
