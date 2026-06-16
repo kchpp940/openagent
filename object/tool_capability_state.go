@@ -413,6 +413,16 @@ func RecheckServerCapability(s *Server, savedHash string) (*CapabilityDecision, 
 	return decision, needsRecheck
 }
 
+func RecheckStoreCapability(store *Store, savedHash string) (*CapabilityDecision, bool) {
+	decision := CheckStoreCapability(store)
+	needsRecheck := savedHash != "" && decision.ConfigHash != savedHash
+	decision.NeedsRecheck = decision.NeedsRecheck || needsRecheck
+	if needsRecheck {
+		decision.RecheckAction = "recheck"
+	}
+	return decision, needsRecheck
+}
+
 func CheckToolMountable(t *Tool) (bool, *CapabilityDecision) {
 	decision := CheckToolCapability(t)
 	return decision.CanMount, decision
@@ -503,6 +513,11 @@ type ServerWithDecision struct {
 	Decision   *CapabilityDecision `json:"decision"`
 }
 
+type StoreWithDecision struct {
+	*Store
+	Decision *CapabilityDecision `json:"decision"`
+}
+
 func EnrichToolWithDecision(t *Tool) *ToolWithDecision {
 	if t == nil {
 		return nil
@@ -591,6 +606,33 @@ func EnrichServersWithDecision(servers []*Server) []*ServerWithDecision {
 	return result
 }
 
+func EnrichStoreWithDecision(store *Store) *StoreWithDecision {
+	if store == nil {
+		return nil
+	}
+	return &StoreWithDecision{
+		Store:    store,
+		Decision: CheckStoreCapability(store),
+	}
+}
+
+func EnrichStoresWithDecision(stores []*Store) []*StoreWithDecision {
+	result := make([]*StoreWithDecision, 0, len(stores))
+	for _, s := range stores {
+		result = append(result, EnrichStoreWithDecision(s))
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Decision.CanSaveStore != result[j].Decision.CanSaveStore {
+			return result[i].Decision.CanSaveStore
+		}
+		if result[i].Decision.HasErrors() != result[j].Decision.HasErrors() {
+			return !result[i].Decision.HasErrors()
+		}
+		return result[i].Store.Name < result[j].Store.Name
+	})
+	return result
+}
+
 type CapabilityCheckRequest struct {
 	EntityType CapabilityEntityType `json:"entityType"`
 	EntityId   string               `json:"entityId"`
@@ -630,8 +672,8 @@ func HandleCapabilityCheck(req *CapabilityCheckRequest) (*CapabilityCheckRespons
 		if err != nil {
 			return nil, err
 		}
-		decision := CheckStoreCapability(store)
-		return &CapabilityCheckResponse{Decision: decision, Changed: false}, nil
+		decision, changed := RecheckStoreCapability(store, store.ConfigHash)
+		return &CapabilityCheckResponse{Decision: decision, Changed: changed}, nil
 	default:
 		return nil, fmt.Errorf("unknown entity type: %s", req.EntityType)
 	}

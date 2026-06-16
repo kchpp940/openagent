@@ -138,7 +138,8 @@ func (c *ApiController) GetStores() {
 		return
 	}
 
-	c.ResponseOk(object.GetMaskedStores(stores))
+	maskedStores := object.GetMaskedStores(stores)
+	c.ResponseOk(object.EnrichStoresWithDecision(maskedStores))
 }
 
 // GetStore
@@ -168,12 +169,12 @@ func (c *ApiController) GetStore() {
 		origin := getOriginFromHost(host)
 		err = store.Populate(origin, c.GetAcceptLanguage())
 		if err != nil {
-			c.ResponseOk(object.GetMaskedStore(store), err.Error())
+			c.ResponseOk(object.EnrichStoreWithDecision(object.GetMaskedStore(store)), err.Error())
 			return
 		}
 	}
 
-	c.ResponseOk(object.GetMaskedStore(store))
+	c.ResponseOk(object.EnrichStoreWithDecision(object.GetMaskedStore(store)))
 }
 
 // UpdateStore
@@ -498,4 +499,29 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
+}
+
+// CheckStoreCapability
+// @Title CheckStoreCapability
+// @Tag Store API
+// @Description check store capability with recheck and failed resources
+// @Param body body object.CapabilityCheckRequest true "The capability check request"
+// @Success 200 {object} object.CapabilityCheckResponse The Response object
+// @router /check-store-capability [post]
+func (c *ApiController) CheckStoreCapability() {
+	var req object.CapabilityCheckRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	req.EntityType = object.EntityTypeStore
+	resp, err := object.HandleCapabilityCheck(&req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(resp)
 }

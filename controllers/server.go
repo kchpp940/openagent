@@ -283,3 +283,28 @@ func (c *ApiController) SyncIntranetServers() {
 	}
 	c.ResponseOk(result)
 }
+
+// CheckServerCapability
+// @Title CheckServerCapability
+// @Tag Server API
+// @Description check server capability with recheck
+// @Param body body object.CapabilityCheckRequest true "The capability check request"
+// @Success 200 {object} object.CapabilityCheckResponse The Response object
+// @router /check-server-capability [post]
+func (c *ApiController) CheckServerCapability() {
+	var req object.CapabilityCheckRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	req.EntityType = object.EntityTypeServer
+	resp, err := object.HandleCapabilityCheck(&req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(resp)
+}

@@ -163,10 +163,8 @@ func (c *ApiController) AddTool() {
 // CheckToolCapability
 // @Title CheckToolCapability
 // @Tag Tool API
-// @Description check tool capability
-// @Param entityType query string true "The entity type"
-// @Param entityId query string true "The entity id"
-// @Param force query bool false "Force recheck"
+// @Description check tool capability with recheck
+// @Param body body object.CapabilityCheckRequest true "The capability check request"
 // @Success 200 {object} object.CapabilityCheckResponse The Response object
 // @router /check-tool-capability [post]
 func (c *ApiController) CheckToolCapability() {
@@ -177,6 +175,7 @@ func (c *ApiController) CheckToolCapability() {
 		return
 	}
 
+	req.EntityType = object.EntityTypeTool
 	resp, err := object.HandleCapabilityCheck(&req)
 	if err != nil {
 		c.ResponseError(err.Error())

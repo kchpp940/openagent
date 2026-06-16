@@ -199,3 +199,28 @@ func (c *ApiController) LoadSkill() {
 
 	c.ResponseOk(s)
 }
+
+// CheckSkillCapability
+// @Title CheckSkillCapability
+// @Tag Skill API
+// @Description check skill capability with recheck
+// @Param body body object.CapabilityCheckRequest true "The capability check request"
+// @Success 200 {object} object.CapabilityCheckResponse The Response object
+// @router /check-skill-capability [post]
+func (c *ApiController) CheckSkillCapability() {
+	var req object.CapabilityCheckRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	req.EntityType = object.EntityTypeSkill
+	resp, err := object.HandleCapabilityCheck(&req)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(resp)
+}

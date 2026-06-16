@@ -93,7 +93,16 @@ export function testTool(tool) {
 }
 
 export function checkCapability(entityType, entityId, force = false) {
-  return fetch(`${Setting.ServerUrl}/api/check-tool-capability`, {
+  let endpoint = "/api/check-tool-capability";
+  if (entityType === "skill") {
+    endpoint = "/api/check-skill-capability";
+  } else if (entityType === "server") {
+    endpoint = "/api/check-server-capability";
+  } else if (entityType === "store") {
+    endpoint = "/api/check-store-capability";
+  }
+
+  return fetch(`${Setting.ServerUrl}${endpoint}`, {
     method: "POST",
     credentials: "include",
     headers: {
