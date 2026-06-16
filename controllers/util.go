@@ -113,6 +113,11 @@ func (c *ApiController) ResponseErrorValidation(msg string, field string) {
 	c.ResponseErrorWithCode(ErrCodeValidationFailed, msg, detail)
 }
 
+func (c *ApiController) ResponseErrorBadRequest(msg string, resType ResourceType, field string) {
+	detail := &ErrorDetail{Code: ErrCodeBadRequest, Key: msg, ResourceType: resType, Field: field}
+	c.ResponseErrorWithCode(ErrCodeBadRequest, msg, detail)
+}
+
 func (c *ApiController) ResponseErrorWithCode(code int, msg string, data ...interface{}) {
 	detail := &ErrorDetail{Code: code, Key: msg}
 	if len(data) > 0 {

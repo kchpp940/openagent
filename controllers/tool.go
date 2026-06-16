@@ -117,7 +117,7 @@ func (c *ApiController) UpdateTool() {
 	var t object.Tool
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTool, "body")
 		return
 	}
 
@@ -146,7 +146,7 @@ func (c *ApiController) AddTool() {
 	var t object.Tool
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTool, "body")
 		return
 	}
 
@@ -171,7 +171,7 @@ func (c *ApiController) DeleteTool() {
 	var t object.Tool
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTool, "body")
 		return
 	}
 
@@ -200,7 +200,7 @@ func (c *ApiController) TestTool() {
 	var t object.Tool
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &t)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTool, "body")
 		return
 	}
 

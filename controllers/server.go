@@ -103,7 +103,7 @@ func (c *ApiController) UpdateServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 
@@ -132,7 +132,7 @@ func (c *ApiController) AddServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 
@@ -157,7 +157,7 @@ func (c *ApiController) DeleteServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (c *ApiController) TestMcpServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 
@@ -214,7 +214,7 @@ func (c *ApiController) SyncMcpTool() {
 
 	var server object.Server
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &server); err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 
@@ -255,7 +255,7 @@ func (c *ApiController) GetOnlineServers() {
 
 	var result interface{}
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 	c.ResponseOk(result)
@@ -279,7 +279,7 @@ func (c *ApiController) SyncIntranetServers() {
 		Paths []string `json:"paths"`
 	}
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &req); err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeServer, "body")
 		return
 	}
 

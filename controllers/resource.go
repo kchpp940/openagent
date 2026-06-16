@@ -115,7 +115,7 @@ func (c *ApiController) UpdateResource() {
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeResource, "body")
 		return
 	}
 
@@ -144,7 +144,7 @@ func (c *ApiController) AddResource() {
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeResource, "body")
 		return
 	}
 
@@ -168,7 +168,7 @@ func (c *ApiController) DeleteResource() {
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseError(err.Error())
+		c.ResponseErrorBadRequest(err.Error(), ResourceTypeResource, "body")
 		return
 	}
 
