@@ -31,7 +31,7 @@ import (
 // @Title GetServers
 // @Tag Server API
 // @Description get MCP servers
-// @Success 200 {array} object.ServerWithCapability The Response object
+// @Success 200 {array} object.ServerWithDecision The Response object
 // @router /get-servers [get]
 func (c *ApiController) GetServers() {
 	owner := "admin"
@@ -76,7 +76,7 @@ func (c *ApiController) GetServers() {
 // @Tag Server API
 // @Description get MCP server
 // @Param id query string true "The id of server"
-// @Success 200 {object} object.ServerWithCapability The Response object
+// @Success 200 {object} object.ServerWithDecision The Response object
 // @router /get-server [get]
 func (c *ApiController) GetServer() {
 	id := c.Input().Get("id")
