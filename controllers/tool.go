@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -80,7 +81,9 @@ func (c *ApiController) GetTools() {
 			return
 		}
 
-		c.ResponseOk(object.GetMaskedTools(tools, true, user), paginator.Nums())
+		maskedTools := object.GetMaskedTools(tools, true, user)
+		object.PopulateToolsCapabilityInfo(tools)
+		c.ResponseOk(maskedTools, paginator.Nums())
 	}
 }
 
@@ -101,6 +104,7 @@ func (c *ApiController) GetTool() {
 		return
 	}
 
+	object.PopulateToolCapabilityInfo(t)
 	c.ResponseOk(object.GetMaskedTool(t, true, user))
 }
 
@@ -202,4 +206,32 @@ func (c *ApiController) TestTool() {
 	}
 
 	c.ResponseOk(result)
+}
+
+func (c *ApiController) GetCapabilityStateOptions() {
+	c.ResponseOk(object.GetCapabilityStateOptions())
+}
+
+func (c *ApiController) ValidateStoreCapabilities() {
+	id := c.Input().Get("id")
+
+	store, err := object.GetStore(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if store == nil {
+		store, err = object.GetStoreForGetApi(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+	}
+	if store == nil {
+		c.ResponseError(fmt.Sprintf("store: %s not found", id))
+		return
+	}
+
+	infos := object.ValidateStoreCapabilities(store)
+	c.ResponseOk(infos)
 }

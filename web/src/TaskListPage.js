@@ -186,6 +186,20 @@ class TaskListPage extends BaseListPage {
       });
   }
 
+  parseReportResult(result) {
+    if (!result) {
+      return null;
+    }
+    if (typeof result === "object") {
+      return result;
+    }
+    try {
+      return JSON.parse(result);
+    } catch {
+      return null;
+    }
+  }
+
   renderTable(tasks) {
     let columns = [
       {
@@ -328,7 +342,8 @@ class TaskListPage extends BaseListPage {
         fixed: "right",
         sorter: (a, b) => (Number(a.score) || 0) - (Number(b.score) || 0),
         render: (text, record) => {
-          if (!record.result) {
+          const parsed = this.parseReportResult(record.result);
+          if (!parsed) {
             return null;
           }
           const s = record.score;
@@ -337,7 +352,7 @@ class TaskListPage extends BaseListPage {
           const showScoreTag = hasNumericScore && !!label;
           const popoverContent = (
             <div style={{width: "50vw", height: "50vh", overflow: "auto"}}>
-              <TaskAnalysisReport result={record.result} />
+              <TaskAnalysisReport result={parsed} />
             </div>
           );
           const scoreFontStyle = {fontSize: "17px", fontWeight: 600};
@@ -350,8 +365,8 @@ class TaskListPage extends BaseListPage {
               {label}
             </Tag>
           ) : (
-            <span style={{cursor: "pointer", ...(record.result.score !== null && record.result.score !== undefined ? scoreFontStyle : {})}}>
-              {record.result.score !== null && record.result.score !== undefined ? `${record.result.score}${i18next.t("task:Score Unit")}` : i18next.t("task:Report")}
+            <span style={{cursor: "pointer", ...(parsed.score !== null && parsed.score !== undefined ? scoreFontStyle : {})}}>
+              {parsed.score !== null && parsed.score !== undefined ? `${parsed.score}${i18next.t("task:Score Unit")}` : i18next.t("task:Report")}
             </span>
           );
           return (

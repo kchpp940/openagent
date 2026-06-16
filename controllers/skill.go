@@ -78,6 +78,7 @@ func (c *ApiController) GetSkills() {
 			return
 		}
 
+		object.PopulateSkillsCapabilityInfo(skills)
 		c.ResponseOk(skills, paginator.Nums())
 	}
 }
@@ -98,6 +99,7 @@ func (c *ApiController) GetSkill() {
 		return
 	}
 
+	object.PopulateSkillCapabilityInfo(s)
 	c.ResponseOk(s)
 }
 

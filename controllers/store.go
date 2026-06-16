@@ -167,6 +167,7 @@ func (c *ApiController) GetStore() {
 		host := c.Ctx.Request.Host
 		origin := getOriginFromHost(host)
 		err = store.Populate(origin, c.GetAcceptLanguage())
+		object.PopulateStoreCapabilityInfo(store)
 		if err != nil {
 			c.ResponseOk(object.GetMaskedStore(store), err.Error())
 			return

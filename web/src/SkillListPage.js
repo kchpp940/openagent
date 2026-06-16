@@ -166,6 +166,12 @@ class SkillListPage extends BaseListPage {
         key: "state",
         width: "100px",
         sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
+        render: (text, record) => {
+          if (record.capabilityInfo) {
+            return Setting.renderCapabilityState(record.capabilityInfo.state);
+          }
+          return text;
+        },
       },
       {
         title: i18next.t("general:Action"),

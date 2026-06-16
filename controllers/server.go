@@ -67,6 +67,7 @@ func (c *ApiController) GetServers() {
 			return
 		}
 
+		object.PopulateServersCapabilityInfo(servers)
 		c.ResponseOk(servers, paginator.Nums())
 	}
 }
@@ -87,6 +88,7 @@ func (c *ApiController) GetServer() {
 		return
 	}
 
+	object.PopulateServerCapabilityInfo(server)
 	c.ResponseOk(server)
 }
 

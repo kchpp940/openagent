@@ -71,12 +71,33 @@ class TaskEditPage extends React.Component {
     });
   }
 
+  normalizeTaskResult(task) {
+    if (!task) {
+      return task;
+    }
+    let t = task;
+    t = t.scale === undefined || t.scale === null ? {...t, scale: ""} : t;
+    t = t.documentError === undefined || t.documentError === null ? {...t, documentError: ""} : t;
+    t = t.documentFileType === undefined || t.documentFileType === null ? {...t, documentFileType: ""} : t;
+    if (!t.result) {
+      return t;
+    }
+    if (typeof t.result === "string") {
+      try {
+        t = {...t, result: JSON.parse(t.result)};
+      } catch {
+        t = {...t, result: null};
+      }
+    }
+    return t;
+  }
+
   getTask() {
     TaskBackend.getTask(this.state.owner, this.state.taskName)
       .then((res) => {
         if (res.status === "ok") {
           this.setState({
-            task: res.data,
+            task: this.normalizeTaskResult(res.data),
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
@@ -524,6 +545,9 @@ class TaskEditPage extends React.Component {
 
   submitTaskEdit(exitAfterSave) {
     const task = Setting.deepCopy(this.state.task);
+    if (task.result && typeof task.result === "object") {
+      task.result = JSON.stringify(task.result);
+    }
     TaskBackend.updateTask(this.state.task.owner, this.state.taskName, task)
       .then((res) => {
         if (res.status === "ok") {

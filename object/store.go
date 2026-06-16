@@ -123,6 +123,8 @@ type Store struct {
 
 	FileTree      *TreeFile              `xorm:"mediumtext" json:"fileTree"`
 	PropertiesMap map[string]*Properties `xorm:"mediumtext" json:"propertiesMap"`
+
+	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
 }
 
 // GetGlobalStores loads every row in the store table (admin UI / init). Not for hot per-request paths.
@@ -207,7 +209,7 @@ func GetDefaultStore(owner string) (*Store, error) {
 
 	// GetStores orders by created_time DESC — first Active row is the newest active store.
 	for _, store := range stores {
-		if store.State == "Active" {
+		if CanSaveStore(store).CanMount {
 			return store, nil
 		}
 	}

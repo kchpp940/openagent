@@ -16,6 +16,7 @@ import React from "react";
 import Loading from "./common/Loading";
 import {Button, Card, Col, Collapse, Input, Row, Select, Space, Tag, Typography} from "antd";
 import * as SkillBackend from "./backend/SkillBackend";
+import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
@@ -36,11 +37,22 @@ class SkillEditPage extends React.Component {
       skill: null,
       originalSkill: null,
       isNewSkill: props.location?.state?.isNewSkill || false,
+      capabilityStateOptions: [],
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getSkill();
+    this.getCapabilityStateOptions();
+  }
+
+  getCapabilityStateOptions() {
+    ToolBackend.getCapabilityStateOptions()
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({capabilityStateOptions: res.data || []});
+        }
+      });
   }
 
   getSkill() {
@@ -145,12 +157,15 @@ class SkillEditPage extends React.Component {
               Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
               <Select virtual={false} style={{width: "100%"}} value={skill.state}
                 onChange={value => this.updateSkillField("state", value)}
-                options={[
-                  {value: "Active", label: i18next.t("general:Active")},
-                  {value: "Inactive", label: i18next.t("general:Inactive")},
-                ].map(item => Setting.getOption(item.label, item.value))}
+                options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))}
               />,
               8
+            )}
+            {skill.capabilityInfo && !skill.capabilityInfo.canMount && (
+              <Col span={24} style={{marginTop: "4px"}}>
+                {Setting.renderCapabilityState(skill.capabilityInfo.state)}
+                {skill.capabilityInfo.reason && <span style={{marginLeft: "8px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>{skill.capabilityInfo.reason}</span>}
+              </Col>
             )}
           </Row>
         </Card>

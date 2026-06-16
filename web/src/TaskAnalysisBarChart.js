@@ -20,11 +20,11 @@ const ITEM_NAME_MAX_LEN = 18;
 
 function flattenItems(categories) {
   const list = [];
-  categories.forEach((cat) => {
-    cat.items.forEach((item) => {
+  (categories || []).forEach((cat) => {
+    (cat.items || []).forEach((item) => {
       list.push({
         name: item.name,
-        score: item.score,
+        score: Number(item.score) || 0,
         categoryName: cat.name,
       });
     });
@@ -35,9 +35,9 @@ function flattenItems(categories) {
 function getScoreRange(categories) {
   let min = 100;
   let max = 0;
-  categories.forEach((cat) => {
-    cat.items.forEach((item) => {
-      const s = item.score;
+  (categories || []).forEach((cat) => {
+    (cat.items || []).forEach((item) => {
+      const s = Number(item.score) || 0;
       if (s < min) {
         min = s;
       }
@@ -61,7 +61,7 @@ function shortLabel(name) {
 
 /** Y-axis for the vertical sub-70 chart: default 50–80; extend min when any score falls below 50. */
 function getLowScoreVerticalAxisBounds(items) {
-  const minScore = Math.min(...items.map((it) => it.score));
+  const minScore = Math.min(...items.map((it) => Number(it.score) || 0));
   const yMax = 80;
   if (minScore >= 50) {
     return {yMin: 50, yMax};

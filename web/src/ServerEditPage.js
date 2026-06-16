@@ -14,9 +14,10 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Space} from "antd";
+import {Button, Card, Col, Input, Row, Select, Space} from "antd";
 import {LinkOutlined} from "@ant-design/icons";
 import * as ServerBackend from "./backend/ServerBackend";
+import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import ToolTable from "./table/ToolTable";
@@ -32,11 +33,22 @@ class ServerEditPage extends React.Component {
       originalServer: null,
       isNewServer: props.location?.state?.isNewServer || false,
       syncButtonLoading: false,
+      capabilityStateOptions: [],
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getServer();
+    this.getCapabilityStateOptions();
+  }
+
+  getCapabilityStateOptions() {
+    ToolBackend.getCapabilityStateOptions()
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({capabilityStateOptions: res.data || []});
+        }
+      });
   }
 
   getServer() {
@@ -168,6 +180,19 @@ class ServerEditPage extends React.Component {
               Setting.getLabel(i18next.t("server:Access token"), i18next.t("server:Access token - Tooltip")),
               <Input.Password placeholder={"***"} value={server.token} onChange={e => this.updateServerField("token", e.target.value)} />,
               16
+            )}
+            {this.renderServerField(
+              Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
+              <Select virtual={false} style={{width: "100%"}} value={server.state || "Active"}
+                onChange={value => this.updateServerField("state", value)}
+                options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))} />,
+              8
+            )}
+            {server.capabilityInfo && !server.capabilityInfo.canMount && (
+              <Col span={24} style={{marginTop: "4px"}}>
+                {Setting.renderCapabilityState(server.capabilityInfo.state)}
+                {server.capabilityInfo.reason && <span style={{marginLeft: "8px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>{server.capabilityInfo.reason}</span>}
+              </Col>
             )}
           </Row>
         </Card>

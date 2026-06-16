@@ -189,15 +189,7 @@ export async function downloadTaskAnalysisReportDocx(result, options) {
     });
   }
 
-  const categories = result.categories;
-  if (result.summary) {
-    children.push(new Paragraph({
-      text: i18next.t("task:Analysis Summary"),
-      heading: HeadingLevel.HEADING_2,
-      spacing: {before: 360, after: 200},
-    }));
-    children.push(bodyParagraph(result.summary, {firstLineIndent: true, after: 320}));
-  }
+  const categories = result.categories || [];
   if (categories.length > 0) {
     children.push(new Paragraph({
       text: i18next.t("task:IV. Detailed Evaluation"),
@@ -217,7 +209,7 @@ export async function downloadTaskAnalysisReportDocx(result, options) {
         spacing: {before: catIdx === 0 ? 120 : 360, after: 200},
       }));
 
-      const items = cat.items;
+      const items = cat.items || [];
       items.forEach((item, itemIdx) => {
         const itemHead = zh
           ? `（${itemIdx + 1}）${item.name || "—"}（${i18next.t("task:Score")}：${displayOrDash(item.score)}${su}）`

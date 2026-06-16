@@ -91,3 +91,23 @@ export function testTool(tool) {
     body: JSON.stringify(newTool),
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getCapabilityStateOptions() {
+  return fetch(`${Setting.ServerUrl}/api/get-capability-state-options`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function validateStoreCapabilities(owner, storeName) {
+  return fetch(`${Setting.ServerUrl}/api/validate-store-capabilities?id=${owner}/${encodeURIComponent(storeName)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

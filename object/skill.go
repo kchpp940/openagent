@@ -58,6 +58,8 @@ type Skill struct {
 	References  []SkillReference `xorm:"mediumtext" json:"references"`
 
 	State string `xorm:"varchar(100)" json:"state"`
+
+	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
 }
 
 func (s *Skill) GetId() string {
@@ -420,7 +422,11 @@ func GetSkillsCatalog(owner string, skillNames []string) (string, error) {
 
 	var items []string
 	for _, s := range skills {
-		if s == nil || s.State != "Active" {
+		if s == nil {
+			continue
+		}
+		info := GetSkillCapabilityInfo(s)
+		if !info.CanMount {
 			continue
 		}
 
@@ -468,8 +474,9 @@ func LoadSkillPromptContent(owner string, skillName string, referenceName string
 	if s == nil {
 		return "", fmt.Errorf("skill not found: %s", skillName)
 	}
-	if s.State != "Active" {
-		return "", fmt.Errorf("skill is not active: %s", skillName)
+	info := GetSkillCapabilityInfo(s)
+	if !info.CanMount {
+		return "", fmt.Errorf("skill is not mountable: %s: %s", skillName, info.Reason)
 	}
 
 	buf := strings.TrimSpace(s.Content)

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -48,7 +49,6 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
   "otherSubjects": "从文档中提取的其他相关领域或学科（逗号分隔）",
   "textbook": "从文档中提取的主要教材信息",
   "score": 所有二级评价项得分的平均值（保留一位小数的数字，不是字符串）,
-  "summary": "整体分析摘要（对整个教学设计的综合性评价，包括整体水平、主要亮点、核心问题和总体改进方向，200-300字）",
   "categories": [
     {
       "name": "一级评价项名称",
@@ -57,8 +57,8 @@ const analyzeTaskPrompt = `请对以下教学设计文本进行深度分析，�
         {
           "name": "二级评价项名称",
           "score": 该项得分（0-100的整数）,
-          "advantage": "优点分析（详细说明教学设计在该项的优势和亮点）,
-          "disadvantage": "不足分析（详细说明教学设计在该项存在的问题和不足）,
+          "advantage": "优点分析（详细说明教学设计在该项的优势和亮点）",
+          "disadvantage": "不足分析（详细说明教学设计在该项存在的问题和不足）",
           "suggestion": "改进建议（提供具体可操作的改进措施和建议）"
         }
       ]
@@ -165,7 +165,37 @@ func extractJSON(raw string) string {
 	return raw
 }
 
-func normalizeTaskAnalysisReport(result *TaskAnalysisReport) {
+func parseFloat(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func parseString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+func normalizeTaskResult(result *TaskResult) {
 	if result == nil {
 		return
 	}
@@ -216,7 +246,54 @@ func normalizeTaskAnalysisReport(result *TaskAnalysisReport) {
 	}
 }
 
-func AnalyzeTask(task *Task, lang string) (*TaskAnalysisReport, error) {
+func normalizeTaskResultFromMap(data map[string]interface{}) *TaskResult {
+	result := &TaskResult{
+		Title:         parseString(data["title"]),
+		Designer:      parseString(data["designer"]),
+		Stage:         parseString(data["stage"]),
+		Participants:  parseString(data["participants"]),
+		Grade:         parseString(data["grade"]),
+		Instructor:    parseString(data["instructor"]),
+		Subject:       parseString(data["subject"]),
+		School:        parseString(data["school"]),
+		OtherSubjects: parseString(data["otherSubjects"]),
+		Textbook:      parseString(data["textbook"]),
+		Score:         parseFloat(data["score"]),
+	}
+
+	if categoriesRaw, ok := data["categories"].([]interface{}); ok {
+		for _, catRaw := range categoriesRaw {
+			if catMap, ok := catRaw.(map[string]interface{}); ok {
+				cat := &TaskResultCategory{
+					Name:  parseString(catMap["name"]),
+					Score: parseFloat(catMap["score"]),
+				}
+
+				if itemsRaw, ok := catMap["items"].([]interface{}); ok {
+					for _, itemRaw := range itemsRaw {
+						if itemMap, ok := itemRaw.(map[string]interface{}); ok {
+							item := &TaskResultItem{
+								Name:         parseString(itemMap["name"]),
+								Score:        parseFloat(itemMap["score"]),
+								Advantage:    parseString(itemMap["advantage"]),
+								Disadvantage: parseString(itemMap["disadvantage"]),
+								Suggestion:   parseString(itemMap["suggestion"]),
+							}
+							cat.Items = append(cat.Items, item)
+						}
+					}
+				}
+
+				result.Categories = append(result.Categories, cat)
+			}
+		}
+	}
+
+	normalizeTaskResult(result)
+	return result
+}
+
+func AnalyzeTask(task *Task, lang string) (*TaskResult, error) {
 	taskID := task.GetId()
 	logs.Info("[analyze-task] start task=%s provider=%s lang=%s", taskID, task.Provider, lang)
 
@@ -293,8 +370,8 @@ func AnalyzeTask(task *Task, lang string) (*TaskAnalysisReport, error) {
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}
 
-	result := BuildTaskAnalysisReportResponse(rawData)
-	if result == nil || len(result.Categories) == 0 {
+	result := normalizeTaskResultFromMap(rawData)
+	if len(result.Categories) == 0 {
 		task.AnalyzeError = "AI返回的分析结果中没有评价维度，请检查文档内容或稍后重试"
 		return nil, fmt.Errorf(task.AnalyzeError)
 	}

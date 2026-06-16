@@ -31,11 +31,22 @@ class ToolEditPage extends React.Component {
       tool: null,
       originalTool: null,
       isNewTool: props.location?.state?.isNewTool || false,
+      capabilityStateOptions: [],
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getTool();
+    this.getCapabilityStateOptions();
+  }
+
+  getCapabilityStateOptions() {
+    ToolBackend.getCapabilityStateOptions()
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({capabilityStateOptions: res.data || []});
+        }
+      });
   }
 
   getTool() {
@@ -275,11 +286,14 @@ class ToolEditPage extends React.Component {
               Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip")),
               <Select virtual={false} style={{width: "100%"}} value={tool.state}
                 onChange={value => this.updateToolField("state", value)}
-                options={[
-                  {value: "Active", label: i18next.t("general:Active")},
-                  {value: "Inactive", label: i18next.t("general:Inactive")},
-                ].map(item => Setting.getOption(item.label, item.value))} />,
+                options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))} />,
               8
+            )}
+            {tool.capabilityInfo && !tool.capabilityInfo.canMount && (
+              <Col span={24} style={{marginTop: "4px"}}>
+                {Setting.renderCapabilityState(tool.capabilityInfo.state)}
+                {tool.capabilityInfo.reason && <span style={{marginLeft: "8px", color: "var(--ant-color-text-tertiary)", fontSize: "12px"}}>{tool.capabilityInfo.reason}</span>}
+              </Col>
             )}
           </Row>
         </Card>

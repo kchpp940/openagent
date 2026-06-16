@@ -27,7 +27,7 @@ import (
 // @Title GetGlobalTasks
 // @Tag Task API
 // @Description get global tasks
-// @Success 200 {array} object.TaskResponse The Response object
+// @Success 200 {array} object.Task The Response object
 // @router /get-global-tasks [get]
 func (c *ApiController) GetGlobalTasks() {
 	owner := c.GetSessionUsername()
@@ -41,7 +41,7 @@ func (c *ApiController) GetGlobalTasks() {
 		return
 	}
 
-	c.ResponseOk(object.GetMaskedTasks(object.BuildTaskResponses(tasks), true))
+	c.ResponseOk(object.GetMaskedTasks(tasks, true))
 }
 
 // GetTasks
@@ -49,7 +49,7 @@ func (c *ApiController) GetGlobalTasks() {
 // @Tag Task API
 // @Description get tasks
 // @Param owner query string true "The owner of task"
-// @Success 200 {array} object.TaskResponse The Response object
+// @Success 200 {array} object.Task The Response object
 // @router /get-tasks [get]
 func (c *ApiController) GetTasks() {
 	owner := c.Input().Get("owner")
@@ -79,7 +79,7 @@ func (c *ApiController) GetTasks() {
 			return
 		}
 
-		c.ResponseOk(object.GetMaskedTasks(object.BuildTaskResponses(tasks), true))
+		c.ResponseOk(object.GetMaskedTasks(tasks, true))
 	} else {
 		limit := util.ParseInt(limit)
 		count, err := object.GetTaskCount(owner, field, value)
@@ -94,7 +94,7 @@ func (c *ApiController) GetTasks() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.GetMaskedTasks(object.BuildTaskResponses(tasks), true), paginator.Nums())
+		c.ResponseOk(tasks, paginator.Nums())
 	}
 }
 
@@ -103,7 +103,7 @@ func (c *ApiController) GetTasks() {
 // @Tag Task API
 // @Description get task
 // @Param id query string true "The id (owner/name) of task"
-// @Success 200 {object} object.TaskResponse The Response object
+// @Success 200 {object} object.Task The Response object
 // @router /get-task [get]
 func (c *ApiController) GetTask() {
 	id := c.Input().Get("id")
@@ -129,7 +129,7 @@ func (c *ApiController) GetTask() {
 		}
 	}
 
-	c.ResponseOk(object.BuildTaskResponse(task))
+	c.ResponseOk(task)
 }
 
 // UpdateTask
@@ -137,14 +137,14 @@ func (c *ApiController) GetTask() {
 // @Tag Task API
 // @Description update task
 // @Param id query string true "The id (owner/name) of the task"
-// @Param body body object.TaskUpdateRequest true "The details of the task"
+// @Param body body object.Task true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /update-task [post]
 func (c *ApiController) UpdateTask() {
 	id := c.Input().Get("id")
 
-	var req object.TaskUpdateRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	var task object.Task
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -160,6 +160,7 @@ func (c *ApiController) UpdateTask() {
 		return
 	}
 
+	// Check ownership for non-admins
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
 		if existingTask.Owner != username {
@@ -168,8 +169,7 @@ func (c *ApiController) UpdateTask() {
 		}
 	}
 
-	task := object.ParseTaskFromUpdateRequest(&req)
-	success, err := object.UpdateTask(id, task)
+	success, err := object.UpdateTask(id, &task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -182,19 +182,18 @@ func (c *ApiController) UpdateTask() {
 // @Title AddTask
 // @Tag Task API
 // @Description add task
-// @Param body body object.TaskCreateRequest true "The details of the task"
+// @Param body body object.Task true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /add-task [post]
 func (c *ApiController) AddTask() {
-	var req object.TaskCreateRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	var task object.Task
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	task := object.ParseTaskFromCreateRequest(&req)
-	success, err := object.AddTask(task)
+	success, err := object.AddTask(&task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -207,20 +206,22 @@ func (c *ApiController) AddTask() {
 // @Title DeleteTask
 // @Tag Task API
 // @Description delete task
-// @Param body body object.TaskDeleteRequest true "The details of the task"
+// @Param body body object.Task true "The details of the task"
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-task [post]
 func (c *ApiController) DeleteTask() {
-	var req object.TaskDeleteRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
+	var task object.Task
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
+	// Check ownership for non-admins
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
-		id := req.Owner + "/" + req.Name
+		// Fetch task from database to verify ownership
+		id := task.GetId()
 		existingTask, err := object.GetTask(id)
 		if err != nil {
 			c.ResponseError(err.Error())
@@ -236,8 +237,7 @@ func (c *ApiController) DeleteTask() {
 		}
 	}
 
-	task := object.ParseTaskFromDeleteRequest(&req)
-	success, err := object.DeleteTask(task)
+	success, err := object.DeleteTask(&task)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -251,7 +251,7 @@ func (c *ApiController) DeleteTask() {
 // @Tag Task API
 // @Description analyze task document and generate structured report
 // @Param id query string true "The id (owner/name) of the task"
-// @Success 200 {object} object.TaskAnalysisReport The Response object
+// @Success 200 {object} object.TaskResult The Response object
 // @router /analyze-task [post]
 func (c *ApiController) AnalyzeTask() {
 	id := c.Input().Get("id")
@@ -280,20 +280,31 @@ func (c *ApiController) AnalyzeTask() {
 	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
 	if err != nil {
 		logs.Error("[analyze-task] AnalyzeTask failed id=%s: %v", id, err)
-		if saveErr := object.SaveTaskAnalysisResult(id, nil); saveErr != nil {
-			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, saveErr)
+		task.Result = ""
+		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
+			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
 		}
 		c.ResponseError(err.Error())
 		return
 	}
 
-	logs.Info("[analyze-task] saving task id=%s", id)
-	if err = object.SaveTaskAnalysisResult(id, result); err != nil {
-		logs.Error("[analyze-task] SaveTaskAnalysisResult failed id=%s: %v", id, err)
+	logs.Info("[analyze-task] serializing result id=%s", id)
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
+		c.ResponseError(err.Error())
+		return
+	}
+	task.Result = string(resultBytes)
+	task.Score = result.Score
+	logs.Info("[analyze-task] saving task id=%s resultBytes=%d", id, len(resultBytes))
+	_, err = object.UpdateTask(id, task)
+	if err != nil {
+		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)
 		c.ResponseError(err.Error())
 		return
 	}
 
 	logs.Info("[analyze-task] HTTP OK id=%s", id)
-	c.ResponseOk(object.BuildTaskAnalysisReportResponse(result))
+	c.ResponseOk(result)
 }

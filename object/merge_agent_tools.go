@@ -50,6 +50,10 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err != nil || t == nil {
 			continue
 		}
+		info := GetToolCapabilityInfo(t)
+		if !info.CanMount {
+			continue
+		}
 		tp, err := tool.New(getToolConfig(t), lang)
 		if err != nil {
 			continue

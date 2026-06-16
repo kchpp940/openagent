@@ -56,6 +56,7 @@ class StoreEditPage extends React.Component {
       isNewStore: props.location?.state?.isNewStore || false,
       ownerUsers: [],
       ownerUsersLoading: false,
+      capabilityStateOptions: [],
     };
   }
 
@@ -67,6 +68,7 @@ class StoreEditPage extends React.Component {
     this.getMcpServers();
     this.getSkills();
     this.getTools();
+    this.getCapabilityStateOptions();
   }
 
   loadOwnerUsers() {
@@ -204,6 +206,15 @@ class StoreEditPage extends React.Component {
           this.setState({tools: res.data});
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      });
+  }
+
+  getCapabilityStateOptions() {
+    ToolBackend.getCapabilityStateOptions()
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({capabilityStateOptions: res.data || []});
         }
       });
   }
@@ -405,10 +416,7 @@ class StoreEditPage extends React.Component {
               <Select virtual={false} style={{width: "100%"}} value={store.state} onChange={value => {
                 this.updateStoreField("state", value);
               }}
-              options={[
-                {value: "Active", label: i18next.t("general:Active")},
-                {value: "Inactive", label: i18next.t("general:Inactive")},
-              ].map(item => Setting.getOption(item.label, item.value))} />,
+              options={this.state.capabilityStateOptions.map(item => Setting.getOption(item.label, item.value))} />,
               8
             )}
             {this.renderStoreField(
@@ -638,7 +646,7 @@ class StoreEditPage extends React.Component {
                     onChange={(value => {this.updateStoreField("skills", value || []);})}
                   >
                     <Option key="All" value="All">{i18next.t("store:All")}</Option>
-                    {this.state.skills.filter(s => s.state === "Active").map((skill, index) => (
+                    {this.state.skills.filter(s => !s.capabilityInfo || s.capabilityInfo.canMount).map((skill, index) => (
                       <Option key={index} value={skill.name}>
                         {skill.displayName ? `${skill.displayName} (${skill.name})` : skill.name}
                       </Option>

@@ -49,6 +49,9 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
+	State       string     `xorm:"varchar(100)" json:"state"`
+
+	CapabilityInfo *CapabilityInfo `xorm:"-" json:"capabilityInfo,omitempty"`
 }
 
 func (s *Server) GetId() string {
@@ -222,7 +225,8 @@ func DeleteServer(server *Server) (bool, error) {
 // McpToolSet with the allowed tools and the open connection.
 // The caller must close all connections in McpToolSet.Connections when done.
 func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
-	if s.Url == "" {
+	capInfo := GetServerCapabilityInfo(s)
+	if !capInfo.CanMount {
 		return nil, nil
 	}
 

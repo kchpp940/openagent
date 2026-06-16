@@ -61,7 +61,7 @@ export default function TaskAnalysisReport({result, downloadFileName}) {
   if (!result) {
     return null;
   }
-  const categories = result.categories;
+  const categories = result.categories || [];
 
   const metaItems = [
     {label: i18next.t("task:Unit Name"), value: result.title},
@@ -105,14 +105,14 @@ export default function TaskAnalysisReport({result, downloadFileName}) {
       return {min: 0, max: 5};
     }
     const scores = [];
-    categories.forEach((c) => {
-      c.items.forEach((item) => {
-        scores.push(item.score);
+    (categories || []).forEach((c) => {
+      (c.items || []).forEach((item) => {
+        scores.push(Number(item.score) || 0);
       });
     });
     if (scores.length === 0) {
-      categories.forEach((c) => {
-        scores.push(c.score);
+      (categories || []).forEach((c) => {
+        scores.push(Number(c.score) || 0);
       });
     }
     if (scores.length === 0) {
@@ -267,14 +267,6 @@ export default function TaskAnalysisReport({result, downloadFileName}) {
           {fullscreenChart === "lowscore" && <TaskAnalysisBarChart categories={categories} orientation="vertical" maxScoreExclusive={70} />}
         </div>
       </Modal>
-      {result.summary && (
-        <div style={{marginBottom: "24px", padding: "16px", background: "#f6ffed", border: "1px solid #b7eb8f", borderRadius: "6px"}}>
-          <div style={{fontWeight: 600, marginBottom: "8px", fontSize: "14px", color: "#389e0d"}}>
-            {i18next.t("task:Analysis Summary")}
-          </div>
-          <div style={{lineHeight: 1.8, color: "rgba(0, 0, 0, 0.85)"}}>{result.summary}</div>
-        </div>
-      )}
       {categories.map((cat, idx) => (
         <div key={idx} style={{marginBottom: "24px"}}>
           <div style={{fontWeight: 600, marginBottom: "8px", fontSize: "14px"}}>
@@ -285,7 +277,7 @@ export default function TaskAnalysisReport({result, downloadFileName}) {
             bordered
             pagination={false}
             columns={reportColumns}
-            dataSource={cat.items.map((item, i) => ({...item, key: i}))}
+            dataSource={(cat.items || []).map((item, i) => ({...item, key: i}))}
           />
         </div>
       ))}

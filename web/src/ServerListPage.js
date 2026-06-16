@@ -45,6 +45,7 @@ class ServerListPage extends BaseListPage {
       displayName: `New MCP Server - ${randomName}`,
       testContent: "",
       isDefault: false,
+      state: "Active",
     };
   }
 
@@ -111,6 +112,7 @@ class ServerListPage extends BaseListPage {
       url: scanServer.url,
       testContent: "",
       isDefault: false,
+      state: "Active",
     };
     ServerBackend.addServer(newServer)
       .then((res) => {
@@ -177,6 +179,19 @@ class ServerListPage extends BaseListPage {
         key: "tools",
         width: "130px",
         render: (_, record) => (record.tools ? record.tools.length : 0),
+      },
+      {
+        title: i18next.t("general:State"),
+        dataIndex: "state",
+        key: "state",
+        width: "110px",
+        sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
+        render: (text, record) => {
+          if (record.capabilityInfo) {
+            return Setting.renderCapabilityState(record.capabilityInfo.state);
+          }
+          return text || "Active";
+        },
       },
       {
         title: i18next.t("general:Action"),
