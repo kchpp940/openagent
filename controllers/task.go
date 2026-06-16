@@ -129,7 +129,7 @@ func (c *ApiController) UpdateTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTask, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
 		return
 	}
 
@@ -158,7 +158,7 @@ func (c *ApiController) AddTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTask, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (c *ApiController) DeleteTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeTask, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
 		return
 	}
 

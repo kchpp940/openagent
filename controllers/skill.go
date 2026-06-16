@@ -114,7 +114,7 @@ func (c *ApiController) UpdateSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeSkill, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (c *ApiController) AddSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeSkill, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (c *ApiController) DeleteSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeSkill, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
 		return
 	}
 

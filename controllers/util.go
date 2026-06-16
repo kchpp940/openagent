@@ -55,6 +55,7 @@ const (
 	ErrCodeInvalidResourceFormat = 40001
 	ErrCodeResourceIdRequired    = 40002
 	ErrCodeValidationFailed      = 40003
+	ErrCodeJsonParseFailed       = 40004
 
 	ErrCodeUnauthorized = 40100
 	ErrCodeNotSignedIn  = 40101
@@ -113,9 +114,13 @@ func (c *ApiController) ResponseErrorValidation(msg string, field string) {
 	c.ResponseErrorWithCode(ErrCodeValidationFailed, msg, detail)
 }
 
-func (c *ApiController) ResponseErrorBadRequest(msg string, resType ResourceType, field string) {
-	detail := &ErrorDetail{Code: ErrCodeBadRequest, Key: msg, ResourceType: resType, Field: field}
-	c.ResponseErrorWithCode(ErrCodeBadRequest, msg, detail)
+func (c *ApiController) ResponseErrorJsonParse(err error, field string, resType ...ResourceType) {
+	msg := fmt.Sprintf("Invalid JSON in request body: %s", err.Error())
+	detail := &ErrorDetail{Code: ErrCodeJsonParseFailed, Key: msg, Field: field}
+	if len(resType) > 0 {
+		detail.ResourceType = resType[0]
+	}
+	c.ResponseErrorWithCode(ErrCodeJsonParseFailed, msg, detail)
 }
 
 func (c *ApiController) ResponseErrorWithCode(code int, msg string, data ...interface{}) {

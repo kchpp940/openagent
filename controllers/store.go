@@ -193,7 +193,7 @@ func (c *ApiController) UpdateStore() {
 	var store object.Store
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeStore, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeStore)
 		return
 	}
 
@@ -257,7 +257,7 @@ func (c *ApiController) AddStore() {
 	var store object.Store
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeStore, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeStore)
 		return
 	}
 
@@ -313,7 +313,7 @@ func (c *ApiController) DeleteStore() {
 	var store object.Store
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeStore, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeStore)
 		return
 	}
 
@@ -386,7 +386,7 @@ func (c *ApiController) RefreshStoreVectors() {
 	var store object.Store
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeStore, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeStore)
 		return
 	}
 
@@ -443,7 +443,7 @@ func (c *ApiController) AddSharedStore() {
 	var form shareStoreForm
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &form)
 	if err != nil {
-		c.ResponseErrorBadRequest(err.Error(), ResourceTypeStore, "body")
+		c.ResponseErrorJsonParse(err, "body", ResourceTypeStore)
 		return
 	}
 	if form.Owner == "" || form.Name == "" || form.TargetUser == "" {
