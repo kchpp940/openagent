@@ -153,20 +153,12 @@ func GetPaginationResources(owner, user string, offset, limit int, field, value,
 }
 
 func CountResources(opts ListQueryOptions) (int64, error) {
-	session := BuildCountSession(opts)
-	if opts.User != "" {
-		session = session.And("user = ?", opts.User)
-	}
-	return session.Count(&Resource{})
+	return BuildCountSession(opts).Count(&Resource{})
 }
 
 func ListResources(opts ListQueryOptions) ([]*Resource, error) {
 	resources := []*Resource{}
-	session := BuildListSession(opts)
-	if opts.User != "" {
-		session = session.And("user = ?", opts.User)
-	}
-	err := session.Find(&resources)
+	err := BuildListSession(opts).Find(&resources)
 	return resources, err
 }
 

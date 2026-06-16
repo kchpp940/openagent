@@ -137,6 +137,10 @@ func BuildListSession(opts ListQueryOptions) *xorm.Session {
 		session = session.In("owner", args...)
 	}
 
+	if opts.User != "" {
+		session = session.And("user = ?", opts.User)
+	}
+
 	if opts.Name != "" {
 		session = session.And("name = ?", opts.Name)
 	}
