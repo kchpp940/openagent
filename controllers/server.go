@@ -31,7 +31,7 @@ import (
 // @Title GetServers
 // @Tag Server API
 // @Description get MCP servers
-// @Success 200 {array} object.ServerWithDecision The Response object
+// @Success 200 {array} object.Server The Response object
 // @router /get-servers [get]
 func (c *ApiController) GetServers() {
 	owner := "admin"
@@ -48,7 +48,7 @@ func (c *ApiController) GetServers() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.EnrichServersWithDecision(servers))
+		c.ResponseOk(servers)
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -67,7 +67,7 @@ func (c *ApiController) GetServers() {
 			return
 		}
 
-		c.ResponseOk(object.EnrichServersWithDecision(servers), paginator.Nums())
+		c.ResponseOk(servers, paginator.Nums())
 	}
 }
 
@@ -76,7 +76,7 @@ func (c *ApiController) GetServers() {
 // @Tag Server API
 // @Description get MCP server
 // @Param id query string true "The id of server"
-// @Success 200 {object} object.ServerWithDecision The Response object
+// @Success 200 {object} object.Server The Response object
 // @router /get-server [get]
 func (c *ApiController) GetServer() {
 	id := c.Input().Get("id")
@@ -87,7 +87,7 @@ func (c *ApiController) GetServer() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichServerWithDecision(server))
+	c.ResponseOk(server)
 }
 
 // UpdateServer
@@ -108,9 +108,9 @@ func (c *ApiController) UpdateServer() {
 		return
 	}
 
-	success, decision, err := object.UpdateServer(id, &server)
+	success, err := object.UpdateServer(id, &server)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -133,9 +133,9 @@ func (c *ApiController) AddServer() {
 	}
 
 	server.Owner = "admin"
-	success, decision, err := object.AddServer(&server)
+	success, err := object.AddServer(&server)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -209,9 +209,9 @@ func (c *ApiController) SyncMcpTool() {
 		return
 	}
 
-	ok, decision, err := object.SyncMcpTool(id, &server, isCleared)
+	ok, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 	c.ResponseOk(ok)
@@ -282,29 +282,4 @@ func (c *ApiController) SyncIntranetServers() {
 		return
 	}
 	c.ResponseOk(result)
-}
-
-// CheckServerCapability
-// @Title CheckServerCapability
-// @Tag Server API
-// @Description check server capability with recheck
-// @Param body body object.CapabilityCheckRequest true "The capability check request"
-// @Success 200 {object} object.CapabilityCheckResponse The Response object
-// @router /check-server-capability [post]
-func (c *ApiController) CheckServerCapability() {
-	var req object.CapabilityCheckRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	req.EntityType = object.EntityTypeServer
-	resp, err := object.HandleCapabilityCheck(&req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	c.ResponseOk(resp)
 }

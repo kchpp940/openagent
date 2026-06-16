@@ -100,7 +100,6 @@ type Store struct {
 	EnableExtraOptions     bool              `json:"enableExtraOptions"`
 	IsDefault              bool              `json:"isDefault"`
 	State                  string            `xorm:"varchar(100)" json:"state"`
-	ConfigHash             string            `xorm:"varchar(100)" json:"configHash"`
 	SharedBy               string            `xorm:"varchar(100)" json:"sharedBy"`
 
 	Author      string `xorm:"varchar(100)" json:"author"`
@@ -208,8 +207,7 @@ func GetDefaultStore(owner string) (*Store, error) {
 
 	// GetStores orders by created_time DESC — first Active row is the newest active store.
 	for _, store := range stores {
-		savable, _ := CheckStoreSavable(store)
-		if savable {
+		if store.State == "Active" {
 			return store, nil
 		}
 	}
@@ -306,53 +304,43 @@ func GetStoreForGetApi(id string) (*Store, error) {
 	return resolveStoreWhenAdminIdMisses(id)
 }
 
-func UpdateStore(id string, store *Store) (bool, *CapabilityDecision, error) {
+func UpdateStore(id string, store *Store) (bool, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	_, err = getStore(owner, name)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	if store == nil {
-		return false, nil, nil
+		return false, nil
 	}
 
 	if store.ApiKey == "" {
 		store.ApiKey = generateStoreApiKey()
-	}
-
-	decision, err := ValidateStoreBeforeSave(store)
-	if err != nil {
-		return false, decision, err
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(store)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
 
 	// return affected != 0
-	return true, decision, nil
+	return true, nil
 }
 
-func AddStore(store *Store) (bool, *CapabilityDecision, error) {
+func AddStore(store *Store) (bool, error) {
 	if store.ApiKey == "" {
 		store.ApiKey = generateStoreApiKey()
 	}
 
-	decision, err := ValidateStoreBeforeSave(store)
-	if err != nil {
-		return false, decision, err
-	}
-
 	affected, err := adapter.engine.Insert(store)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
 
-	return affected != 0, decision, nil
+	return affected != 0, nil
 }
 
 func DeleteStore(store *Store) (bool, error) {
@@ -475,7 +463,7 @@ func RefreshStoreVectors(store *Store, lang string) (bool, error) {
 		return false, err
 	}
 
-	err = UpdateFilesStatusByStore(store.Owner, store.Name, FileStatusPending)
+	err = ResetFilesStateByStore(store.Owner, store.Name)
 	if err != nil {
 		return false, err
 	}
@@ -511,9 +499,7 @@ func AddVectorsForFile(store *Store, fileName string, fileUrl string, lang strin
 		return false, err
 	}
 
-	ok, err := withFileStatus(store.Owner, store.Name, fileName, func() (bool, int, error) {
-		return addVectorsForFile(embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
-	})
+	ok, _, err := addVectorsForFileWithOwner(store.Owner, embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
 
 	return ok, err
 }

@@ -28,7 +28,6 @@ import i18next from "i18next";
 import FileTree from "./FileTree";
 import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
-import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -290,15 +289,6 @@ class StoreEditPage extends React.Component {
             },
           }));
         } else {
-          const failedDecision = extractCapabilityDecision(res);
-          if (failedDecision) {
-            this.setState(prevState => ({
-              store: {
-                ...prevState.store,
-                decision: failedDecision,
-              },
-            }));
-          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
@@ -334,19 +324,6 @@ class StoreEditPage extends React.Component {
             {this.renderStoreActions()}
           </div>
         </div>
-
-        <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityError
-            decision={store.decision}
-            entityType="store"
-            entityId={store.owner + "/" + store.name}
-            onRecheck={(newDecision) => {
-              this.setState({
-                store: {...this.state.store, decision: newDecision},
-              });
-            }}
-          />
-        </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -926,15 +903,6 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
-          const failedDecision = extractCapabilityDecision(res);
-          if (failedDecision) {
-            this.setState(prevState => ({
-              store: {
-                ...prevState.store,
-                decision: failedDecision,
-              },
-            }));
-          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

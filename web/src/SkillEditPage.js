@@ -19,7 +19,6 @@ import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
-import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -108,19 +107,6 @@ class SkillEditPage extends React.Component {
             </Space>
           </div>
         </div>
-
-        <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityError
-            decision={skill.decision}
-            entityType="skill"
-            entityId={skill.owner + "/" + skill.name}
-            onRecheck={(newDecision) => {
-              this.setState({
-                skill: {...this.state.skill, decision: newDecision},
-              });
-            }}
-          />
-        </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -280,15 +266,6 @@ class SkillEditPage extends React.Component {
             this.props.history.push(`/skills/${this.state.skill.name}`);
           }
         } else {
-          const failedDecision = extractCapabilityDecision(res);
-          if (failedDecision) {
-            this.setState(prevState => ({
-              skill: {
-                ...prevState.skill,
-                decision: failedDecision,
-              },
-            }));
-          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

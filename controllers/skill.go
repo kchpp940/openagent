@@ -26,7 +26,7 @@ import (
 // @Title GetGlobalSkills
 // @Tag Skill API
 // @Description get global skills
-// @Success 200 {array} object.SkillWithDecision The Response object
+// @Success 200 {array} object.Skill The Response object
 // @router /get-global-skills [get]
 func (c *ApiController) GetGlobalSkills() {
 	skills, err := object.GetGlobalSkills()
@@ -35,14 +35,14 @@ func (c *ApiController) GetGlobalSkills() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichSkillsWithDecision(skills))
+	c.ResponseOk(skills)
 }
 
 // GetSkills
 // @Title GetSkills
 // @Tag Skill API
 // @Description get skills
-// @Success 200 {array} object.SkillWithDecision The Response object
+// @Success 200 {array} object.Skill The Response object
 // @router /get-skills [get]
 func (c *ApiController) GetSkills() {
 	owner := "admin"
@@ -59,7 +59,7 @@ func (c *ApiController) GetSkills() {
 			c.ResponseError(err.Error())
 			return
 		}
-		c.ResponseOk(object.EnrichSkillsWithDecision(skills))
+		c.ResponseOk(skills)
 	} else {
 		if !c.RequireAdmin() {
 			return
@@ -78,7 +78,7 @@ func (c *ApiController) GetSkills() {
 			return
 		}
 
-		c.ResponseOk(object.EnrichSkillsWithDecision(skills), paginator.Nums())
+		c.ResponseOk(skills, paginator.Nums())
 	}
 }
 
@@ -87,7 +87,7 @@ func (c *ApiController) GetSkills() {
 // @Tag Skill API
 // @Description get skill
 // @Param id query string true "The id of skill"
-// @Success 200 {object} object.SkillWithDecision The Response object
+// @Success 200 {object} object.Skill The Response object
 // @router /get-skill [get]
 func (c *ApiController) GetSkill() {
 	id := c.Input().Get("id")
@@ -98,7 +98,7 @@ func (c *ApiController) GetSkill() {
 		return
 	}
 
-	c.ResponseOk(object.EnrichSkillWithDecision(s))
+	c.ResponseOk(s)
 }
 
 // UpdateSkill
@@ -119,9 +119,9 @@ func (c *ApiController) UpdateSkill() {
 		return
 	}
 
-	success, decision, err := object.UpdateSkill(id, &s)
+	success, err := object.UpdateSkill(id, &s)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -144,9 +144,9 @@ func (c *ApiController) AddSkill() {
 	}
 
 	s.Owner = "admin"
-	success, decision, err := object.AddSkill(&s)
+	success, err := object.AddSkill(&s)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -198,29 +198,4 @@ func (c *ApiController) LoadSkill() {
 	}
 
 	c.ResponseOk(s)
-}
-
-// CheckSkillCapability
-// @Title CheckSkillCapability
-// @Tag Skill API
-// @Description check skill capability with recheck
-// @Param body body object.CapabilityCheckRequest true "The capability check request"
-// @Success 200 {object} object.CapabilityCheckResponse The Response object
-// @router /check-skill-capability [post]
-func (c *ApiController) CheckSkillCapability() {
-	var req object.CapabilityCheckRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	req.EntityType = object.EntityTypeSkill
-	resp, err := object.HandleCapabilityCheck(&req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	c.ResponseOk(resp)
 }

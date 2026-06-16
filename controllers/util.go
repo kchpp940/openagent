@@ -26,13 +26,11 @@ import (
 	"github.com/the-open-agent/openagent/auth"
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/i18n"
-	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
 
 type Response struct {
 	Status string      `json:"status"`
-	Code   string      `json:"code,omitempty"`
 	Msg    string      `json:"msg"`
 	Data   interface{} `json:"data"`
 	Data2  interface{} `json:"data2"`
@@ -59,39 +57,6 @@ func (c *ApiController) ResponseError(error string, data ...interface{}) {
 		fallthrough
 	case 1:
 		resp.Data = data[0]
-	}
-	c.Data["json"] = resp
-	c.ServeJSON()
-}
-
-func (c *ApiController) ResponseErrorWithCode(code string, error string, data interface{}) {
-	resp := Response{Status: "error", Code: code, Msg: error, Data: data}
-	c.Data["json"] = resp
-	c.ServeJSON()
-}
-
-func (c *ApiController) ResponseCapabilityError(decision *object.CapabilityDecision) {
-	if decision == nil {
-		c.ResponseErrorWithCode(object.ErrCodeCapabilityCheckFailed, "capability check failed", nil)
-		return
-	}
-	msg := decision.BlockReason
-	if msg == "" {
-		if len(decision.Errors) > 0 {
-			msg = decision.Errors[0].Message
-		} else if len(decision.FailedResources) > 0 {
-			msg = fmt.Sprintf("%d dependent resources failed", len(decision.FailedResources))
-		} else {
-			msg = "capability check failed"
-		}
-	}
-	resp := Response{
-		Status: "error",
-		Code:   object.ErrCodeCapabilityCheckFailed,
-		Msg:    msg,
-		Data: map[string]interface{}{
-			"decision": decision,
-		},
 	}
 	c.Data["json"] = resp
 	c.ServeJSON()

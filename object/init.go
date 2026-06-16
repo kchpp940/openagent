@@ -145,7 +145,7 @@ func initBuiltInStore(modelProviderName string, embeddingProviderName string, tt
 		}
 	}
 
-	_, _, err = AddStore(store)
+	_, err = AddStore(store)
 	if err != nil {
 		panic(err)
 	}
@@ -613,7 +613,7 @@ func initBuiltInTools() {
 		if existing != nil {
 			if len(existing.PromptExamples) == 0 && len(t.PromptExamples) > 0 {
 				existing.PromptExamples = t.PromptExamples
-				_, _, err = UpdateTool(existing.GetId(), existing)
+				_, err = UpdateTool(existing.GetId(), existing)
 				if err != nil {
 					panic(err)
 				}
@@ -621,7 +621,7 @@ func initBuiltInTools() {
 			continue
 		}
 		t.CreatedTime = util.GetCurrentTime()
-		_, _, err = AddTool(t)
+		_, err = AddTool(t)
 		if err != nil {
 			panic(err)
 		}

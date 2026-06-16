@@ -48,8 +48,7 @@ type Tool struct {
 	ResultSummary  string   `xorm:"varchar(500)" json:"resultSummary"`
 	PromptExamples []string `xorm:"mediumtext" json:"promptExamples"`
 
-	State      string `xorm:"varchar(100)" json:"state"`
-	ConfigHash string `xorm:"varchar(100)" json:"configHash"`
+	State string `xorm:"varchar(100)" json:"state"`
 }
 
 func (t *Tool) GetId() string {
@@ -143,46 +142,36 @@ func GetPaginationTools(owner string, offset, limit int, field, value, sortField
 	return tools, err
 }
 
-func UpdateTool(id string, t *Tool) (bool, *CapabilityDecision, error) {
+func UpdateTool(id string, t *Tool) (bool, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	toolDb, err := getTool(owner, name)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	if t == nil || toolDb == nil {
-		return false, nil, nil
+		return false, nil
 	}
 
 	if t.ClientSecret == "***" {
 		t.ClientSecret = toolDb.ClientSecret
 	}
 
-	decision, err := ValidateToolBeforeSave(t)
-	if err != nil {
-		return false, decision, err
-	}
-
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(t)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
-	return true, decision, nil
+	return true, nil
 }
 
-func AddTool(t *Tool) (bool, *CapabilityDecision, error) {
-	decision, err := ValidateToolBeforeSave(t)
-	if err != nil {
-		return false, decision, err
-	}
-
+func AddTool(t *Tool) (bool, error) {
 	affected, err := adapter.engine.Insert(t)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
-	return affected != 0, decision, nil
+	return affected != 0, nil
 }
 
 func DeleteTool(t *Tool) (bool, error) {

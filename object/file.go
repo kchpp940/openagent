@@ -28,6 +28,40 @@ import (
 	"xorm.io/core"
 )
 
+type KnowledgeFileState string
+
+const (
+	KnowledgeFileStateUploaded      KnowledgeFileState = "Uploaded"
+	KnowledgeFileStateParsing       KnowledgeFileState = "Parsing"
+	KnowledgeFileStateVectorizing   KnowledgeFileState = "Vectorizing"
+	KnowledgeFileStatePartialFailed KnowledgeFileState = "PartialFailed"
+	KnowledgeFileStateReady         KnowledgeFileState = "Ready"
+	KnowledgeFileStateFailed        KnowledgeFileState = "Failed"
+)
+
+type VectorBuildState string
+
+const (
+	VectorBuildStatePending   VectorBuildState = "Pending"
+	VectorBuildStateBuilding  VectorBuildState = "Building"
+	VectorBuildStatePartial   VectorBuildState = "Partial"
+	VectorBuildStateCompleted VectorBuildState = "Completed"
+	VectorBuildStateFailed    VectorBuildState = "Failed"
+)
+
+type FileStateDetail struct {
+	State         KnowledgeFileState `json:"state"`
+	VectorState   VectorBuildState   `json:"vectorState"`
+	ErrorText     string             `json:"errorText"`
+	VectorError   string             `json:"vectorError"`
+	Progress      int                `json:"progress"`
+	TotalSections int                `json:"totalSections"`
+	CanRetry      bool               `json:"canRetry"`
+	CanDelete     bool               `json:"canDelete"`
+	Label         string             `json:"label"`
+	LabelColor    string             `json:"labelColor"`
+}
+
 type FileStatus string
 
 const (
@@ -51,6 +85,13 @@ type File struct {
 	VectorCount     int        `xorm:"-" json:"vectorCount"`
 	Status          FileStatus `xorm:"varchar(100)" json:"status"`
 	ErrorText       string     `xorm:"mediumtext" json:"errorText"`
+
+	FileState     KnowledgeFileState `xorm:"varchar(100)" json:"fileState"`
+	VectorState   VectorBuildState   `xorm:"varchar(100)" json:"vectorState"`
+	VectorError   string             `xorm:"mediumtext" json:"vectorError"`
+	Progress      int                `json:"progress"`
+	TotalSections int                `json:"totalSections"`
+	StateDetail   *FileStateDetail   `xorm:"-" json:"stateDetail"`
 }
 
 func populateFileVectorCounts(files []*File) error {
@@ -89,6 +130,11 @@ func GetGlobalFiles() ([]*File, error) {
 		return files, err
 	}
 
+	err = populateFileStateDetails(files)
+	if err != nil {
+		return files, err
+	}
+
 	return files, nil
 }
 
@@ -99,12 +145,32 @@ func GetFiles(owner string) ([]*File, error) {
 		return files, err
 	}
 
+	err = populateFileVectorCounts(files)
+	if err != nil {
+		return files, err
+	}
+
+	err = populateFileStateDetails(files)
+	if err != nil {
+		return files, err
+	}
+
 	return files, nil
 }
 
 func GetFilesByStore(owner string, store string) ([]*File, error) {
 	files := []*File{}
 	err := adapter.engine.Desc("created_time").Find(&files, &File{Owner: owner, Store: store})
+	if err != nil {
+		return files, err
+	}
+
+	err = populateFileVectorCounts(files)
+	if err != nil {
+		return files, err
+	}
+
+	err = populateFileStateDetails(files)
 	if err != nil {
 		return files, err
 	}
@@ -128,7 +194,21 @@ func getFile(owner string, name string) (*File, error) {
 
 func GetFile(id string) (*File, error) {
 	owner, name := util.GetOwnerAndNameFromIdNoCheck(id)
-	return getFile(owner, name)
+	file, err := getFile(owner, name)
+	if err != nil || file == nil {
+		return file, err
+	}
+
+	files := []*File{file}
+	err = populateFileVectorCounts(files)
+	if err != nil {
+		return file, err
+	}
+	err = populateFileStateDetails(files)
+	if err != nil {
+		return file, err
+	}
+	return file, nil
 }
 
 func UpdateFile(id string, file *File) (bool, error) {
@@ -244,6 +324,11 @@ func GetPaginationFiles(owner, store string, offset, limit int, field, value, so
 		return files, err
 	}
 
+	err = populateFileStateDetails(files)
+	if err != nil {
+		return files, err
+	}
+
 	if fileVirtualSortFields[sortField] {
 		sort.SliceStable(files, func(i, j int) bool {
 			if sortOrder == "ascend" {
@@ -275,6 +360,169 @@ func UpdateFilesStatusByStore(owner string, storeName string, status FileStatus)
 	_, err := adapter.engine.Where("owner = ? and store = ?", owner, storeName).
 		Cols("status", "error_text").Update(&File{Status: status, ErrorText: ""})
 	return err
+}
+
+func ResetFilesStateByStore(owner string, storeName string) error {
+	_, err := adapter.engine.Where("owner = ? and store = ?", owner, storeName).
+		Cols("file_state", "vector_state", "error_text", "vector_error", "progress", "total_sections", "status").
+		Update(&File{
+			FileState:   KnowledgeFileStateUploaded,
+			VectorState: VectorBuildStatePending,
+			Status:      FileStatusPending,
+		})
+	return err
+}
+
+func (f *File) ComputeStateDetail() *FileStateDetail {
+	detail := &FileStateDetail{
+		State:         f.FileState,
+		VectorState:   f.VectorState,
+		ErrorText:     f.ErrorText,
+		VectorError:   f.VectorError,
+		Progress:      f.Progress,
+		TotalSections: f.TotalSections,
+		CanDelete:     true,
+	}
+
+	if f.FileState == "" {
+		if f.Status == FileStatusFinished {
+			detail.State = KnowledgeFileStateReady
+			detail.VectorState = VectorBuildStateCompleted
+		} else if f.Status == FileStatusProcessing {
+			detail.State = KnowledgeFileStateVectorizing
+			detail.VectorState = VectorBuildStateBuilding
+		} else if f.Status == FileStatusError {
+			detail.State = KnowledgeFileStateFailed
+			detail.VectorState = VectorBuildStateFailed
+		} else {
+			detail.State = KnowledgeFileStateUploaded
+			detail.VectorState = VectorBuildStatePending
+		}
+	}
+
+	switch detail.State {
+	case KnowledgeFileStateUploaded:
+		detail.Label = "Uploaded"
+		detail.LabelColor = "default"
+		detail.CanRetry = false
+	case KnowledgeFileStateParsing:
+		detail.Label = "Parsing"
+		detail.LabelColor = "processing"
+		detail.CanRetry = false
+	case KnowledgeFileStateVectorizing:
+		detail.Label = "Vectorizing"
+		detail.LabelColor = "processing"
+		detail.CanRetry = false
+	case KnowledgeFileStatePartialFailed:
+		detail.Label = "Partial Failed"
+		detail.LabelColor = "warning"
+		detail.CanRetry = true
+	case KnowledgeFileStateReady:
+		detail.Label = "Ready"
+		detail.LabelColor = "success"
+		detail.CanRetry = true
+	case KnowledgeFileStateFailed:
+		detail.Label = "Failed"
+		detail.LabelColor = "error"
+		detail.CanRetry = true
+	default:
+		detail.Label = string(detail.State)
+		detail.LabelColor = "default"
+		detail.CanRetry = true
+	}
+
+	return detail
+}
+
+func populateFileStateDetails(files []*File) error {
+	for _, f := range files {
+		f.StateDetail = f.ComputeStateDetail()
+	}
+	return nil
+}
+
+type SetFileStateOptions struct {
+	FileState     KnowledgeFileState
+	VectorState   VectorBuildState
+	ErrorText     string
+	VectorError   string
+	Progress      int
+	TotalSections int
+	TokenCount    int
+	UpdateTokens  bool
+}
+
+func SetFileState(owner string, storeName string, objectKey string, opts SetFileStateOptions) error {
+	name := getFileName(storeName, objectKey)
+	cols := []string{}
+	file := &File{}
+
+	if opts.FileState != "" {
+		cols = append(cols, "file_state")
+		file.FileState = opts.FileState
+	}
+	if opts.VectorState != "" {
+		cols = append(cols, "vector_state")
+		file.VectorState = opts.VectorState
+	}
+	if opts.ErrorText != "" || opts.FileState == KnowledgeFileStateReady || opts.FileState == KnowledgeFileStateUploaded {
+		cols = append(cols, "error_text")
+		file.ErrorText = opts.ErrorText
+	}
+	if opts.VectorError != "" || opts.VectorState == VectorBuildStateCompleted || opts.VectorState == VectorBuildStatePending {
+		cols = append(cols, "vector_error")
+		file.VectorError = opts.VectorError
+	}
+	if opts.Progress > 0 || opts.TotalSections > 0 {
+		cols = append(cols, "progress", "total_sections")
+		file.Progress = opts.Progress
+		file.TotalSections = opts.TotalSections
+	}
+	if opts.UpdateTokens {
+		cols = append(cols, "token_count")
+		file.TokenCount = opts.TokenCount
+	}
+
+	legacyStatus := mapKnowledgeStateToLegacy(opts.FileState, opts.VectorState)
+	if legacyStatus != "" {
+		cols = append(cols, "status")
+		file.Status = legacyStatus
+	}
+
+	if len(cols) == 0 {
+		return nil
+	}
+
+	_, err := adapter.engine.ID(core.PK{owner, name}).Cols(cols...).Update(file)
+	return err
+}
+
+func mapKnowledgeStateToLegacy(fileState KnowledgeFileState, vectorState VectorBuildState) FileStatus {
+	switch fileState {
+	case KnowledgeFileStateUploaded:
+		return FileStatusPending
+	case KnowledgeFileStateParsing, KnowledgeFileStateVectorizing:
+		return FileStatusProcessing
+	case KnowledgeFileStateReady:
+		return FileStatusFinished
+	case KnowledgeFileStatePartialFailed, KnowledgeFileStateFailed:
+		return FileStatusError
+	default:
+		if vectorState == VectorBuildStateBuilding {
+			return FileStatusProcessing
+		}
+		if vectorState == VectorBuildStateCompleted {
+			return FileStatusFinished
+		}
+		if vectorState == VectorBuildStateFailed {
+			return FileStatusError
+		}
+		return ""
+	}
+}
+
+func SetFileStateWithFallback(file *File, opts SetFileStateOptions) error {
+	return SetFileState(file.Owner, file.Store, file.getObjectKey(), opts)
 }
 
 func deleteFileRecord(owner string, storeName string, objectKey string) error {
@@ -347,6 +595,8 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 		Url:             fileUrl,
 		TokenCount:      0,
 		Status:          FileStatusPending,
+		FileState:       KnowledgeFileStateUploaded,
+		VectorState:     VectorBuildStatePending,
 	}
 
 	_, err = AddFile(fileRecord)

@@ -39,10 +39,7 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		if err == nil {
 			toolNames = make([]string, 0, len(allTools))
 			for _, t := range allTools {
-				mountable, _ := CheckToolMountable(t)
-				if mountable {
-					toolNames = append(toolNames, t.Name)
-				}
+				toolNames = append(toolNames, t.Name)
 			}
 		}
 	}
@@ -51,10 +48,6 @@ func buildMergedBuiltinRegistry(store *Store, user, origin, lang string) *tool.T
 		id := util.GetIdFromOwnerAndName(store.Owner, tname)
 		t, err := GetTool(id)
 		if err != nil || t == nil {
-			continue
-		}
-		mountable, _ := CheckToolMountable(t)
-		if !mountable {
 			continue
 		}
 		tp, err := tool.New(getToolConfig(t), lang)

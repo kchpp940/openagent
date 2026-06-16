@@ -138,8 +138,7 @@ func (c *ApiController) GetStores() {
 		return
 	}
 
-	maskedStores := object.GetMaskedStores(stores)
-	c.ResponseOk(object.EnrichStoresWithDecision(maskedStores))
+	c.ResponseOk(object.GetMaskedStores(stores))
 }
 
 // GetStore
@@ -169,12 +168,12 @@ func (c *ApiController) GetStore() {
 		origin := getOriginFromHost(host)
 		err = store.Populate(origin, c.GetAcceptLanguage())
 		if err != nil {
-			c.ResponseOk(object.EnrichStoreWithDecision(object.GetMaskedStore(store)), err.Error())
+			c.ResponseOk(object.GetMaskedStore(store), err.Error())
 			return
 		}
 	}
 
-	c.ResponseOk(object.EnrichStoreWithDecision(object.GetMaskedStore(store)))
+	c.ResponseOk(object.GetMaskedStore(store))
 }
 
 // UpdateStore
@@ -228,9 +227,9 @@ func (c *ApiController) UpdateStore() {
 		return
 	}
 
-	success, decision, err := object.UpdateStore(id, &store)
+	success, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -244,7 +243,7 @@ func (c *ApiController) UpdateStore() {
 		for _, store2 := range stores {
 			if store2.Owner == store.Owner && store2.GetId() != store.GetId() && store2.IsDefault {
 				store2.IsDefault = false
-				success, _, err = object.UpdateStore(store2.GetId(), store2)
+				success, err = object.UpdateStore(store2.GetId(), store2)
 				if err != nil {
 					c.ResponseError(err.Error())
 					return
@@ -303,9 +302,9 @@ func (c *ApiController) AddStore() {
 		}
 	}
 
-	success, decision, err := object.AddStore(&store)
+	success, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseCapabilityError(decision)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -381,7 +380,7 @@ func (c *ApiController) ClaimStore() {
 
 	username := c.GetSessionUsername()
 	store.Owner = username
-	_, _, err = object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
+	_, err = object.UpdateStore(fmt.Sprintf("admin/%s", store.Name), store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -499,29 +498,4 @@ func (c *ApiController) AddSharedStore() {
 	}
 
 	c.ResponseOk(newStore)
-}
-
-// CheckStoreCapability
-// @Title CheckStoreCapability
-// @Tag Store API
-// @Description check store capability with recheck and failed resources
-// @Param body body object.CapabilityCheckRequest true "The capability check request"
-// @Success 200 {object} object.CapabilityCheckResponse The Response object
-// @router /check-store-capability [post]
-func (c *ApiController) CheckStoreCapability() {
-	var req object.CapabilityCheckRequest
-	err := json.Unmarshal(c.Ctx.Input.RequestBody, &req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	req.EntityType = object.EntityTypeStore
-	resp, err := object.HandleCapabilityCheck(&req)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	c.ResponseOk(resp)
 }

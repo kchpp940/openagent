@@ -19,7 +19,6 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
-import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 
@@ -128,19 +127,6 @@ class ToolEditPage extends React.Component {
             </Space>
           </div>
         </div>
-
-        <Card size="small" title={renderCardTitle(i18next.t("general:Capability Status"), i18next.t("general:Capability Status desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <CapabilityError
-            decision={tool.decision}
-            entityType="tool"
-            entityId={tool.owner + "/" + tool.name}
-            onRecheck={(newDecision) => {
-              this.setState({
-                tool: {...this.state.tool, decision: newDecision},
-              });
-            }}
-          />
-        </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
           <Row gutter={rowGutter}>
@@ -351,15 +337,6 @@ class ToolEditPage extends React.Component {
             this.props.history.push(`/tools/${this.state.tool.name}`);
           }
         } else {
-          const failedDecision = extractCapabilityDecision(res);
-          if (failedDecision) {
-            this.setState(prevState => ({
-              tool: {
-                ...prevState.tool,
-                decision: failedDecision,
-              },
-            }));
-          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

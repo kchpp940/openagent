@@ -66,12 +66,14 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			Name:            getFileName(store.Name, objectKey),
 			CreatedTime:     util.GetCurrentTime(),
 			Filename:        filename,
-			Size:            int64(len(bs)),
+			Size:            int64(fileBuffer.Len()),
 			Store:           store.Name,
 			StorageProvider: store.StorageProvider,
 			Url:             fileUrl,
 			TokenCount:      0,
-			Status:          FileStatusPending, // Initial status before embedding
+			Status:          FileStatusPending,
+			FileState:       KnowledgeFileStateUploaded,
+			VectorState:     VectorBuildStatePending,
 		}
 		_, err = AddFile(fileRecord)
 		if err != nil {

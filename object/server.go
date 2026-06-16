@@ -49,8 +49,6 @@ type Server struct {
 	Tools       []*McpTool `xorm:"mediumtext" json:"tools"`
 	TestContent string     `xorm:"varchar(500)" json:"testContent"`
 	IsDefault   bool       `json:"isDefault"`
-	State       string     `xorm:"varchar(100)" json:"state"`
-	ConfigHash  string     `xorm:"varchar(100)" json:"configHash"`
 }
 
 func (s *Server) GetId() string {
@@ -109,100 +107,70 @@ func GetServerByOwnerAndName(owner, nameOrId string) (*Server, error) {
 	return nil, nil
 }
 
-func AddServer(server *Server) (bool, *CapabilityDecision, error) {
-	decision, err := ValidateServerBeforeSave(server)
-	if err != nil {
-		return false, decision, err
-	}
-	server.State = "Active"
-	if !decision.CanMount {
-		server.State = "Inactive"
-	}
-
+func AddServer(server *Server) (bool, error) {
 	affected, err := adapter.engine.Insert(server)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
-	return affected != 0, decision, nil
+	return affected != 0, nil
 }
 
-func UpdateServer(id string, server *Server) (bool, *CapabilityDecision, error) {
+func UpdateServer(id string, server *Server) (bool, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	oldServer, err := getServer(owner, name)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	if oldServer != nil && server.Token == "" {
 		server.Token = oldServer.Token
 	}
 
-	decision, err := ValidateServerBeforeSave(server)
-	if err != nil {
-		return false, decision, err
-	}
-	server.State = "Active"
-	if !decision.CanMount {
-		server.State = "Inactive"
-	}
-
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
-	return true, decision, nil
+	return true, nil
 }
 
-func SyncMcpTool(id string, server *Server, isCleared bool) (bool, *CapabilityDecision, error) {
+func SyncMcpTool(id string, server *Server, isCleared bool) (bool, error) {
 	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	if isCleared {
 		server.Tools = nil
-		decision, _ := ValidateServerBeforeSave(server)
-		server.State = "Active"
-		if !decision.CanMount {
-			server.State = "Inactive"
-		}
-		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools", "state", "config_hash").Update(server)
+		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("tools").Update(server)
 		if err != nil {
-			return false, decision, err
+			return false, err
 		}
-		return true, decision, nil
+		return true, nil
 	}
 
 	oldServer, err := getServer(owner, name)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	if oldServer == nil {
-		return false, nil, nil
+		return false, nil
 	}
 	if server.Token == "" {
 		server.Token = oldServer.Token
 	}
 
 	if err = syncServerTools(server); err != nil {
-		decision := CheckServerCapability(server)
-		return false, decision, err
-	}
-
-	decision, _ := ValidateServerBeforeSave(server)
-	server.State = "Active"
-	if !decision.CanMount {
-		server.State = "Inactive"
+		return false, err
 	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(server)
 	if err != nil {
-		return false, decision, err
+		return false, err
 	}
-	return true, decision, nil
+	return true, nil
 }
 
 func syncServerTools(server *Server) error {
@@ -256,11 +224,6 @@ func DeleteServer(server *Server) (bool, error) {
 func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 	if s.Url == "" {
 		return nil, nil
-	}
-
-	mountable, decision := CheckServerMountable(s)
-	if !mountable {
-		return nil, fmt.Errorf("server is not mountable: %s", decision.Summary())
 	}
 
 	cli, err := mcp.NewClient(s.Url, s.Token)

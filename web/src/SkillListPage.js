@@ -23,7 +23,6 @@ import i18next from "i18next";
 import {DeleteOutlined, DownloadOutlined, EditOutlined, ShopOutlined} from "@ant-design/icons";
 import LoadSkillModal from "./LoadSkillModal";
 import SkillMarketplaceModal from "./SkillMarketplaceModal";
-import {CapabilityListStatus} from "./CapabilityError";
 
 const SKILL_TYPES = ["writing", "coding", "analysis", "translation", "reasoning", "search", "custom"];
 
@@ -162,19 +161,11 @@ class SkillListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("general:Capability"),
-        dataIndex: "decision",
-        key: "decision",
-        width: "280px",
-        sorter: (a, b) => {
-          const aErr = a.decision?.errors?.length || 0;
-          const bErr = b.decision?.errors?.length || 0;
-          if (aErr !== bErr) {return aErr - bErr;}
-          return (a.decision?.canMount === b.decision?.canMount) ? 0 : (a.decision?.canMount ? -1 : 1);
-        },
-        render: (_, record) => (
-          <CapabilityListStatus decision={record.decision} compact />
-        ),
+        title: i18next.t("general:State"),
+        dataIndex: "state",
+        key: "state",
+        width: "100px",
+        sorter: (a, b) => (a.state || "").localeCompare(b.state || ""),
       },
       {
         title: i18next.t("general:Action"),

@@ -22,7 +22,6 @@ import * as ServerBackend from "./backend/ServerBackend";
 import i18next from "i18next";
 import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
 import ScanServerModal from "./common/modal/ScanServerModal";
-import {CapabilityListStatus} from "./CapabilityError";
 
 class ServerListPage extends BaseListPage {
   constructor(props) {
@@ -178,21 +177,6 @@ class ServerListPage extends BaseListPage {
         key: "tools",
         width: "130px",
         render: (_, record) => (record.tools ? record.tools.length : 0),
-      },
-      {
-        title: i18next.t("general:Capability"),
-        dataIndex: "decision",
-        key: "decision",
-        width: "280px",
-        sorter: (a, b) => {
-          const aErr = a.decision?.errors?.length || 0;
-          const bErr = b.decision?.errors?.length || 0;
-          if (aErr !== bErr) {return aErr - bErr;}
-          return (a.decision?.canMount === b.decision?.canMount) ? 0 : (a.decision?.canMount ? -1 : 1);
-        },
-        render: (_, record) => (
-          <CapabilityListStatus decision={record.decision} compact />
-        ),
       },
       {
         title: i18next.t("general:Action"),

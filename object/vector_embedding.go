@@ -106,14 +106,31 @@ func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text st
 }
 
 func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeName string, fileKey string, fileUrl string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, int, error) {
+	return addVectorsForFileWithOwner("", embeddingProviderObj, storeName, fileKey, fileUrl, splitProviderName, embeddingProviderName, modelSubType, lang)
+}
+
+func addVectorsForFileWithOwner(owner string, embeddingProviderObj embedding.EmbeddingProvider, storeName string, fileKey string, fileUrl string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, int, error) {
 	var (
 		affected        bool
 		totalTokenCount int
 	)
 
+	if owner != "" {
+		SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+			FileState:   KnowledgeFileStateParsing,
+			VectorState: VectorBuildStatePending,
+		})
+	}
+
 	fileExt := filepath.Ext(fileKey)
 	text, err := txt.GetParsedTextFromUrl(fileUrl, fileExt, lang)
 	if err != nil {
+		if owner != "" {
+			SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+				FileState: KnowledgeFileStateFailed,
+				ErrorText: err.Error(),
+			})
+		}
 		return false, 0, err
 	}
 
@@ -132,14 +149,36 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 
 	splitProvider, err := split.GetSplitProvider(splitProviderType)
 	if err != nil {
+		if owner != "" {
+			SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+				FileState: KnowledgeFileStateFailed,
+				ErrorText: err.Error(),
+			})
+		}
 		return false, 0, err
 	}
 
 	textSections, err := splitProvider.SplitText(text)
 	if err != nil {
+		if owner != "" {
+			SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+				FileState: KnowledgeFileStateFailed,
+				ErrorText: err.Error(),
+			})
+		}
 		return false, 0, err
 	}
 
+	if owner != "" {
+		SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+			FileState:     KnowledgeFileStateVectorizing,
+			VectorState:   VectorBuildStateBuilding,
+			Progress:      0,
+			TotalSections: len(textSections),
+		})
+	}
+
+	successCount := 0
 	for i, textSection := range textSections {
 		logs.Info("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s", i+1, len(textSections), storeName, fileKey, i, textSection)
 
@@ -161,18 +200,47 @@ func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeNa
 		err = backoff.Retry(operation, backoff.NewExponentialBackOff())
 		if err != nil {
 			logs.Error("Failed to generate embedding after retries: %v", err)
+			if owner != "" {
+				SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+					FileState:   KnowledgeFileStatePartialFailed,
+					VectorState: VectorBuildStatePartial,
+					VectorError: err.Error(),
+					Progress:    i,
+				})
+			}
 			return affected, totalTokenCount, err
 		}
 
+		successCount++
 		affected = affected || sectionAffected
 		totalTokenCount += sectionTokenCount
+
+		if owner != "" {
+			SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+				Progress: i + 1,
+			})
+		}
+	}
+
+	if owner != "" {
+		SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+			FileState:     KnowledgeFileStateReady,
+			VectorState:   VectorBuildStateCompleted,
+			Progress:      len(textSections),
+			TotalSections: len(textSections),
+			TokenCount:    totalTokenCount,
+			UpdateTokens:  true,
+		})
 	}
 
 	return affected, totalTokenCount, nil
 }
 
 func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
-	err := updateFileStatus(owner, storeName, fileKey, FileStatusProcessing, "", 0)
+	err := SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+		FileState:   KnowledgeFileStateVectorizing,
+		VectorState: VectorBuildStateBuilding,
+	})
 	if err != nil {
 		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
 		return false, err
@@ -180,14 +248,25 @@ func withFileStatus(owner string, storeName string, fileKey string, op func() (b
 
 	affected, tokenCount, opErr := op()
 
-	fileStatus := FileStatusFinished
-	errorText := ""
+	var finalState KnowledgeFileState
+	var finalVectorState VectorBuildState
+	var errorText string
 	if opErr != nil {
-		fileStatus = FileStatusError
+		finalState = KnowledgeFileStateFailed
+		finalVectorState = VectorBuildStateFailed
 		errorText = opErr.Error()
+	} else {
+		finalState = KnowledgeFileStateReady
+		finalVectorState = VectorBuildStateCompleted
 	}
 
-	err = updateFileStatus(owner, storeName, fileKey, fileStatus, errorText, tokenCount)
+	err = SetFileState(owner, storeName, fileKey, SetFileStateOptions{
+		FileState:    finalState,
+		VectorState:  finalVectorState,
+		ErrorText:    errorText,
+		TokenCount:   tokenCount,
+		UpdateTokens: true,
+	})
 	if err != nil {
 		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
 		return affected, errors.Join(opErr, err)
@@ -210,9 +289,7 @@ func addVectorsForStore(storageProviderObj storage.StorageProvider, embeddingPro
 	files = filterTextFiles(files)
 
 	for _, file := range files {
-		fileAffected, err := withFileStatus(owner, storeName, file.Key, func() (bool, int, error) {
-			return addVectorsForFile(embeddingProviderObj, storeName, file.Key, file.Url, splitProviderName, embeddingProviderName, modelSubType, lang)
-		})
+		fileAffected, _, err := addVectorsForFileWithOwner(owner, embeddingProviderObj, storeName, file.Key, file.Url, splitProviderName, embeddingProviderName, modelSubType, lang)
 		if err != nil {
 			logs.Error("Failed to add vectors for store: [%s], file: [%s]: %v", storeName, file.Key, err)
 			fileErr = errors.Join(fileErr, err)

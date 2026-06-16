@@ -91,27 +91,3 @@ export function testTool(tool) {
     body: JSON.stringify(newTool),
   }).then(res => Setting.handleFetchResponse(res));
 }
-
-export function checkCapability(entityType, entityId, force = false) {
-  let endpoint = "/api/check-tool-capability";
-  if (entityType === "skill") {
-    endpoint = "/api/check-skill-capability";
-  } else if (entityType === "server") {
-    endpoint = "/api/check-server-capability";
-  } else if (entityType === "store") {
-    endpoint = "/api/check-store-capability";
-  }
-
-  return fetch(`${Setting.ServerUrl}${endpoint}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify({
-      entityType,
-      entityId,
-      force,
-    }),
-  }).then(res => Setting.handleFetchResponse(res));
-}
