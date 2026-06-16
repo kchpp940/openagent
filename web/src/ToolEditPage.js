@@ -19,7 +19,7 @@ import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
-import {CapabilityError} from "./CapabilityError";
+import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 
@@ -351,6 +351,15 @@ class ToolEditPage extends React.Component {
             this.props.history.push(`/tools/${this.state.tool.name}`);
           }
         } else {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
+            this.setState(prevState => ({
+              tool: {
+                ...prevState.tool,
+                decision: failedDecision,
+              },
+            }));
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

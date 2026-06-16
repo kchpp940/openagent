@@ -21,7 +21,7 @@ import * as Setting from "./Setting";
 import i18next from "i18next";
 import ToolTable from "./table/ToolTable";
 import TestMcpWidget from "./common/TestMcpWidget";
-import {CapabilityError} from "./CapabilityError";
+import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 class ServerEditPage extends React.Component {
   constructor(props) {
@@ -71,6 +71,15 @@ class ServerEditPage extends React.Component {
             this.props.history.push("/servers");
           }
         } else {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
+            this.setState(prevState => ({
+              server: {
+                ...prevState.server,
+                decision: failedDecision,
+              },
+            }));
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
@@ -95,6 +104,15 @@ class ServerEditPage extends React.Component {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.getServer();
         } else {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
+            this.setState(prevState => ({
+              server: {
+                ...prevState.server,
+                decision: failedDecision,
+              },
+            }));
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

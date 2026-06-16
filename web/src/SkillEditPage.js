@@ -19,7 +19,7 @@ import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import Editor from "./common/Editor";
-import {CapabilityError} from "./CapabilityError";
+import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -280,6 +280,15 @@ class SkillEditPage extends React.Component {
             this.props.history.push(`/skills/${this.state.skill.name}`);
           }
         } else {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
+            this.setState(prevState => ({
+              skill: {
+                ...prevState.skill,
+                decision: failedDecision,
+              },
+            }));
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })

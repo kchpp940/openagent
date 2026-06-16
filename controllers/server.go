@@ -110,7 +110,7 @@ func (c *ApiController) UpdateServer() {
 
 	success, decision, err := object.UpdateServer(id, &server)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 
@@ -135,7 +135,7 @@ func (c *ApiController) AddServer() {
 	server.Owner = "admin"
 	success, decision, err := object.AddServer(&server)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 
@@ -211,7 +211,7 @@ func (c *ApiController) SyncMcpTool() {
 
 	ok, decision, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 	c.ResponseOk(ok)

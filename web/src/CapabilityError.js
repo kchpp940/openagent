@@ -27,6 +27,23 @@ import * as ToolBackend from "./backend/ToolBackend";
 
 const {Text} = Typography;
 
+const ERR_CODE_CAPABILITY_CHECK_FAILED = "CAPABILITY_CHECK_FAILED";
+
+export function extractCapabilityDecision(res) {
+  if (!res) {return null;}
+  if (res.decision) {return res.decision;}
+  if (res.data && res.data.decision) {return res.data.decision;}
+  if (res.code === ERR_CODE_CAPABILITY_CHECK_FAILED && res.data && res.data.decision) {
+    return res.data.decision;
+  }
+  if (res.canMount !== undefined || res.canSaveStore !== undefined) {return res;}
+  return null;
+}
+
+export function isCapabilityError(res) {
+  return res && res.code === ERR_CODE_CAPABILITY_CHECK_FAILED;
+}
+
 const statusMap = {
   canMount: {
     true: {icon: <CheckCircleOutlined />, color: "#52c41a", text: "可挂载"},

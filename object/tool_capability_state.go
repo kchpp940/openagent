@@ -34,6 +34,11 @@ const (
 	EntityTypeStore  CapabilityEntityType = "Store"
 )
 
+const (
+	ErrCodeCapabilityCheckFailed = "CAPABILITY_CHECK_FAILED"
+	ErrCodeCapabilityNeedsRecheck = "CAPABILITY_NEEDS_RECHECK"
+)
+
 type CapabilityError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

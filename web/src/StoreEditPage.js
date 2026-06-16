@@ -28,7 +28,7 @@ import i18next from "i18next";
 import FileTree from "./FileTree";
 import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
-import {CapabilityError} from "./CapabilityError";
+import {CapabilityError, extractCapabilityDecision} from "./CapabilityError";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -290,6 +290,15 @@ class StoreEditPage extends React.Component {
             },
           }));
         } else {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
+            this.setState(prevState => ({
+              store: {
+                ...prevState.store,
+                decision: failedDecision,
+              },
+            }));
+          }
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
@@ -917,11 +926,12 @@ class StoreEditPage extends React.Component {
             this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
           }
         } else {
-          if (res.data) {
+          const failedDecision = extractCapabilityDecision(res);
+          if (failedDecision) {
             this.setState(prevState => ({
               store: {
                 ...prevState.store,
-                decision: res.data,
+                decision: failedDecision,
               },
             }));
           }

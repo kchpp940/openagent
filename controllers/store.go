@@ -230,7 +230,7 @@ func (c *ApiController) UpdateStore() {
 
 	success, decision, err := object.UpdateStore(id, &store)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 
@@ -305,7 +305,7 @@ func (c *ApiController) AddStore() {
 
 	success, decision, err := object.AddStore(&store)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 

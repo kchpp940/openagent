@@ -121,7 +121,7 @@ func (c *ApiController) UpdateSkill() {
 
 	success, decision, err := object.UpdateSkill(id, &s)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (c *ApiController) AddSkill() {
 	s.Owner = "admin"
 	success, decision, err := object.AddSkill(&s)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 

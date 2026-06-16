@@ -128,7 +128,7 @@ func (c *ApiController) UpdateTool() {
 
 	success, decision, err := object.UpdateTool(id, &t)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (c *ApiController) AddTool() {
 	t.Owner = "admin"
 	success, decision, err := object.AddTool(&t)
 	if err != nil {
-		c.ResponseError(err.Error(), decision)
+		c.ResponseCapabilityError(decision)
 		return
 	}
 

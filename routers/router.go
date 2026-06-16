@@ -68,6 +68,7 @@ func initAPI() {
 	beego.Router("/api/get-organization-users", &controllers.ApiController{}, "GET:GetOrganizationUsers")
 	beego.Router("/api/add-shared-store", &controllers.ApiController{}, "POST:AddSharedStore")
 	beego.Router("/api/claim-store", &controllers.ApiController{}, "POST:ClaimStore")
+	beego.Router("/api/check-store-capability", &controllers.ApiController{}, "POST:CheckStoreCapability")
 
 	beego.Router("/api/get-global-providers", &controllers.ApiController{}, "GET:GetGlobalProviders")
 	beego.Router("/api/get-providers", &controllers.ApiController{}, "GET:GetProviders")
@@ -96,6 +97,7 @@ func initAPI() {
 	beego.Router("/api/sync-mcp-tool", &controllers.ApiController{}, "POST:SyncMcpTool")
 	beego.Router("/api/get-online-servers", &controllers.ApiController{}, "GET:GetOnlineServers")
 	beego.Router("/api/sync-intranet-servers", &controllers.ApiController{}, "POST:SyncIntranetServers")
+	beego.Router("/api/check-server-capability", &controllers.ApiController{}, "POST:CheckServerCapability")
 
 	beego.Router("/api/get-global-skills", &controllers.ApiController{}, "GET:GetGlobalSkills")
 	beego.Router("/api/get-skills", &controllers.ApiController{}, "GET:GetSkills")
@@ -104,6 +106,7 @@ func initAPI() {
 	beego.Router("/api/add-skill", &controllers.ApiController{}, "POST:AddSkill")
 	beego.Router("/api/delete-skill", &controllers.ApiController{}, "POST:DeleteSkill")
 	beego.Router("/api/load-skill", &controllers.ApiController{}, "GET:LoadSkill")
+	beego.Router("/api/check-skill-capability", &controllers.ApiController{}, "POST:CheckSkillCapability")
 	beego.Router("/api/get-marketplace-sources", &controllers.ApiController{}, "GET:GetMarketplaceSources")
 	beego.Router("/api/get-marketplace-skills", &controllers.ApiController{}, "GET:GetMarketplaceSkills")
 	beego.Router("/api/install-marketplace-skill", &controllers.ApiController{}, "POST:InstallMarketplaceSkill")
@@ -115,6 +118,7 @@ func initAPI() {
 	beego.Router("/api/add-tool", &controllers.ApiController{}, "POST:AddTool")
 	beego.Router("/api/delete-tool", &controllers.ApiController{}, "POST:DeleteTool")
 	beego.Router("/api/test-tool", &controllers.ApiController{}, "POST:TestTool")
+	beego.Router("/api/check-tool-capability", &controllers.ApiController{}, "POST:CheckToolCapability")
 
 	beego.Router("/api/get-global-files", &controllers.ApiController{}, "GET:GetGlobalFiles")
 	beego.Router("/api/get-files", &controllers.ApiController{}, "GET:GetFiles")
