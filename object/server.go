@@ -308,20 +308,21 @@ func TestMcpServer(s *Server, lang string) (string, error) {
 }
 
 func GetServerCount(owner, field, value string) (int64, error) {
-	session := GetDbSession(owner, -1, -1, field, value, "", "")
-	count, err := session.Count(&Server{})
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountServers(opts)
 }
 
 func GetPaginationServers(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Server, error) {
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListServers(opts)
+}
+
+func CountServers(opts ListQueryOptions) (int64, error) {
+	return BuildCountSession(opts).Count(&Server{})
+}
+
+func ListServers(opts ListQueryOptions) ([]*Server, error) {
 	servers := []*Server{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&servers)
-	if err != nil {
-		return servers, err
-	}
-	return servers, nil
+	err := BuildListSession(opts).Find(&servers)
+	return servers, err
 }

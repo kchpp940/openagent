@@ -149,24 +149,31 @@ func DeleteResource(resource *Resource) (bool, error) {
 }
 
 func GetResourceCount(owner, user, field, value string) (int64, error) {
-	session := GetDbSession(owner, -1, -1, field, value, "", "")
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountResources(opts, user)
+}
+
+func GetPaginationResources(owner, user string, offset, limit int, field, value, sortField, sortOrder string) ([]*Resource, error) {
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListResources(opts, user)
+}
+
+func CountResources(opts ListQueryOptions, user string) (int64, error) {
+	session := BuildCountSession(opts)
 	if user != "" {
 		session = session.And("user = ?", user)
 	}
 	return session.Count(&Resource{})
 }
 
-func GetPaginationResources(owner, user string, offset, limit int, field, value, sortField, sortOrder string) ([]*Resource, error) {
+func ListResources(opts ListQueryOptions, user string) ([]*Resource, error) {
 	resources := []*Resource{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
+	session := BuildListSession(opts)
 	if user != "" {
 		session = session.And("user = ?", user)
 	}
 	err := session.Find(&resources)
-	if err != nil {
-		return resources, err
-	}
-	return resources, nil
+	return resources, err
 }
 
 // NewResourceFromUpload builds a Resource record for a just-uploaded file.

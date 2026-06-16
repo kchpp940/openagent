@@ -60,7 +60,7 @@ func (c *ApiController) GetGlobalResources() {
 			resources, err = object.GetResources(owner, filterUser)
 		}
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeResource)
+			c.ResponseError(err.Error())
 			return
 		}
 		c.ResponseOk(resources)
@@ -68,14 +68,14 @@ func (c *ApiController) GetGlobalResources() {
 		limitInt := util.ParseInt(limit)
 		count, err := object.GetResourceCount(owner, filterUser, field, value)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeResource)
+			c.ResponseError(err.Error())
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limitInt, count)
 		resources, err := object.GetPaginationResources(owner, filterUser, paginator.Offset(), limitInt, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeResource)
+			c.ResponseError(err.Error())
 			return
 		}
 
@@ -93,12 +93,23 @@ func (c *ApiController) GetGlobalResources() {
 func (c *ApiController) GetResource() {
 	id := c.Input().Get("id")
 
-	rr := c.RequireResource(ResourceTypeResource, id, AccessRead)
-	if rr == nil {
+	userName, ok := c.RequireSignedIn()
+	if !ok {
 		return
 	}
 
-	c.ResponseOk(rr.Resource())
+	resource, err := object.GetResource(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	if resource != nil && !c.IsAdmin() && resource.User != userName {
+		c.ResponseError(c.T("auth:Unauthorized operation"))
+		return
+	}
+
+	c.ResponseOk(resource)
 }
 
 // UpdateResource
@@ -115,18 +126,13 @@ func (c *ApiController) UpdateResource() {
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeResource)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeResource, id, AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.UpdateResource(id, &resource)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -144,13 +150,13 @@ func (c *ApiController) AddResource() {
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.AddResource(&resource)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -165,27 +171,32 @@ func (c *ApiController) AddResource() {
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-resource [post]
 func (c *ApiController) DeleteResource() {
+	userName, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+
 	var resource object.Resource
 	err := json.NewDecoder(c.Ctx.Request.Body).Decode(&resource)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
-	rr := c.RequireResource(ResourceTypeResource, resource.GetId(), AccessWrite)
-	if rr == nil {
+	if !c.IsAdmin() && resource.User != userName {
+		c.ResponseError(c.T("auth:Unauthorized operation"))
 		return
 	}
 
-	err = object.DeleteResourceFile(rr.Resource(), c.GetAcceptLanguage())
+	err = object.DeleteResourceFile(&resource, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.DeleteResource(&resource)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -217,7 +228,7 @@ func (c *ApiController) UploadResource() {
 
 	file, header, err := c.GetFile("file")
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 	defer file.Close()
@@ -228,14 +239,15 @@ func (c *ApiController) UploadResource() {
 	fileBytes := make([]byte, fileSize)
 	_, err = file.Read(fileBytes)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
+	// Detect MIME type and file type category
 	ext := strings.ToLower(filepath.Ext(fileName))
 
 	if err = validateFileExtension(fileName, c.GetAcceptLanguage()); err != nil {
-		c.ResponseErrorValidation(err.Error(), "file")
+		c.ResponseError(err.Error())
 		return
 	}
 	mimeType := header.Header.Get("Content-Type")
@@ -254,14 +266,14 @@ func (c *ApiController) UploadResource() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(fullFilePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	resource := object.NewResourceFromUpload("admin", userName, category, fileName, fileType, ext, fileUrl, fullFilePath, fileSize, objectType, objectId)
 	_, err = object.AddResource(resource)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeResource)
+		c.ResponseError(err.Error())
 		return
 	}
 

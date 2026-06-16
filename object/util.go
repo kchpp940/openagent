@@ -24,6 +24,127 @@ import (
 	"xorm.io/xorm"
 )
 
+type ScopeType string
+
+const (
+	ScopeAll      ScopeType = "all"
+	ScopePublic   ScopeType = "public"
+	ScopePrivate  ScopeType = "private"
+	ScopeMine     ScopeType = "mine"
+)
+
+type ListQueryOptions struct {
+	Owner      string
+	Owners     []string
+	Name       string
+	Offset     int
+	Limit      int
+	SortField  string
+	SortOrder  string
+	Field      string
+	Value      string
+	Keyword    string
+	SearchFields []string
+	Scope      ScopeType
+	State      string
+}
+
+type PaginationResult[T any] struct {
+	Data  []*T  `json:"data"`
+	Total int64 `json:"total"`
+}
+
+func (o *ListQueryOptions) normalize() {
+	if o.Offset < 0 {
+		o.Offset = -1
+	}
+	if o.Limit < 0 {
+		o.Limit = -1
+	}
+	if o.SortField == "" {
+		o.SortField = "created_time"
+	}
+}
+
+func BuildListSession(opts ListQueryOptions) *xorm.Session {
+	opts.normalize()
+	session := adapter.engine.NewSession()
+
+	if opts.Offset != -1 && opts.Limit != -1 {
+		session.Limit(opts.Limit, opts.Offset)
+	}
+
+	if opts.Owner != "" {
+		session = session.And("owner = ?", opts.Owner)
+	}
+	if len(opts.Owners) > 0 {
+		args := make([]interface{}, len(opts.Owners))
+		for i, o := range opts.Owners {
+			args[i] = o
+		}
+		session = session.In("owner", args...)
+	}
+
+	if opts.Name != "" {
+		session = session.And("name = ?", opts.Name)
+	}
+
+	if opts.Field != "" && opts.Value != "" {
+		if util.FilterField(opts.Field) {
+			session = session.And(fmt.Sprintf("%s like ?", util.SnakeString(opts.Field)), fmt.Sprintf("%%%s%%", opts.Value))
+		}
+	}
+
+	if opts.Keyword != "" && len(opts.SearchFields) > 0 {
+		var conditions []string
+		var args []interface{}
+		for _, f := range opts.SearchFields {
+			if util.FilterField(f) {
+				conditions = append(conditions, fmt.Sprintf("%s like ?", util.SnakeString(f)))
+				args = append(args, fmt.Sprintf("%%%s%%", opts.Keyword))
+			}
+		}
+		if len(conditions) > 0 {
+			session = session.And("("+strings.Join(conditions, " OR ")+")", args...)
+		}
+	}
+
+	if opts.State != "" {
+		session = session.And("state = ?", opts.State)
+	}
+
+	snakeSortField := util.SnakeString(opts.SortField)
+	if opts.SortOrder == "ascend" {
+		session = session.Asc(snakeSortField)
+	} else {
+		session = session.Desc(snakeSortField)
+	}
+
+	return session
+}
+
+func BuildCountSession(opts ListQueryOptions) *xorm.Session {
+	opts.Offset = -1
+	opts.Limit = -1
+	return BuildListSession(opts)
+}
+
+func ListQueryOptionsFromLegacy(owner string, offset, limit int, field, value, sortField, sortOrder string) ListQueryOptions {
+	return ListQueryOptions{
+		Owner:     owner,
+		Offset:    offset,
+		Limit:     limit,
+		SortField: sortField,
+		SortOrder: sortOrder,
+		Field:     field,
+		Value:     value,
+	}
+}
+
+func GetDbSession(owner string, offset, limit int, field, value, sortField, sortOrder string) *xorm.Session {
+	return BuildListSession(ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder))
+}
+
 func getUrlFromPath(path string, origin string) (string, error) {
 	if strings.HasPrefix(path, "http") {
 		return path, nil
@@ -33,30 +154,6 @@ func getUrlFromPath(path string, origin string) (string, error) {
 	res = fmt.Sprintf("storage/%s", res)
 	res, err := url.JoinPath(origin, res)
 	return res, err
-}
-
-func GetDbSession(owner string, offset, limit int, field, value, sortField, sortOrder string) *xorm.Session {
-	session := adapter.engine.NewSession()
-	if offset != -1 && limit != -1 {
-		session.Limit(limit, offset)
-	}
-	if owner != "" {
-		session = session.And("owner=?", owner)
-	}
-	if field != "" && value != "" {
-		if util.FilterField(field) {
-			session = session.And(fmt.Sprintf("%s like ?", util.SnakeString(field)), fmt.Sprintf("%%%s%%", value))
-		}
-	}
-	if sortField == "" || sortOrder == "" {
-		sortField = "created_time"
-	}
-	if sortOrder == "ascend" {
-		session = session.Asc(util.SnakeString(sortField))
-	} else {
-		session = session.Desc(util.SnakeString(sortField))
-	}
-	return session
 }
 
 func isRetryableError(err error) bool {

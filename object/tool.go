@@ -131,14 +131,22 @@ func GetToolByOwnerAndName(owner string, nameOrId string) (*Tool, error) {
 }
 
 func GetToolCount(owner, field, value string) (int64, error) {
-	session := GetDbSession(owner, -1, -1, field, value, "", "")
-	return session.Count(&Tool{})
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountTools(opts)
 }
 
 func GetPaginationTools(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Tool, error) {
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListTools(opts)
+}
+
+func CountTools(opts ListQueryOptions) (int64, error) {
+	return BuildCountSession(opts).Count(&Tool{})
+}
+
+func ListTools(opts ListQueryOptions) ([]*Tool, error) {
 	tools := []*Tool{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&tools)
+	err := BuildListSession(opts).Find(&tools)
 	return tools, err
 }
 

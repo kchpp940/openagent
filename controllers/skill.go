@@ -31,7 +31,7 @@ import (
 func (c *ApiController) GetGlobalSkills() {
 	skills, err := object.GetGlobalSkills()
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -56,7 +56,7 @@ func (c *ApiController) GetSkills() {
 	if limit == "" || page == "" {
 		skills, err := object.GetSkills(owner)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeSkill)
+			c.ResponseError(err.Error())
 			return
 		}
 		c.ResponseOk(skills)
@@ -67,14 +67,14 @@ func (c *ApiController) GetSkills() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetSkillCount(owner, field, value)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeSkill)
+			c.ResponseError(err.Error())
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		skills, err := object.GetPaginationSkills(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeSkill)
+			c.ResponseError(err.Error())
 			return
 		}
 
@@ -92,12 +92,13 @@ func (c *ApiController) GetSkills() {
 func (c *ApiController) GetSkill() {
 	id := c.Input().Get("id")
 
-	rr := c.ResolveResource(ResourceTypeSkill, id)
-	if rr == nil {
+	s, err := object.GetSkill(id)
+	if err != nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(rr.Skill())
+	c.ResponseOk(s)
 }
 
 // UpdateSkill
@@ -114,18 +115,13 @@ func (c *ApiController) UpdateSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeSkill, id, AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.UpdateSkill(id, &s)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -143,14 +139,14 @@ func (c *ApiController) AddSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	s.Owner = "admin"
 	success, err := object.AddSkill(&s)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -168,18 +164,13 @@ func (c *ApiController) DeleteSkill() {
 	var s object.Skill
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &s)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeSkill)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeSkill, s.GetId(), AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.DeleteSkill(&s)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -196,13 +187,13 @@ func (c *ApiController) DeleteSkill() {
 func (c *ApiController) LoadSkill() {
 	path := c.Input().Get("path")
 	if path == "" {
-		c.ResponseErrorValidation("path is required", "path")
+		c.ResponseError("path is required")
 		return
 	}
 
 	s, err := object.LoadSkill(path)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeSkill)
+		c.ResponseError(err.Error())
 		return
 	}
 

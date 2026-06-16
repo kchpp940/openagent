@@ -37,7 +37,7 @@ func (c *ApiController) GetGlobalTasks() {
 
 	tasks, err := object.GetGlobalTasks(owner)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -64,6 +64,7 @@ func (c *ApiController) GetTasks() {
 		owner = ""
 	}
 
+	// For non-admins, filter by their username
 	if !c.IsAdmin() {
 		username := c.GetSessionUsername()
 		if username != "" {
@@ -74,7 +75,7 @@ func (c *ApiController) GetTasks() {
 	if limit == "" || page == "" {
 		tasks, err := object.GetTasks(owner)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeTask)
+			c.ResponseError(err.Error())
 			return
 		}
 
@@ -83,14 +84,14 @@ func (c *ApiController) GetTasks() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetTaskCount(owner, field, value)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeTask)
+			c.ResponseError(err.Error())
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		tasks, err := object.GetPaginationTasks(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeTask)
+			c.ResponseError(err.Error())
 			return
 		}
 		c.ResponseOk(tasks, paginator.Nums())
@@ -107,12 +108,28 @@ func (c *ApiController) GetTasks() {
 func (c *ApiController) GetTask() {
 	id := c.Input().Get("id")
 
-	rr := c.RequireResource(ResourceTypeTask, id, AccessRead)
-	if rr == nil {
+	task, err := object.GetTask(id)
+	if err != nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(rr.Task())
+	// Check if task exists
+	if task == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	// Check ownership for non-admins
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if task.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
+	c.ResponseOk(task)
 }
 
 // UpdateTask
@@ -129,18 +146,32 @@ func (c *ApiController) UpdateTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
-	rr := c.RequireResource(ResourceTypeTask, id, AccessWrite)
-	if rr == nil {
+	existingTask, err := object.GetTask(id)
+	if err != nil {
+		c.ResponseError(err.Error())
 		return
+	}
+	if existingTask == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	// Check ownership for non-admins
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if existingTask.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
 	}
 
 	success, err := object.UpdateTask(id, &task)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -158,13 +189,13 @@ func (c *ApiController) AddTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.AddTask(&task)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -182,18 +213,33 @@ func (c *ApiController) DeleteTask() {
 	var task object.Task
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &task)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
-	rr := c.RequireResource(ResourceTypeTask, task.GetId(), AccessWrite)
-	if rr == nil {
-		return
+	// Check ownership for non-admins
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		// Fetch task from database to verify ownership
+		id := task.GetId()
+		existingTask, err := object.GetTask(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		if existingTask == nil {
+			c.ResponseError(c.T("general:The task does not exist"))
+			return
+		}
+		if existingTask.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
 	}
 
 	success, err := object.DeleteTask(&task)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -211,11 +257,25 @@ func (c *ApiController) AnalyzeTask() {
 	id := c.Input().Get("id")
 	logs.Info("[analyze-task] HTTP request id=%s user=%s", id, c.GetSessionUsername())
 
-	rr := c.RequireResource(ResourceTypeTask, id, AccessWrite)
-	if rr == nil {
+	task, err := object.GetTask(id)
+	if err != nil {
+		logs.Error("[analyze-task] GetTask failed id=%s: %v", id, err)
+		c.ResponseError(err.Error())
 		return
 	}
-	task := rr.Task()
+	if task == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if task.Owner != username {
+			logs.Warn("[analyze-task] forbidden id=%s taskOwner=%s user=%s", id, task.Owner, username)
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
 
 	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
 	if err != nil {
@@ -224,7 +284,7 @@ func (c *ApiController) AnalyzeTask() {
 		if _, updateErr := object.UpdateTask(id, task); updateErr != nil {
 			logs.Error("[analyze-task] failed to save analyze error state id=%s: %v", id, updateErr)
 		}
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -232,7 +292,7 @@ func (c *ApiController) AnalyzeTask() {
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		logs.Error("[analyze-task] json.Marshal failed id=%s: %v", id, err)
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 	task.Result = string(resultBytes)
@@ -241,7 +301,7 @@ func (c *ApiController) AnalyzeTask() {
 	_, err = object.UpdateTask(id, task)
 	if err != nil {
 		logs.Error("[analyze-task] UpdateTask failed id=%s: %v", id, err)
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 

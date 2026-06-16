@@ -237,17 +237,21 @@ func (task *Task) GetId() string {
 }
 
 func GetTaskCount(owner string, field, value string) (int64, error) {
-	session := GetDbSession(owner, -1, -1, field, value, "", "")
-	return session.Count(&Task{})
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountTasks(opts)
 }
 
 func GetPaginationTasks(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Task, error) {
-	tasks := []*Task{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&tasks)
-	if err != nil {
-		return tasks, err
-	}
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListTasks(opts)
+}
 
-	return tasks, nil
+func CountTasks(opts ListQueryOptions) (int64, error) {
+	return BuildCountSession(opts).Count(&Task{})
+}
+
+func ListTasks(opts ListQueryOptions) ([]*Task, error) {
+	tasks := []*Task{}
+	err := BuildListSession(opts).Find(&tasks)
+	return tasks, err
 }

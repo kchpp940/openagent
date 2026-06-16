@@ -72,27 +72,38 @@ func (c *ApiController) UploadTaskDocument() {
 	fileName := c.GetString("name")
 
 	if taskId == "" || fileBase64 == "" || fileName == "" {
-		c.ResponseErrorValidation(c.T("application:Missing required parameters"), "id/file/name")
+		c.ResponseError(c.T("application:Missing required parameters"))
 		return
 	}
 
-	rr := c.RequireResource(ResourceTypeTask, taskId, AccessWrite)
-	if rr == nil {
+	task, err := object.GetTask(taskId)
+	if err != nil {
+		c.ResponseError(err.Error())
 		return
 	}
-	task := rr.Task()
+	if task == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	if !c.IsAdmin() {
+		if task.Owner != userName {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
 
 	allowedExtensions := []string{".docx", ".pdf"}
 	typeDetection := txt.DetectTaskDocumentType(fileName, fileType, allowedExtensions)
 
 	if typeDetection.Unsupported {
-		c.ResponseErrorValidation(typeDetection.UnsupportedReason, "type")
+		c.ResponseError(typeDetection.UnsupportedReason)
 		return
 	}
 
 	fileBytes, err := decodeFileBase64(fileBase64)
 	if err != nil {
-		c.ResponseErrorValidation(err.Error(), "file")
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -102,7 +113,7 @@ func (c *ApiController) UploadTaskDocument() {
 	origin := getOriginFromHost(host)
 	fileUrl, err := object.UploadFileToStorageSafe(filePath, fileBytes, origin, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -136,12 +147,12 @@ func (c *ApiController) UploadTaskDocument() {
 
 	success, err := object.UpdateTask(taskId, task)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeTask)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	if !success {
-		c.ResponseErrorInternal(fmt.Errorf("%s", c.T("general:Failed to update")), ResourceTypeTask)
+		c.ResponseError(c.T("general:Failed to update"))
 		return
 	}
 

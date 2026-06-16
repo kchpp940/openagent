@@ -31,61 +31,13 @@ import (
 
 type Response struct {
 	Status string      `json:"status"`
-	Code   int         `json:"code,omitempty"`
 	Msg    string      `json:"msg"`
 	Data   interface{} `json:"data"`
 	Data2  interface{} `json:"data2"`
 }
 
-type ErrorDetail struct {
-	Code           int          `json:"code"`
-	Key            string       `json:"key"`
-	ResourceType   ResourceType `json:"resourceType,omitempty"`
-	ResourceId     string       `json:"resourceId,omitempty"`
-	ResourceOwner  string       `json:"resourceOwner,omitempty"`
-	ResourceName   string       `json:"resourceName,omitempty"`
-	RequiredAccess string       `json:"requiredAccess,omitempty"`
-	CurrentUser    string       `json:"currentUser,omitempty"`
-	Field          string       `json:"field,omitempty"`
-}
-
-const (
-	ErrCodeOK                    = 0
-	ErrCodeBadRequest            = 40000
-	ErrCodeInvalidResourceFormat = 40001
-	ErrCodeResourceIdRequired    = 40002
-	ErrCodeValidationFailed      = 40003
-	ErrCodeJsonParseFailed       = 40004
-
-	ErrCodeUnauthorized = 40100
-	ErrCodeNotSignedIn  = 40101
-
-	ErrCodeForbidden             = 40300
-	ErrCodeAdminRequired         = 40301
-	ErrCodeNotResourceOwner      = 40302
-	ErrCodeStorePermissionDenied = 40303
-
-	ErrCodeNotFound         = 40400
-	ErrCodeTaskNotFound     = 40401
-	ErrCodeStoreNotFound    = 40402
-	ErrCodeServerNotFound   = 40403
-	ErrCodeSkillNotFound    = 40404
-	ErrCodeToolNotFound     = 40405
-	ErrCodeResourceNotFound = 40406
-	ErrCodeCommentNotFound  = 40407
-
-	ErrCodeInternal = 50000
-)
-
-func accessLevelString(level AccessLevel) string {
-	if level == AccessWrite {
-		return "write"
-	}
-	return "read"
-}
-
 func (c *ApiController) ResponseOk(data ...interface{}) {
-	resp := Response{Status: "ok", Code: ErrCodeOK}
+	resp := Response{Status: "ok"}
 	switch len(data) {
 	case 2:
 		resp.Data2 = data[1]
@@ -98,47 +50,13 @@ func (c *ApiController) ResponseOk(data ...interface{}) {
 }
 
 func (c *ApiController) ResponseError(error string, data ...interface{}) {
-	c.ResponseErrorWithCode(ErrCodeBadRequest, error, data...)
-}
-
-func (c *ApiController) ResponseErrorInternal(err error, resType ...ResourceType) {
-	detail := &ErrorDetail{Code: ErrCodeInternal, Key: err.Error()}
-	if len(resType) > 0 {
-		detail.ResourceType = resType[0]
-	}
-	c.ResponseErrorWithCode(ErrCodeInternal, err.Error(), detail)
-}
-
-func (c *ApiController) ResponseErrorValidation(msg string, field string) {
-	detail := &ErrorDetail{Code: ErrCodeValidationFailed, Key: msg, Field: field}
-	c.ResponseErrorWithCode(ErrCodeValidationFailed, msg, detail)
-}
-
-func (c *ApiController) ResponseErrorJsonParse(err error, field string, resType ...ResourceType) {
-	msg := fmt.Sprintf("Invalid JSON in request body: %s", err.Error())
-	detail := &ErrorDetail{Code: ErrCodeJsonParseFailed, Key: msg, Field: field}
-	if len(resType) > 0 {
-		detail.ResourceType = resType[0]
-	}
-	c.ResponseErrorWithCode(ErrCodeJsonParseFailed, msg, detail)
-}
-
-func (c *ApiController) ResponseErrorWithCode(code int, msg string, data ...interface{}) {
-	detail := &ErrorDetail{Code: code, Key: msg}
-	if len(data) > 0 {
-		if ed, ok := data[0].(*ErrorDetail); ok {
-			detail = ed
-		}
-	}
-	resp := Response{Status: "error", Code: code, Msg: msg}
+	resp := Response{Status: "error", Msg: error}
 	switch len(data) {
 	case 2:
 		resp.Data2 = data[1]
 		fallthrough
 	case 1:
 		resp.Data = data[0]
-	default:
-		resp.Data = detail
 	}
 	c.Data["json"] = resp
 	c.ServeJSON()
@@ -175,7 +93,7 @@ func (c *ApiController) GetAcceptLanguage() string {
 func (c *ApiController) RequireSignedIn() (string, bool) {
 	userId := c.GetSessionUsername()
 	if userId == "" {
-		c.ResponseErrorWithCode(ErrCodeNotSignedIn, c.T("auth:Please sign in first"))
+		c.ResponseError(c.T("auth:Please sign in first"))
 		return "", false
 	}
 	return userId, true
@@ -184,7 +102,7 @@ func (c *ApiController) RequireSignedIn() (string, bool) {
 func (c *ApiController) RequireSignedInUser() (*auth.User, bool) {
 	user := c.GetSessionUser()
 	if user == nil {
-		c.ResponseErrorWithCode(ErrCodeNotSignedIn, c.T("auth:Please sign in first"))
+		c.ResponseError(c.T("auth:Please sign in first"))
 		return nil, false
 	}
 	return user, true
@@ -200,7 +118,7 @@ func (c *ApiController) CheckSignedIn() (string, bool) {
 
 func (c *ApiController) RequireAdmin() bool {
 	if !c.IsAdmin() {
-		c.ResponseErrorWithCode(ErrCodeAdminRequired, c.T("auth:this operation requires admin privilege"))
+		c.ResponseError(c.T("auth:this operation requires admin privilege"))
 		return false
 	}
 
@@ -223,41 +141,30 @@ func (c *ApiController) IsStoreAdmin() bool {
 }
 
 func DenyRequest(ctx *context.Context) {
-	responseErrorWithCode(ctx, ErrCodeForbidden, "auth:Unauthorized operation")
+	responseError(ctx, "auth:Unauthorized operation")
 }
 
 func responseError(ctx *context.Context, error string, data ...interface{}) {
-	responseErrorWithCode(ctx, ErrCodeBadRequest, error, data...)
-}
-
-func responseErrorWithCode(ctx *context.Context, code int, error string, data ...interface{}) {
+	// Get language from Accept-Language header
 	language := ctx.Request.Header.Get("Accept-Language")
 	if len(language) > 2 {
 		language = language[0:2]
 	}
 	language = conf.GetLanguage(language)
 
+	// Translate error message if it contains namespace prefix
 	translatedError := error
 	if strings.Contains(error, ":") {
 		translatedError = i18n.Translate(language, error)
 	}
 
-	detail := &ErrorDetail{Code: code, Key: error}
-	if len(data) > 0 {
-		if ed, ok := data[0].(*ErrorDetail); ok {
-			detail = ed
-		}
-	}
-
-	resp := Response{Status: "error", Code: code, Msg: translatedError}
+	resp := Response{Status: "error", Msg: translatedError}
 	switch len(data) {
 	case 2:
 		resp.Data2 = data[1]
 		fallthrough
 	case 1:
 		resp.Data = data[0]
-	default:
-		resp.Data = detail
 	}
 
 	err := ctx.Output.JSON(resp, true, false)
@@ -321,7 +228,7 @@ func (c *ApiController) getUserAgent() string {
 func (c *ApiController) IsCurrentUser(usernameInput string) bool {
 	username := c.GetSessionUsername()
 	if !c.IsAdmin() && username != usernameInput {
-		c.ResponseErrorWithCode(ErrCodeForbidden, c.T("auth:Unauthorized operation"))
+		c.ResponseError(c.T("auth:Unauthorized operation"))
 		return false
 	}
 	return true

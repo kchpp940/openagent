@@ -45,7 +45,7 @@ func (c *ApiController) GetServers() {
 	if limit == "" || page == "" {
 		servers, err := object.GetServers(owner)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeServer)
+			c.ResponseError(err.Error())
 			return
 		}
 		c.ResponseOk(servers)
@@ -56,14 +56,14 @@ func (c *ApiController) GetServers() {
 		limit := util.ParseInt(limit)
 		count, err := object.GetServerCount(owner, field, value)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeServer)
+			c.ResponseError(err.Error())
 			return
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
 		servers, err := object.GetPaginationServers(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
 		if err != nil {
-			c.ResponseErrorInternal(err, ResourceTypeServer)
+			c.ResponseError(err.Error())
 			return
 		}
 
@@ -81,12 +81,13 @@ func (c *ApiController) GetServers() {
 func (c *ApiController) GetServer() {
 	id := c.Input().Get("id")
 
-	rr := c.ResolveResource(ResourceTypeServer, id)
-	if rr == nil {
+	server, err := object.GetServer(id)
+	if err != nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(rr.Server())
+	c.ResponseOk(server)
 }
 
 // UpdateServer
@@ -103,18 +104,13 @@ func (c *ApiController) UpdateServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeServer, id, AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.UpdateServer(id, &server)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -132,14 +128,14 @@ func (c *ApiController) AddServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	server.Owner = "admin"
 	success, err := object.AddServer(&server)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -157,18 +153,13 @@ func (c *ApiController) DeleteServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeServer, server.GetId(), AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	success, err := object.DeleteServer(&server)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -186,13 +177,13 @@ func (c *ApiController) TestMcpServer() {
 	var server object.Server
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &server)
 	if err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
 	result, err := object.TestMcpServer(&server, c.GetAcceptLanguage())
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -214,18 +205,13 @@ func (c *ApiController) SyncMcpTool() {
 
 	var server object.Server
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &server); err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
-		return
-	}
-
-	rr := c.RequireResource(ResourceTypeServer, id, AccessWrite)
-	if rr == nil {
+		c.ResponseError(err.Error())
 		return
 	}
 
 	ok, err := object.SyncMcpTool(id, &server, isCleared)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 	c.ResponseOk(ok)
@@ -243,19 +229,19 @@ func (c *ApiController) GetOnlineServers() {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	resp, err := httpClient.Get(onlineServerListURL)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		c.ResponseErrorWithCode(ErrCodeInternal, fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode), &ErrorDetail{Code: ErrCodeInternal, Key: fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode), ResourceType: ResourceTypeServer})
+		c.ResponseError(fmt.Sprintf("failed to get online server list, status code: %d", resp.StatusCode))
 		return
 	}
 
 	var result interface{}
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 	c.ResponseOk(result)
@@ -279,10 +265,11 @@ func (c *ApiController) SyncIntranetServers() {
 		Paths []string `json:"paths"`
 	}
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &req); err != nil {
-		c.ResponseErrorJsonParse(err, "body", ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 
+	// Also accept a single cidr string
 	if len(req.CIDR) == 0 {
 		if cidrStr := strings.TrimSpace(c.Input().Get("cidr")); cidrStr != "" {
 			req.CIDR = []string{cidrStr}
@@ -291,7 +278,7 @@ func (c *ApiController) SyncIntranetServers() {
 
 	result, err := mcppkg.ScanIntranetServers(req.CIDR, req.Ports, req.Paths)
 	if err != nil {
-		c.ResponseErrorInternal(err, ResourceTypeServer)
+		c.ResponseError(err.Error())
 		return
 	}
 	c.ResponseOk(result)

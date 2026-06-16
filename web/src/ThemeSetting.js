@@ -253,9 +253,6 @@ export function renderExternalLink() {
 }
 
 export function isResponseDenied(data) {
-  if (data.code === 40100 || data.code === 40101 || data.code === 40300 || data.code === 40301 || data.code === 40302 || data.code === 40303) {
-    return true;
-  }
   return data.msg === "Unauthorized operation" || data.msg === "this operation requires admin privilege";
 }
 

@@ -287,14 +287,22 @@ func GetSkillByOwnerAndName(owner string, nameOrId string) (*Skill, error) {
 }
 
 func GetSkillCount(owner, field, value string) (int64, error) {
-	session := GetDbSession(owner, -1, -1, field, value, "", "")
-	return session.Count(&Skill{})
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountSkills(opts)
 }
 
 func GetPaginationSkills(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Skill, error) {
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListSkills(opts)
+}
+
+func CountSkills(opts ListQueryOptions) (int64, error) {
+	return BuildCountSession(opts).Count(&Skill{})
+}
+
+func ListSkills(opts ListQueryOptions) ([]*Skill, error) {
 	skills := []*Skill{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&skills)
+	err := BuildListSession(opts).Find(&skills)
 	return skills, err
 }
 

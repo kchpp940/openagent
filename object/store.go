@@ -570,13 +570,14 @@ func GetStoresByFields(owner string, fields ...string) ([]*Store, error) {
 }
 
 func GetStoreCount(name, field, value string) (int64, error) {
-	session := GetDbSession("", -1, -1, field, value, "", "")
-	return session.Count(&Store{Name: name})
+	opts := ListQueryOptionsFromLegacy("", -1, -1, field, value, "", "")
+	opts.Name = name
+	return CountStores(opts)
 }
 
 func GetStoreCountByOwner(owner, field, value string) (int64, error) {
-	session := GetDbSession("", -1, -1, field, value, "", "")
-	return session.Where("owner = ?", owner).Count(&Store{})
+	opts := ListQueryOptionsFromLegacy(owner, -1, -1, field, value, "", "")
+	return CountStores(opts)
 }
 
 var storeVirtualSortFields = map[string]bool{
@@ -607,16 +608,28 @@ func SortStoresInMemory(stores []*Store, sortField, sortOrder string) {
 	})
 }
 
-func GetPaginationStores(offset, limit int, name, field, value, sortField, sortOrder string) ([]*Store, error) {
+func CountStores(opts ListQueryOptions) (int64, error) {
+	session := BuildCountSession(opts)
+	if opts.Name != "" {
+		return session.Count(&Store{Name: opts.Name})
+	}
+	return session.Count(&Store{})
+}
+
+func ListStores(opts ListQueryOptions) ([]*Store, error) {
 	stores := []*Store{}
-	dbSortField, dbSortOrder := sortField, sortOrder
-	if storeVirtualSortFields[sortField] {
+	dbSortField, dbSortOrder := opts.SortField, opts.SortOrder
+	if storeVirtualSortFields[opts.SortField] {
 		dbSortField, dbSortOrder = "", ""
 	}
-	session := GetDbSession("", offset, limit, field, value, dbSortField, dbSortOrder)
+	dbOpts := opts
+	dbOpts.SortField = dbSortField
+	dbOpts.SortOrder = dbSortOrder
+
+	session := BuildListSession(dbOpts)
 	var err error
-	if name != "" {
-		err = session.Find(&stores, &Store{Name: name})
+	if opts.Name != "" {
+		err = session.Find(&stores, &Store{Name: opts.Name})
 	} else {
 		err = session.Find(&stores)
 	}
@@ -624,22 +637,21 @@ func GetPaginationStores(offset, limit int, name, field, value, sortField, sortO
 		return stores, err
 	}
 
+	if storeVirtualSortFields[opts.SortField] {
+		SortStoresInMemory(stores, opts.SortField, opts.SortOrder)
+	}
 	return stores, nil
 }
 
-func GetPaginationStoresByOwner(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Store, error) {
-	stores := []*Store{}
-	dbSortField, dbSortOrder := sortField, sortOrder
-	if storeVirtualSortFields[sortField] {
-		dbSortField, dbSortOrder = "", ""
-	}
-	session := GetDbSession("", offset, limit, field, value, dbSortField, dbSortOrder)
-	err := session.Where("owner = ?", owner).Find(&stores)
-	if err != nil {
-		return stores, err
-	}
+func GetPaginationStores(offset, limit int, name, field, value, sortField, sortOrder string) ([]*Store, error) {
+	opts := ListQueryOptionsFromLegacy("", offset, limit, field, value, sortField, sortOrder)
+	opts.Name = name
+	return ListStores(opts)
+}
 
-	return stores, nil
+func GetPaginationStoresByOwner(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Store, error) {
+	opts := ListQueryOptionsFromLegacy(owner, offset, limit, field, value, sortField, sortOrder)
+	return ListStores(opts)
 }
 
 func (store *Store) ContainsForbiddenWords(text string) (bool, string) {
