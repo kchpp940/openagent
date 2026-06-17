@@ -264,6 +264,8 @@ func WrapExternalError(kind ErrorKind, message string, err error) error {
 	return NewToolCallError(string(kind), fmt.Sprintf("%s: %v", message, err), err)
 }
 
+// ---- 公共模块内部实现：工具结果统一转换入口 ----
+// 本函数是所有 MCP 工具调用结果的收口点，业务层禁止重复实现该逻辑。
 func CallToolResultToExternalResult(result *protocol.CallToolResult, execErr error) *ExternalCallResult {
 	if execErr != nil {
 		var errKind ErrorKind
@@ -279,7 +281,9 @@ func CallToolResultToExternalResult(result *protocol.CallToolResult, execErr err
 		return NewExternalCallResultError(ErrKindRemoteCall, "tool returned nil result")
 	}
 
+	// ---- 公共模块内部实现 ----
 	if result.IsError {
+		// ---- 公共模块内部实现 ----
 		contentBytes, marshalErr := json.Marshal(result.Content)
 		if marshalErr != nil {
 			return NewExternalCallResultError(ErrKindRemoteCall,
@@ -293,6 +297,7 @@ func CallToolResultToExternalResult(result *protocol.CallToolResult, execErr err
 		}
 	}
 
+	// ---- 公共模块内部实现 ----
 	contentBytes, marshalErr := json.Marshal(result.Content)
 	if marshalErr != nil {
 		return NewExternalCallResultError(ErrKindRemoteCall,
@@ -324,12 +329,15 @@ type TestContentPayload struct {
 	Arguments map[string]interface{} `json:"arguments"`
 }
 
+// ---- 公共模块内部实现：测试内容统一解析入口 ----
+// 本函数是所有测试内容 JSON 的统一解析入口，业务层禁止重复实现该逻辑。
 func ParseTestContent(testContent string) (*TestContentPayload, error) {
 	if strings.TrimSpace(testContent) == "" {
 		return nil, fmt.Errorf("testContent is empty")
 	}
 
 	var payload TestContentPayload
+	// ---- 公共模块内部实现 ----
 	if err := json.Unmarshal([]byte(testContent), &payload); err != nil {
 		return nil, fmt.Errorf("invalid test JSON: %w", err)
 	}
@@ -345,6 +353,8 @@ func ParseTestContent(testContent string) (*TestContentPayload, error) {
 	return &payload, nil
 }
 
+// ---- 公共模块内部实现：工具参数统一解析入口 ----
+// 本函数是所有工具参数字符串的统一解析入口，业务层禁止重复实现该逻辑。
 func ParseToolArguments(argumentsStr string) (map[string]interface{}, error) {
 	if strings.TrimSpace(argumentsStr) == "" {
 		return nil, fmt.Errorf("arguments string is empty")

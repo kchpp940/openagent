@@ -41,16 +41,27 @@ func (e *ToolCallError) Unwrap() error {
 	return e.Err
 }
 
+// ---- 旧 API 兼容层：保留旧常量供遗留代码使用
+// 新代码请使用 mcp.ErrKind* 常量，禁止在新代码中新增对 ToolCallErr* 的引用。
 const (
-	ToolCallErrInvalidID       = "invalid_tool_id"
-	ToolCallErrParseArgs       = "parse_arguments"
-	ToolCallErrNoConnection    = "no_connection"
-	ToolCallErrNoBuiltinReg    = "no_builtin_registry"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrInvalidID = "invalid_tool_id"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrParseArgs = "parse_arguments"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrNoConnection = "no_connection"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrNoBuiltinReg = "no_builtin_registry"
+	// ---- 旧 API 兼容层 ----
 	ToolCallErrBuiltinNotFound = "builtin_tool_not_found"
-	ToolCallErrRemoteCall      = "remote_call"
-	ToolCallErrEmptyToolName   = "empty_tool_name"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrRemoteCall = "remote_call"
+	// ---- 旧 API 兼容层 ----
+	ToolCallErrEmptyToolName = "empty_tool_name"
 )
 
+// ---- 旧 API 兼容层：保留旧错误类型供遗留代码使用
+// 新代码请使用 mcp.ExternalCallResult，禁止在新代码中新增对 ToolCallError 的引用。
 func NewToolCallError(kind, message string, err ...error) *ToolCallError {
 	tce := &ToolCallError{
 		Kind:    kind,

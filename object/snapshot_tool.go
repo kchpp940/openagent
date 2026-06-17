@@ -169,6 +169,9 @@ func snapshotToolFailureMessage(prefix string, toolName string, cause error, res
 	return message
 }
 
+// ---- 工具定义层边界：snapshot 工具内部结果处理 ----
+// 本函数是 snapshot 工具的特殊错误文本提取逻辑，用于在文件操作失败时
+// 还原原始工具错误信息，不属于业务层的工具调用。
 func snapshotInnerErrorText(result *protocol.CallToolResult, err error) string {
 	if err != nil {
 		return err.Error()
@@ -176,6 +179,7 @@ func snapshotInnerErrorText(result *protocol.CallToolResult, err error) string {
 	if result == nil {
 		return "inner tool returned nil result"
 	}
+	// ---- 工具定义层边界 ----
 	if !result.IsError {
 		return ""
 	}

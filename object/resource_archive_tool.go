@@ -71,6 +71,7 @@ func (t *generatedResourceArchiveBuiltinTool) GetInputSchema() interface{} {
 
 func (t *generatedResourceArchiveBuiltinTool) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	result, innerErr := t.inner.Execute(ctx, arguments)
+	// ---- 工具定义层边界 ----
 	if innerErr != nil || result == nil || result.IsError {
 		return result, innerErr
 	}
