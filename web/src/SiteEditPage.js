@@ -14,15 +14,18 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Image, Input, Modal, Popover, Row, Space, Switch, Upload} from "antd";
-import {EyeInvisibleOutlined, EyeTwoTone} from "@ant-design/icons";
+import {Button, Card, Col, Image, Input, Modal, Popover, Row, Space, Upload} from "antd";
+import {LinkOutlined, UploadOutlined} from "@ant-design/icons";
 import * as SiteBackend from "./backend/SiteBackend";
+import * as SystemBackend from "./backend/SystemInfo";
 import * as ResourceBackend from "./backend/ResourceBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
-import {LinkOutlined, UploadOutlined} from "@ant-design/icons";
 import Editor from "./common/Editor";
 import {NavItemTree} from "./component/nav-item-tree/NavItemTree";
+import ConfigForm from "./ConfigForm";
+
+const EXCLUDED_CONFIG_KEYS = ["faviconUrl", "logoUrl", "navbarHtml", "footerHtml"];
 
 class SiteEditPage extends React.Component {
   constructor(props) {
@@ -31,13 +34,31 @@ class SiteEditPage extends React.Component {
       classes: props,
       siteName: props.match.params.siteName,
       site: null,
+      configMetadata: null,
       uploadingFavicon: false,
       uploadingLogo: false,
     };
+    this.configFormRef = React.createRef();
   }
 
   UNSAFE_componentWillMount() {
     this.getSite();
+    this.getConfigMetadata();
+  }
+
+  getConfigMetadata() {
+    SystemBackend.getConfigMetadata()
+      .then((res) => {
+        if (res.status === "ok") {
+          const filtered = (res.data || []).filter(
+            (m) => !EXCLUDED_CONFIG_KEYS.includes(m.key)
+          );
+          this.setState({configMetadata: filtered});
+        }
+      })
+      .catch(() => {
+        this.setState({configMetadata: []});
+      });
   }
 
   getSite() {
@@ -77,17 +98,26 @@ class SiteEditPage extends React.Component {
       });
   }
 
+  buildPayload() {
+    const site = Setting.deepCopy(this.state.site);
+    const configValues = this.configFormRef.current
+      ? this.configFormRef.current.getValues()
+      : {};
+    return {...site, ...configValues};
+  }
+
   submitSiteEdit(exitAfterSave) {
-    SiteBackend.updateSite(this.state.site.owner, this.state.siteName, this.state.site)
+    const payload = this.buildPayload();
+    SiteBackend.updateSite(payload.owner, this.state.siteName, payload)
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          Setting.setThemeColor(this.state.site.themeColor || Setting.getThemeColor());
-          this.setState({siteName: this.state.site.name});
+          Setting.setThemeColor(payload.themeColor || Setting.getThemeColor());
+          this.setState({siteName: payload.name});
           if (this.props.onUpdateSite) {
             this.props.onUpdateSite();
           }
-          this.props.history.push(`/sites/${this.state.site.name}`);
+          this.props.history.push(`/sites/${payload.name}`);
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
@@ -106,21 +136,109 @@ class SiteEditPage extends React.Component {
     );
   }
 
-  renderSiteSwitch(label, checked, onChange, span = 6) {
-    return this.renderSiteField(label, <Switch checked={checked} onChange={onChange} />, span);
-  }
-
-  renderSiteActions() {
-
+  renderBrandingCustomFields() {
+    const site = this.state.site;
+    const rowGutter = [16, 8];
     return (
-      <Space wrap>
-        <Button onClick={() => this.submitSiteEdit(false)}>{i18next.t("general:Save")}</Button>
-        <Button type="primary" onClick={() => this.submitSiteEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
-      </Space>
+      <Row gutter={rowGutter}>
+        {this.renderSiteField(
+          Setting.getLabel(i18next.t("general:Favicon URL"), i18next.t("general:Favicon URL - Tooltip")),
+          <Space direction="vertical" style={{width: "100%"}}>
+            <Space.Compact style={{width: "100%"}}>
+              <Input prefix={<LinkOutlined />} value={site.faviconUrl} onChange={e => {
+                this.updateSiteField("faviconUrl", e.target.value);
+              }} />
+              <Upload name="file" accept="image/*" showUploadList={false} customRequest={({file}) => this.handleImageUpload("faviconUrl", file)}>
+                <Button icon={<UploadOutlined />} loading={this.state.uploadingFavicon}>
+                  {i18next.t("general:Upload")}
+                </Button>
+              </Upload>
+            </Space.Compact>
+            {site.faviconUrl ? (
+              <Image src={Setting.getFaviconUrl("", site.faviconUrl)} alt={site.faviconUrl} height={90}
+                preview={{mask: i18next.t("general:Preview")}}
+              />
+            ) : null}
+          </Space>,
+          12
+        )}
+        {this.renderSiteField(
+          Setting.getLabel(i18next.t("general:Logo URL"), i18next.t("general:Logo URL - Tooltip")),
+          <Space direction="vertical" style={{width: "100%"}}>
+            <Space.Compact style={{width: "100%"}}>
+              <Input prefix={<LinkOutlined />} value={site.logoUrl} onChange={e => {
+                this.updateSiteField("logoUrl", e.target.value);
+              }} />
+              <Upload name="file" accept="image/*" showUploadList={false} customRequest={({file}) => this.handleImageUpload("logoUrl", file)}>
+                <Button icon={<UploadOutlined />} loading={this.state.uploadingLogo}>
+                  {i18next.t("general:Upload")}
+                </Button>
+              </Upload>
+            </Space.Compact>
+            {site.logoUrl ? (
+              <Image src={Setting.getLogo("", site.logoUrl)} alt={site.logoUrl} height={90}
+                preview={{mask: i18next.t("general:Preview")}}
+              />
+            ) : null}
+          </Space>,
+          12
+        )}
+      </Row>
     );
   }
 
-  renderSite() {
+  renderContentCustomFields() {
+    const site = this.state.site;
+    const rowGutter = [16, 8];
+    return (
+      <Row gutter={rowGutter}>
+        {this.renderSiteField(
+          Setting.getLabel(i18next.t("general:Navbar HTML"), i18next.t("general:Navbar HTML - Tooltip")),
+          <Popover placement="right" content={
+            <div style={{width: "900px", height: "300px"}}>
+              <Editor
+                value={site.navbarHtml}
+                lang="html"
+                fillHeight
+                dark
+                onChange={value => {
+                  this.updateSiteField("navbarHtml", value);
+                }}
+              />
+            </div>
+          } title={i18next.t("general:Navbar HTML - Edit")} trigger="click">
+            <Input value={site.navbarHtml} onChange={e => {
+              this.updateSiteField("navbarHtml", e.target.value);
+            }} />
+          </Popover>,
+          12
+        )}
+        {this.renderSiteField(
+          Setting.getLabel(i18next.t("general:Footer HTML"), i18next.t("general:Footer HTML - Tooltip")),
+          <Popover placement="right" content={
+            <div style={{width: "900px", height: "300px"}}>
+              <Editor
+                value={site.footerHtml}
+                lang="html"
+                fillHeight
+                dark
+                onChange={value => {
+                  this.updateSiteField("footerHtml", value);
+                }}
+              />
+            </div>
+          } title={i18next.t("store:Footer HTML - Edit")} trigger="click">
+            <Input value={site.footerHtml} onChange={e => {
+              this.updateSiteField("footerHtml", e.target.value);
+            }} />
+          </Popover>,
+          12
+        )}
+      </Row>
+    );
+  }
+
+  renderEntityCard() {
     const site = this.state.site;
     const rowGutter = [16, 8];
     const cardHeadStyle = {background: "transparent", borderBottom: "none", fontWeight: 600, fontSize: "15px", fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"};
@@ -130,13 +248,107 @@ class SiteEditPage extends React.Component {
       boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
       padding: "18px",
     };
-
     const renderCardTitle = (title, desc) => (
       <div>
         <div style={{fontWeight: 600, fontSize: "15px"}}>{title}</div>
         <div style={{fontSize: "13px", color: "var(--ant-color-text-tertiary)", fontWeight: 400, marginTop: "2px"}}>{desc}</div>
       </div>
     );
+
+    return (
+      <Card size="small" title={renderCardTitle(i18next.t("general:Identity"), i18next.t("general:Site identity and navigation"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+        <Row gutter={rowGutter}>
+          {this.renderSiteField(
+            Setting.getLabel(i18next.t("general:Name"), i18next.t("general:Name - Tooltip")),
+            <Input value={site.name} disabled={site.name === "site-built-in"} onChange={e => {
+              this.updateSiteField("name", e.target.value);
+            }} />,
+            8
+          )}
+          {this.renderSiteField(
+            Setting.getLabel(i18next.t("general:Display name"), i18next.t("general:Display name - Tooltip")),
+            <Input value={site.displayName} onChange={e => {
+              this.updateSiteField("displayName", e.target.value);
+            }} />,
+            8
+          )}
+        </Row>
+        <Row gutter={rowGutter} style={{marginTop: 8}}>
+          {this.renderSiteField(
+            Setting.getLabel(i18next.t("store:Navbar items"), i18next.t("store:Navbar items - Tooltip")),
+            <NavItemTree
+              disabled={!Setting.isAdminUser(this.props.account)}
+              casdoorAvailable={Setting.isCasdoorAvailable()}
+              checkedKeys={site.navItems ?? ["all"]}
+              defaultExpandedKeys={["all"]}
+              onCheck={(checked) => {
+                const checkedArr = Array.isArray(checked) ? [...checked] : [...checked.checked];
+                const identityKeys = ["/identity", "/users", "/casdoor-resources", "/permissions"];
+                const prevChecked = site.navItems ?? ["all"];
+                const newlyChecked = checkedArr.filter(k => identityKeys.includes(k) && !prevChecked.includes(k));
+                if (!Setting.isCasdoorAvailable() && newlyChecked.length > 0) {
+                  Modal.warning({
+                    title: i18next.t("general:Identity requires Casdoor"),
+                    content: i18next.t("general:Identity requires Casdoor - Tooltip"),
+                  });
+                  return;
+                }
+                if (!checkedArr.includes("/sites")) {
+                  checkedArr.push("/sites");
+                }
+                this.updateSiteField("navItems", checkedArr);
+              }}
+            />,
+            24
+          )}
+        </Row>
+      </Card>
+    );
+  }
+
+  renderConfigCategory(catName, title, desc, fieldsNode) {
+    const cardHeadStyle = {background: "transparent", borderBottom: "none", fontWeight: 600, fontSize: "15px", fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"};
+    const sectionCardStyle = {
+      marginBottom: "16px",
+      borderRadius: "14px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+      padding: "18px",
+    };
+
+    let customContent = null;
+    if (catName === "Branding") {
+      customContent = this.renderBrandingCustomFields();
+    } else if (catName === "Content") {
+      customContent = this.renderContentCustomFields();
+    }
+
+    const renderCardTitle = () => (
+      <div>
+        <div style={{fontWeight: 600, fontSize: "15px"}}>{title}</div>
+        <div style={{fontSize: "13px", color: "var(--ant-color-text-tertiary)", fontWeight: 400, marginTop: "2px"}}>{desc}</div>
+      </div>
+    );
+
+    return (
+      <Card key={catName} size="small" title={renderCardTitle()} style={sectionCardStyle} headStyle={cardHeadStyle}>
+        {customContent}
+        {fieldsNode}
+      </Card>
+    );
+  }
+
+  renderSiteActions() {
+    return (
+      <Space wrap>
+        <Button onClick={() => this.submitSiteEdit(false)}>{i18next.t("general:Save")}</Button>
+        <Button type="primary" onClick={() => this.submitSiteEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+      </Space>
+    );
+  }
+
+  renderSite() {
+    const {site, configMetadata} = this.state;
+    if (!site || !configMetadata) {return null;}
 
     return (
       <div>
@@ -147,266 +359,25 @@ class SiteEditPage extends React.Component {
           </div>
         </div>
 
-        <Card size="small" title={renderCardTitle(i18next.t("general:General Settings"), i18next.t("general:General Settings desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row gutter={rowGutter}>
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Name"), i18next.t("general:Name - Tooltip")),
-              <Input value={site.name} disabled={site.name === "site-built-in"} onChange={e => {
-                this.updateSiteField("name", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Display name"), i18next.t("general:Display name - Tooltip")),
-              <Input value={site.displayName} onChange={e => {
-                this.updateSiteField("displayName", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:HTML title"), i18next.t("general:HTML title - Tooltip")),
-              <Input value={site.htmlTitle} onChange={e => {
-                this.updateSiteField("htmlTitle", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("store:Theme color"), i18next.t("store:Theme color - Tooltip")),
-              <input type="color" value={site.themeColor || ""} style={{height: "32px", width: "64px", cursor: "pointer", border: "1px solid #d9d9d9", borderRadius: "6px", padding: "2px"}} onChange={(e) => {
-                this.updateSiteField("themeColor", e.target.value);
-              }} />,
-              8
-            )}
-          </Row>
-        </Card>
+        {this.renderEntityCard()}
 
-        <Card size="small" title={renderCardTitle(i18next.t("general:Branding"), i18next.t("general:Branding desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row gutter={rowGutter}>
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("provider:Endpoint"), i18next.t("provider:Endpoint - Tooltip")),
-              <Input prefix={<LinkOutlined />} value={site.endpoint} onChange={e => {
-                this.updateSiteField("endpoint", e.target.value);
-              }} />,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Favicon URL"), i18next.t("general:Favicon URL - Tooltip")),
-              <Space direction="vertical" style={{width: "100%"}}>
-                <Space.Compact style={{width: "100%"}}>
-                  <Input prefix={<LinkOutlined />} value={site.faviconUrl} onChange={e => {
-                    this.updateSiteField("faviconUrl", e.target.value);
-                  }} />
-                  <Upload name="file" accept="image/*" showUploadList={false} customRequest={({file}) => this.handleImageUpload("faviconUrl", file)}>
-                    <Button icon={<UploadOutlined />} loading={this.state.uploadingFavicon}>
-                      {i18next.t("general:Upload")}
-                    </Button>
-                  </Upload>
-                </Space.Compact>
-                {site.faviconUrl ? (
-                  <Image src={Setting.getFaviconUrl("", site.faviconUrl)} alt={site.faviconUrl} height={90}
-                    preview={{mask: i18next.t("general:Preview")}}
-                  />
-                ) : null}
-              </Space>,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Logo URL"), i18next.t("general:Logo URL - Tooltip")),
-              <Space direction="vertical" style={{width: "100%"}}>
-                <Space.Compact style={{width: "100%"}}>
-                  <Input prefix={<LinkOutlined />} value={site.logoUrl} onChange={e => {
-                    this.updateSiteField("logoUrl", e.target.value);
-                  }} />
-                  <Upload name="file" accept="image/*" showUploadList={false} customRequest={({file}) => this.handleImageUpload("logoUrl", file)}>
-                    <Button icon={<UploadOutlined />} loading={this.state.uploadingLogo}>
-                      {i18next.t("general:Upload")}
-                    </Button>
-                  </Upload>
-                </Space.Compact>
-                {site.logoUrl ? (
-                  <Image src={Setting.getLogo("", site.logoUrl)} alt={site.logoUrl} height={90}
-                    preview={{mask: i18next.t("general:Preview")}}
-                  />
-                ) : null}
-              </Space>,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Static base URL"), i18next.t("general:Static base URL - Tooltip")),
-              <Input prefix={<LinkOutlined />} value={site.staticBaseUrl} onChange={e => {
-                this.updateSiteField("staticBaseUrl", e.target.value);
-              }} />,
-              12
-            )}
-          </Row>
-        </Card>
-
-        <Card size="small" title={renderCardTitle(i18next.t("general:Content"), i18next.t("general:Content desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row gutter={rowGutter}>
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Hub description"), i18next.t("general:Hub description - Tooltip")),
-              <Input value={site.hubDesc} onChange={e => {
-                this.updateSiteField("hubDesc", e.target.value);
-              }} />,
-              24
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Navbar HTML"), i18next.t("general:Navbar HTML - Tooltip")),
-              <Popover placement="right" content={
-                <div style={{width: "900px", height: "300px"}}>
-                  <Editor
-                    value={site.navbarHtml}
-                    lang="html"
-                    fillHeight
-                    dark
-                    onChange={value => {
-                      this.updateSiteField("navbarHtml", value);
-                    }}
-                  />
-                </div>
-              } title={i18next.t("general:Navbar HTML - Edit")} trigger="click">
-                <Input value={site.navbarHtml} onChange={e => {
-                  this.updateSiteField("navbarHtml", e.target.value);
-                }} />
-              </Popover>,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("general:Footer HTML"), i18next.t("general:Footer HTML - Tooltip")),
-              <Popover placement="right" content={
-                <div style={{width: "900px", height: "300px"}}>
-                  <Editor
-                    value={site.footerHtml}
-                    lang="html"
-                    fillHeight
-                    dark
-                    onChange={value => {
-                      this.updateSiteField("footerHtml", value);
-                    }}
-                  />
-                </div>
-              } title={i18next.t("store:Footer HTML - Edit")} trigger="click">
-                <Input value={site.footerHtml} onChange={e => {
-                  this.updateSiteField("footerHtml", e.target.value);
-                }} />
-              </Popover>,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("store:Navbar items"), i18next.t("store:Navbar items - Tooltip")),
-              <NavItemTree
-                disabled={!Setting.isAdminUser(this.props.account)}
-                casdoorAvailable={Setting.isCasdoorAvailable()}
-                checkedKeys={site.navItems ?? ["all"]}
-                defaultExpandedKeys={["all"]}
-                onCheck={(checked) => {
-                  const checkedArr = Array.isArray(checked) ? [...checked] : [...checked.checked];
-                  const identityKeys = ["/identity", "/users", "/casdoor-resources", "/permissions"];
-                  const prevChecked = site.navItems ?? ["all"];
-                  const newlyChecked = checkedArr.filter(k => identityKeys.includes(k) && !prevChecked.includes(k));
-                  if (!Setting.isCasdoorAvailable() && newlyChecked.length > 0) {
-                    Modal.warning({
-                      title: i18next.t("general:Identity requires Casdoor"),
-                      content: i18next.t("general:Identity requires Casdoor - Tooltip"),
-                    });
-                    return;
-                  }
-                  if (!checkedArr.includes("/sites")) {
-                    checkedArr.push("/sites");
-                  }
-                  this.updateSiteField("navItems", checkedArr);
-                }}
-              />,
-              24
-            )}
-          </Row>
-        </Card>
-
-        <Card size="small" title={renderCardTitle(i18next.t("site:Authentication"), i18next.t("site:Authentication desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row gutter={rowGutter}>
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:OIDC issuer"), i18next.t("site:OIDC issuer - Tooltip")),
-              <Input prefix={<LinkOutlined />} value={site.issuer} onChange={e => {
-                this.updateSiteField("issuer", e.target.value);
-              }} />,
-              12
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("provider:Client ID"), i18next.t("provider:Client ID - Tooltip")),
-              <Input value={site.clientId} onChange={e => {
-                this.updateSiteField("clientId", e.target.value);
-              }} />,
-              6
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("provider:Client secret"), i18next.t("provider:Client secret - Tooltip")),
-              <Input.Password
-                value={site.clientSecret}
-                iconRender={visible => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
-                onChange={e => {
-                  this.updateSiteField("clientSecret", e.target.value);
-                }}
-              />,
-              6
-            )}
-            {this.renderSiteSwitch(
-              Setting.getLabel(i18next.t("site:Check user balance"), i18next.t("site:Check user balance - Tooltip")),
-              site.checkUserBalance,
-              checked => {
-                this.updateSiteField("checkUserBalance", checked);
-              },
-              6
-            )}
-          </Row>
-        </Card>
-
-        <Card size="small" title={renderCardTitle(i18next.t("site:Advanced"), i18next.t("site:Advanced desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row gutter={rowGutter}>
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:IP parsing mode"), i18next.t("site:IP parsing mode - Tooltip")),
-              <Input value={site.ipParsingMode} onChange={e => {
-                this.updateSiteField("ipParsingMode", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:Parent DB name"), i18next.t("site:Parent DB name - Tooltip")),
-              <Input value={site.parentDbName} onChange={e => {
-                this.updateSiteField("parentDbName", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:Hub DB names"), i18next.t("site:Hub DB names - Tooltip")),
-              <Input value={site.hubDbNames} placeholder={"openagent-db1, openagent-db2"} onChange={e => {
-                this.updateSiteField("hubDbNames", e.target.value);
-              }} />,
-              16
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:Socks5 proxy"), i18next.t("site:Socks5 proxy - Tooltip")),
-              <Input value={site.socks5Proxy} onChange={e => {
-                this.updateSiteField("socks5Proxy", e.target.value);
-              }} />,
-              8
-            )}
-            {this.renderSiteField(
-              Setting.getLabel(i18next.t("site:Log config"), i18next.t("site:Log config - Tooltip")),
-              <Input value={site.logConfig} onChange={e => {
-                this.updateSiteField("logConfig", e.target.value);
-              }} />,
-              24
-            )}
-          </Row>
-        </Card>
+        <ConfigForm
+          ref={this.configFormRef}
+          metadata={configMetadata}
+          initialValues={site}
+          renderCategory={(catName, title, desc, fieldsNode) =>
+            this.renderConfigCategory(catName, title, desc, fieldsNode)
+          }
+        />
       </div>
     );
   }
 
   render() {
+    const ready = this.state.site !== null && this.state.configMetadata !== null;
     return (
       <div style={{background: "var(--ant-color-bg-layout)", padding: "16px 20px 32px", minHeight: "100vh"}}>
-        {this.state.site !== null ? this.renderSite() : <Loading type="page" tip={i18next.t("general:Loading")} />}
+        {ready ? this.renderSite() : <Loading type="page" tip={i18next.t("general:Loading")} />}
       </div>
     );
   }

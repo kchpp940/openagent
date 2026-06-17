@@ -289,6 +289,11 @@ class ConfigForm extends React.Component {
     const {hideCategoryHeader} = this.props;
 
     const fields = items.map((m) => this.renderField(m));
+    const fieldsNode = (
+      <Row gutter={[16, 8]}>
+        {fields}
+      </Row>
+    );
 
     if (hideCategoryHeader) {
       return fields;
@@ -298,6 +303,14 @@ class ConfigForm extends React.Component {
     const catDescs = CATEGORY_DESCRIPTIONS[catName] || {en: "", zh: ""};
     const title = i18nText(catLabels, langKey);
     const desc = i18nText(catDescs, langKey);
+
+    if (this.props.renderCategory) {
+      return (
+        <div key={catName}>
+          {this.props.renderCategory(catName, title, desc, fieldsNode)}
+        </div>
+      );
+    }
 
     return (
       <div key={catName} style={{marginBottom: 16}}>
@@ -324,9 +337,7 @@ class ConfigForm extends React.Component {
               </div>
             </div>
           )}
-        <Row gutter={[16, 8]}>
-          {fields}
-        </Row>
+        {fieldsNode}
       </div>
     );
   }
