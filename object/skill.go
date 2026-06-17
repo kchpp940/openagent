@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -177,35 +176,23 @@ func unquote(s string) string {
 // returns a partially-populated Skill (not yet persisted to the database).
 // ---------------------------------------------------------------------------
 
-type SkillLoadResult struct {
-	Skill  *Skill
-	Error  error
-	Source string
-}
-
-func LoadSkillWithContext(tec *mcp.ToolExecutionContext, dir string) *SkillLoadResult {
-	result := &SkillLoadResult{
-		Source: dir,
-	}
-
-	if dir == "" {
-		result.Error = fmt.Errorf("skill directory path is empty")
-		return result
-	}
-
+// LoadSkill reads {dir}/SKILL.md and all {dir}/references/*.md files,
+// parses them, and returns a Skill struct ready to be saved with AddSkill.
+func LoadSkill(dir string) (*Skill, error) {
 	skillMdPath := filepath.Join(dir, "SKILL.md")
 	rawBytes, err := os.ReadFile(skillMdPath)
 	if err != nil {
-		result.Error = fmt.Errorf("cannot read SKILL.md at %s: %w", skillMdPath, err)
-		return result
+		return nil, fmt.Errorf("cannot read SKILL.md at %s: %w", skillMdPath, err)
 	}
 	raw := string(rawBytes)
 
 	name, description, homepage, metadata, emoji, content := parseSkillMd(raw)
 	if name == "" {
+		// Fall back to directory base-name
 		name = filepath.Base(dir)
 	}
 
+	// Read references/
 	var refs []SkillReference
 	refsDir := filepath.Join(dir, "references")
 	if entries, err2 := os.ReadDir(refsDir); err2 == nil {
@@ -225,7 +212,7 @@ func LoadSkillWithContext(tec *mcp.ToolExecutionContext, dir string) *SkillLoadR
 		}
 	}
 
-	result.Skill = &Skill{
+	return &Skill{
 		Name:        name,
 		DisplayName: name,
 		Type:        "built-in",
@@ -237,17 +224,7 @@ func LoadSkillWithContext(tec *mcp.ToolExecutionContext, dir string) *SkillLoadR
 		SkillMd:     raw,
 		References:  refs,
 		State:       "Active",
-	}
-	return result
-}
-
-// ---- 旧 API 兼容层 ----
-// 新代码请使用 LoadSkillWithContext 返回 SkillLoadResult。
-// 本函数仅保留向后兼容，内部直接委托给 LoadSkillWithContext。
-func LoadSkill(dir string) (*Skill, error) {
-	tec := mcp.NewToolExecutionContext(nil)
-	result := LoadSkillWithContext(tec, dir)
-	return result.Skill, result.Error
+	}, nil
 }
 
 // ---------------------------------------------------------------------------

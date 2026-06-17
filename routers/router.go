@@ -236,6 +236,8 @@ func initAPI() {
 	beego.Router("/api/health", &controllers.ApiController{}, "GET:Health")
 	beego.Router("/api/get-prometheus-info", &controllers.ApiController{}, "GET:GetPrometheusInfo")
 	beego.Router("/api/metrics", &controllers.ApiController{}, "GET:GetMetrics")
+	beego.Router("/api/get-config-metadata", &controllers.ApiController{}, "GET:GetConfigMetadata")
+	beego.Router("/api/get-web-config", &controllers.ApiController{}, "GET:GetWebConfig")
 
 	beego.Router("/api/chat/completions", &controllers.ApiController{}, "POST:ChatCompletions")
 }

@@ -15,6 +15,7 @@
 package controllers
 
 import (
+	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/util"
 )
 
@@ -78,4 +79,30 @@ func (c *ApiController) GetVersionInfo() {
 // @router /health [get]
 func (c *ApiController) Health() {
 	c.ResponseOk()
+}
+
+// GetConfigMetadata
+// @Title GetConfigMetadata
+// @Tag System API
+// @Description get all configurable metadata (names, defaults, types, labels, descriptions) for frontend settings page rendering
+// @Success 200 {array} conf.ConfigMetadata The Response object
+// @router /get-config-metadata [get]
+func (c *ApiController) GetConfigMetadata() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	metadata := conf.GetAllConfigMetadata()
+	c.ResponseOk(metadata)
+}
+
+// GetWebConfig
+// @Title GetWebConfig
+// @Tag System API
+// @Description get public web-facing config (branding, auth, theme) for frontend bootstrap
+// @Success 200 {object} conf.WebConfig The Response object
+// @router /get-web-config [get]
+func (c *ApiController) GetWebConfig() {
+	webConfig := conf.GetWebConfig()
+	c.ResponseOk(webConfig)
 }

@@ -16,13 +16,13 @@ package object
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/auth"
 	"github.com/the-open-agent/openagent/i18n"
-	"github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
@@ -224,9 +224,18 @@ func testToolWithLoader(t *Tool, lang string, loadTool func(owner string, name s
 		}
 	}
 
-	payload, err := mcp.ParseTestContent(t.TestContent)
-	if err != nil {
+	var payload struct {
+		Tool      string                 `json:"tool"`
+		Arguments map[string]interface{} `json:"arguments"`
+	}
+	if err := json.Unmarshal([]byte(t.TestContent), &payload); err != nil {
 		return "", fmt.Errorf(i18n.Translate(lang, "object:invalid tool test JSON in testContent: %v"), err)
+	}
+	if strings.TrimSpace(payload.Tool) == "" {
+		return "", fmt.Errorf(i18n.Translate(lang, "object:tool test JSON must include non-empty \"tool\""))
+	}
+	if payload.Arguments == nil {
+		payload.Arguments = map[string]interface{}{}
 	}
 
 	owner := strings.TrimSpace(t.Owner)
@@ -252,18 +261,20 @@ func testToolWithLoader(t *Tool, lang string, loadTool func(owner string, name s
 		return "", fmt.Errorf("tool not found: %s", payload.Tool)
 	}
 
-	tec := mcp.NewToolExecutionContext(context.Background()).
-		WithLang(lang).
-		WithOwner(owner).
-		WithToolName(payload.Tool)
-
-	ctx, cancel := tec.GetTimeoutContext()
-	defer cancel()
-
-	result, execErr := foundTool.Execute(ctx, payload.Arguments)
-	extResult := mcp.CallToolResultToExternalResult(result, execErr)
-	if !extResult.Success {
-		return "", fmt.Errorf("%s", extResult.ErrorWithKind())
+	result, err := foundTool.Execute(context.Background(), payload.Arguments)
+	if err != nil {
+		return "", err
 	}
-	return mcp.ExtractTextFromResult(result), nil
+
+	var texts []string
+	for _, c := range result.Content {
+		if tc, ok := c.(*protocol.TextContent); ok {
+			texts = append(texts, tc.Text)
+		}
+	}
+	output := strings.Join(texts, "\n")
+	if result.IsError {
+		return "", fmt.Errorf("%s", output)
+	}
+	return output, nil
 }

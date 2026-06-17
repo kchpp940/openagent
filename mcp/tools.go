@@ -17,21 +17,17 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/client"
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/ThinkInAIXYZ/go-mcp/transport"
 )
 
-type ListToolsResult struct {
-	Tools  []*protocol.Tool
-	Error  error
-	Client *client.Client
-}
-
-func ListToolsWithContext(tec *ToolExecutionContext, url, token string) *ListToolsResult {
-	result := &ListToolsResult{}
-
+// GetToolsFromURL connects to an HTTP-based MCP server and returns its tool list.
+// Always uses StreamableHTTP transport (the current MCP standard); when token is
+// non-empty it is sent as a Bearer Authorization header.
+func GetToolsFromURL(url, token string) ([]*protocol.Tool, error) {
 	var tr transport.ClientTransport
 	var err error
 
@@ -45,39 +41,21 @@ func ListToolsWithContext(tec *ToolExecutionContext, url, token string) *ListToo
 		tr, err = transport.NewStreamableHTTPClientTransport(url)
 	}
 	if err != nil {
-		result.Error = fmt.Errorf("mcp: create transport for %s: %w", url, err)
-		return result
+		return nil, fmt.Errorf("mcp: create transport for %s: %w", url, err)
 	}
 
 	cli, err := client.NewClient(tr)
 	if err != nil {
-		result.Error = fmt.Errorf("mcp: create client for %s: %w", url, err)
-		return result
+		return nil, fmt.Errorf("mcp: create client for %s: %w", url, err)
 	}
-	result.Client = cli
+	defer cli.Close()
 
-	ctx, cancel := tec.GetTimeoutContext()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// ---- SDK 原始调用边界 ----
 	list, err := cli.ListTools(ctx)
-	// --------------------------
 	if err != nil {
-		result.Error = fmt.Errorf("mcp: list tools from %s: %w", url, err)
-		return result
+		return nil, fmt.Errorf("mcp: list tools from %s: %w", url, err)
 	}
-	result.Tools = list.Tools
-	return result
-}
-
-// ---- 旧 API 兼容层 ----
-// 新代码请使用 ListToolsWithContext 返回 ListToolsResult。
-// 本函数仅保留向后兼容，内部直接委托给 ListToolsWithContext。
-func GetToolsFromURL(url, token string) ([]*protocol.Tool, error) {
-	tec := NewToolExecutionContext(context.Background()).WithTimeout(DefaultListToolsTimeout)
-	result := ListToolsWithContext(tec, url, token)
-	if result.Client != nil {
-		defer result.Client.Close()
-	}
-	return result.Tools, result.Error
+	return list.Tools, nil
 }

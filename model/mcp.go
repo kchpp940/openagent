@@ -85,9 +85,6 @@ func flushToolCallDelta(index int, id string, name string, argumentsDelta string
 func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
 	var openaiTools []openai.Tool
 	for _, tool := range tools {
-		// ---- 模型 API 适配边界：protocol.InputSchema -> OpenAI 工具参数格式 ----
-		// 此处为 MCP 协议格式到 OpenAI API 格式的协议间转换，
-		// 方向与 SchemaParseResult（JSON 字符串 -> 解析）不同。
 		schemaBytes, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return nil, err
@@ -97,7 +94,6 @@ func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
 		if err := json.Unmarshal(schemaBytes, &parameters); err != nil {
 			return nil, err
 		}
-		// --------------------------------------------------------------------
 		normalizeToolParametersSchema(parameters)
 		openaiTools = append(openaiTools, openai.Tool{
 			Type: "function",
@@ -291,9 +287,9 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 }
 
 func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+	var arguments map[string]interface{}
 	ctx := context.Background()
 
-	// ---- 流式输出边界：tool-start 事件 ----
 	toolStartData := ToolCall{
 		Name:      toolCall.Function.Name,
 		Arguments: toolCall.Function.Arguments,
@@ -304,67 +300,74 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 	if len(toolStartJSON) > 0 {
 		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
 	}
-	// ---- 流式输出边界结束 ----
 
-	arguments, parseErr := mcp.ParseToolArguments(toolCall.Function.Arguments)
-	if parseErr != nil {
-		extResult := mcp.NewExternalCallResultError(mcp.ErrKindParseArgs,
-			fmt.Sprintf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), parseErr), parseErr)
-		return emitToolResult(toolCall, extResult, messages, writer, lang)
+	if parseErr := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); parseErr != nil {
+		errMsg := fmt.Sprintf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), parseErr)
+		return emitToolError(toolCall, mcp.ToolCallErrParseArgs, errMsg, messages, writer, lang)
 	}
 
 	var mu sync.Mutex
+	var result *protocol.CallToolResult
+	var execErr error
 
-	// ---- 流式输出边界：heartbeat 保活 ----
 	heartbeat := startHeartbeat(writer, &mu)
 	defer close(heartbeat)
-	// ---- 流式输出边界结束 ----
-
-	var extResult *mcp.ExternalCallResult
 
 	if mcpToolSet == nil {
-		extResult = mcp.NewExternalCallResultError(mcp.ErrKindNoBuiltinReg,
-			i18n.Translate(lang, "model:MCP toolset is not initialized"))
-	} else if serverName == "" {
+		errMsg := i18n.Translate(lang, "model:MCP toolset is not initialized")
+		return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
+	}
+
+	if serverName == "" {
 		if mcpToolSet.BuiltinTools == nil {
-			extResult = mcp.NewExternalCallResultError(mcp.ErrKindNoBuiltinReg,
-				fmt.Sprintf(i18n.Translate(lang, "model:builtin tool registry is not available; cannot execute tool: %s"), toolName))
-		} else {
-			result, execErr := mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
-			extResult = mcp.CallToolResultToExternalResult(result, execErr)
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:builtin tool registry is not available; cannot execute tool: %s"), toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoBuiltinReg, errMsg, messages, writer, lang)
 		}
+		result, execErr = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
 	} else {
 		conn, ok := mcpToolSet.Connections[serverName]
 		if !ok {
-			extResult = mcp.NewExternalCallResultError(mcp.ErrKindNoConnection,
-				fmt.Sprintf(i18n.Translate(lang, "model:no open MCP connection for server: %s (tool: %s)"), serverName, toolName))
-		} else {
-			req := &protocol.CallToolRequest{
-				Name:      toolName,
-				Arguments: arguments,
-			}
-			// ---- SDK 原始调用边界 ----
-			// 此处直接调用是因为连接由上层 ToolSet 管理，不在本函数生命周期内创建/关闭
-			result, execErr := conn.CallTool(ctx, req)
-			// --------------------------
-			extResult = mcp.CallToolResultToExternalResult(result, execErr)
+			errMsg := fmt.Sprintf(i18n.Translate(lang, "model:no open MCP connection for server: %s (tool: %s)"), serverName, toolName)
+			return emitToolError(toolCall, mcp.ToolCallErrNoConnection, errMsg, messages, writer, lang)
 		}
+		req := &protocol.CallToolRequest{
+			Name:      toolName,
+			Arguments: arguments,
+		}
+		result, execErr = conn.CallTool(ctx, req)
 	}
-
-	return emitToolResult(toolCall, extResult, messages, writer, lang)
-}
-
-func emitToolResult(toolCall openai.ToolCall, extResult *mcp.ExternalCallResult, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
-	var mu sync.Mutex
 
 	response := &ToolCallResponse{
-		Success:  extResult.Success,
 		ToolName: toolCall.Function.Name,
 	}
-	if extResult.Success {
-		response.Data = extResult.Data
+
+	if execErr != nil {
+		response.Success = false
+		if tce, ok := mcp.IsToolCallError(execErr); ok {
+			response.Error = fmt.Sprintf("[%s] %s", tce.Kind, tce.Message)
+		} else {
+			response.Error = execErr.Error()
+		}
+	} else if result == nil {
+		response.Success = false
+		response.Error = i18n.Translate(lang, "model:tool returned nil result")
+	} else if result.IsError {
+		response.Success = false
+		contentBytes, marshalErr := json.Marshal(result.Content)
+		if marshalErr != nil {
+			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal error content: %v"), marshalErr)
+		} else {
+			response.Error = string(contentBytes)
+		}
 	} else {
-		response.Error = extResult.ErrorWithKind()
+		response.Success = true
+		contentBytes, marshalErr := json.Marshal(result.Content)
+		if marshalErr != nil {
+			response.Success = false
+			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal content: %v"), marshalErr)
+		} else {
+			response.Data = string(contentBytes)
+		}
 	}
 
 	responseJson, marshalErr := json.Marshal(response)
@@ -373,20 +376,25 @@ func emitToolResult(toolCall openai.ToolCall, extResult *mcp.ExternalCallResult,
 	}
 
 	var contentStr string
-	if !extResult.Success {
-		contentStr = extResult.ErrorWithKind()
+	if !response.Success {
+		contentStr = response.Error
 	} else {
-		contentStr = extResult.Data
+		if dataStr, ok := response.Data.(string); ok {
+			contentStr = dataStr
+		} else {
+			dataBytes, _ := json.Marshal(response.Data)
+			contentStr = string(dataBytes)
+		}
 	}
 
 	fmt.Printf("Tool Result: [%s]\n", contentStr)
+	isError := !response.Success
 
-	// ---- 流式输出边界：tool 进度事件 ----
 	toolData := ToolCall{
 		Name:      toolCall.Function.Name,
 		Arguments: toolCall.Function.Arguments,
 		Content:   contentStr,
-		IsError:   !extResult.Success,
+		IsError:   isError,
 	}
 	toolJSON, _ := json.Marshal(toolData)
 	if len(toolJSON) > 0 {
@@ -394,14 +402,12 @@ func emitToolResult(toolCall openai.ToolCall, extResult *mcp.ExternalCallResult,
 		_ = flushDataThink(string(toolJSON), "tool", writer, lang)
 		mu.Unlock()
 	}
-	// ---- 流式输出边界结束 ----
 
 	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
-	return messages, !extResult.Success, nil
+	return messages, !response.Success, nil
 }
 
 func handleToolIdParseError(toolCall openai.ToolCall, parseErr error, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
-	// ---- 流式输出边界：tool-start 事件 ----
 	toolStartData := ToolCall{
 		Name:      toolCall.Function.Name,
 		Arguments: toolCall.Function.Arguments,
@@ -412,11 +418,39 @@ func handleToolIdParseError(toolCall openai.ToolCall, parseErr error, messages [
 	if len(toolStartJSON) > 0 {
 		_ = flushDataThink(string(toolStartJSON), "tool-start", writer, lang)
 	}
-	// ---- 流式输出边界结束 ----
 
-	extResult := mcp.NewExternalCallResultError(mcp.ErrKindInvalidID,
-		fmt.Sprintf(i18n.Translate(lang, "model:invalid tool id: %v"), parseErr), parseErr)
-	return emitToolResult(toolCall, extResult, messages, writer, lang)
+	errMsg := fmt.Sprintf(i18n.Translate(lang, "model:invalid tool id: %v"), parseErr)
+	return emitToolError(toolCall, mcp.ToolCallErrInvalidID, errMsg, messages, writer, lang)
+}
+
+func emitToolError(toolCall openai.ToolCall, errKind, errMsg string, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+	response := &ToolCallResponse{
+		Success:  false,
+		ToolName: toolCall.Function.Name,
+		Error:    fmt.Sprintf("[%s] %s", errKind, errMsg),
+	}
+
+	responseJson, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool error response: %v"), marshalErr)
+	}
+
+	contentStr := response.Error
+	fmt.Printf("Tool Error [%s]: %s\n", errKind, contentStr)
+
+	toolData := ToolCall{
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   contentStr,
+		IsError:   true,
+	}
+	toolJSON, _ := json.Marshal(toolData)
+	if len(toolJSON) > 0 {
+		_ = flushDataThink(string(toolJSON), "tool", writer, lang)
+	}
+
+	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
+	return messages, true, nil
 }
 
 func GetToolCallsFromWriter(toolMessage string) []ToolCall {

@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -76,69 +75,20 @@ func ReadGlobalConfigTokens() []string {
 }
 
 func GetConfigString(key string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-
-	siteConfigMu.RLock()
-	siteVal, hasSiteVal := siteConfigOverrides[key]
-	siteConfigMu.RUnlock()
-	if hasSiteVal && siteVal != "" {
-		return siteVal
-	}
-
-	tokens := ReadGlobalConfigTokens()
-	if len(tokens) > 0 {
-		if key == "htmlTitle" {
-			return tokens[8]
-		} else if key == "faviconUrl" {
-			return tokens[9]
-		} else if key == "logoUrl" {
-			return tokens[10]
-		} else if key == "footerHtml" {
-			return tokens[11]
-		}
-	}
-
-	res := beego.AppConfig.String(key)
-	if res == "" {
-		if key == "staticBaseUrl" {
-			res = "https://cdn.openagentai.org"
-		} else if key == "logConfig" {
-			res = "{\"filename\": \"logs/openagent.log\", \"maxdays\":99999, \"perm\":\"0770\"}"
-		}
-	}
-
-	if key == "staticBaseUrl" {
-		if strings.HasSuffix(beego.AppConfig.String("casdoorEndpoint"), ".casdoor.net") && res == "https://cdn.openagentai.org" {
-			res = "https://cdn.casibase.com"
-		}
-	}
-
-	return res
+	return GetConfigString2(key)
 }
 
 // GetDefaultColorPrimary returns the default Ant Design primary color.
 func GetDefaultColorPrimary() string {
-	return GetConfigString("defaultColorPrimary")
+	return GetConfigString2("defaultColorPrimary")
 }
 
 func GetConfigBool(key string) bool {
-	value := GetConfigString(key)
-	if value == "true" {
-		return true
-	} else {
-		return false
-	}
+	return GetConfigBool2(key)
 }
 
 func GetConfigInt(key string) int {
-	value := GetConfigString(key)
-	num, err := strconv.Atoi(value)
-	if err != nil {
-		return 0
-	}
-	return num
+	return GetConfigInt2(key)
 }
 
 func GetConfigDataSourceName() string {
@@ -172,15 +122,11 @@ func GetLanguage(language string) string {
 }
 
 func IsDemoMode() bool {
-	return strings.ToLower(GetConfigString("isDemoMode")) == "true"
+	return GetConfigBool2("isDemoMode")
 }
 
 func GetConfigBatchSize() int {
-	res, err := strconv.Atoi(GetConfigString("batchSize"))
-	if err != nil {
-		res = 100
-	}
-	return res
+	return GetConfigInt2("batchSize")
 }
 
 func GetStringArray(key string) []string {

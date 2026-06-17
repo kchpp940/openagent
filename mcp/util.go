@@ -12,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ---- 纯编解码工具函数边界 ----
-// 本文件仅包含 Tool ID 的纯字符串编解码逻辑，与执行上下文、错误处理、
-// Schema 解析无关。若需工具执行 / 错误包装 / Schema 解析，请使用
-// execution.go 中的 ToolExecutionContext / ExternalCallResult / SchemaParseResult。
-// ------------------------------
-
 package mcp
 
 import (

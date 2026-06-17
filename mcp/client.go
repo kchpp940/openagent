@@ -16,7 +16,9 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/client"
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
@@ -52,39 +54,37 @@ func NewClient(url, token string) (*client.Client, error) {
 	})
 }
 
-func CallToolWithContext(tec *ToolExecutionContext, url, token, toolName string, arguments map[string]interface{}) *ExternalCallResult {
+// CallTool opens a short-lived MCP connection to url, calls toolName with
+// the supplied arguments, and returns the JSON-marshalled result content.
+func CallTool(url, token, toolName string, arguments map[string]interface{}) (string, error) {
 	cli, err := NewClient(url, token)
 	if err != nil {
-		return NewExternalCallResultError(ErrKindNoConnection,
-			fmt.Sprintf("failed to create MCP client: %v", err), err)
+		return "", err
 	}
 	defer cli.Close()
 
-	ctx, cancel := tec.GetTimeoutContext()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// ---- SDK 原始调用边界 ----
 	result, err := cli.CallTool(ctx, &protocol.CallToolRequest{
 		Name:      toolName,
 		Arguments: arguments,
 	})
-	// --------------------------
-
-	extResult := CallToolResultToExternalResult(result, err)
-	extResult.RawResult = result
-	return extResult
-}
-
-// ---- 旧 API 兼容层 ----
-// 新代码请使用 CallToolWithContext 返回 ExternalCallResult。
-// 本函数仅保留向后兼容，内部直接委托给 CallToolWithContext。
-func CallTool(url, token, toolName string, arguments map[string]interface{}) (string, error) {
-	tec := NewToolExecutionContext(context.Background()).WithTimeout(DefaultToolCallTimeout)
-	result := CallToolWithContext(tec, url, token, toolName, arguments)
-	if !result.Success {
-		return "", fmt.Errorf("%s", result.ErrorWithKind())
+	if err != nil {
+		return "", err
 	}
-	return result.Data, nil
+	if result.IsError {
+		b, mErr := json.Marshal(result.Content)
+		if mErr != nil {
+			return "", fmt.Errorf("MCP tool returned error")
+		}
+		return "", fmt.Errorf("MCP tool returned error: %s", string(b))
+	}
+	b, err := json.Marshal(result.Content)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func createClient(srv ServerConfig) (*client.Client, error) {

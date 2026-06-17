@@ -15,6 +15,8 @@
 package object
 
 import (
+	"fmt"
+
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
@@ -53,24 +55,30 @@ type Site struct {
 }
 
 func SyncSiteToConf(site *Site) {
-	conf.SetSiteOverrides(map[string]string{
+	overrides := map[string]string{
 		"staticBaseUrl":       site.StaticBaseUrl,
 		"htmlTitle":           site.HtmlTitle,
+		"themeColor":          site.ThemeColor,
 		"faviconUrl":          site.FaviconUrl,
 		"logoUrl":             site.LogoUrl,
 		"navbarHtml":          site.NavbarHtml,
 		"footerHtml":          site.FooterHtml,
+		"endpoint":            site.Endpoint,
 		"issuer":              site.Issuer,
 		"clientId":            site.ClientId,
 		"clientSecret":        site.ClientSecret,
-		"casdoorEndpoint":     site.CasdoorEndpoint,     // backward compat
-		"casdoorOrganization": site.CasdoorOrganization, // casdoor backward compat
-		"casdoorApplication":  site.CasdoorApplication,  // casdoor backward compat
+		"casdoorEndpoint":     site.CasdoorEndpoint,
+		"casdoorOrganization": site.CasdoorOrganization,
+		"casdoorApplication":  site.CasdoorApplication,
+		"checkUserBalance":    fmt.Sprintf("%t", site.CheckUserBalance),
 		"ipParsingMode":       site.IpParsingMode,
 		"parentDbName":        site.ParentDbName,
+		"hubDbNames":          site.HubDbNames,
+		"hubDesc":             site.HubDesc,
 		"socks5Proxy":         site.Socks5Proxy,
 		"logConfig":           site.LogConfig,
-	})
+	}
+	conf.SetSiteOverrides(conf.BuildSiteOverridesFromConfigMap(conf.SiteConfigMap(overrides)))
 }
 
 func GetGlobalSites() ([]*Site, error) {

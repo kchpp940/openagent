@@ -41,27 +41,16 @@ func (e *ToolCallError) Unwrap() error {
 	return e.Err
 }
 
-// ---- 旧 API 兼容层：保留旧常量供遗留代码使用
-// 新代码请使用 mcp.ErrKind* 常量，禁止在新代码中新增对 ToolCallErr* 的引用。
 const (
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrInvalidID = "invalid_tool_id"
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrParseArgs = "parse_arguments"
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrNoConnection = "no_connection"
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrNoBuiltinReg = "no_builtin_registry"
-	// ---- 旧 API 兼容层 ----
+	ToolCallErrInvalidID       = "invalid_tool_id"
+	ToolCallErrParseArgs       = "parse_arguments"
+	ToolCallErrNoConnection    = "no_connection"
+	ToolCallErrNoBuiltinReg    = "no_builtin_registry"
 	ToolCallErrBuiltinNotFound = "builtin_tool_not_found"
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrRemoteCall = "remote_call"
-	// ---- 旧 API 兼容层 ----
-	ToolCallErrEmptyToolName = "empty_tool_name"
+	ToolCallErrRemoteCall      = "remote_call"
+	ToolCallErrEmptyToolName   = "empty_tool_name"
 )
 
-// ---- 旧 API 兼容层：保留旧错误类型供遗留代码使用
-// 新代码请使用 mcp.ExternalCallResult，禁止在新代码中新增对 ToolCallError 的引用。
 func NewToolCallError(kind, message string, err ...error) *ToolCallError {
 	tce := &ToolCallError{
 		Kind:    kind,
@@ -80,31 +69,31 @@ type ToolSet struct {
 	WebSearchEnabled bool
 }
 
-func (ts *ToolSet) ExecuteToolWithContext(tec *ToolExecutionContext, toolId string, arguments map[string]interface{}) *ExternalCallResult {
+func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	serverName, toolName, err := GetServerNameAndToolNameFromId(toolId)
 	if err != nil {
-		return NewExternalCallResultError(ErrKindInvalidID, err.Error(), err)
+		return nil, NewToolCallError(ToolCallErrInvalidID, err.Error())
 	}
 
 	if toolName == "" {
-		return NewExternalCallResultError(ErrKindEmptyToolName, "tool name is empty after parsing")
+		return nil, NewToolCallError(ToolCallErrEmptyToolName, "tool name is empty after parsing")
 	}
-
-	ctx, cancel := tec.GetTimeoutContext()
-	defer cancel()
 
 	if serverName == "" {
 		if ts.BuiltinTools == nil {
-			return NewExternalCallResultError(ErrKindNoBuiltinReg,
+			return nil, NewToolCallError(ToolCallErrNoBuiltinReg,
 				fmt.Sprintf("builtin tool registry is nil; cannot execute builtin tool: %s", toolName))
 		}
 		result, execErr := ts.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
-		return CallToolResultToExternalResult(result, execErr)
+		if execErr != nil {
+			return nil, NewToolCallError(ToolCallErrBuiltinNotFound, execErr.Error(), execErr)
+		}
+		return result, nil
 	}
 
 	conn, ok := ts.Connections[serverName]
 	if !ok {
-		return NewExternalCallResultError(ErrKindNoConnection,
+		return nil, NewToolCallError(ToolCallErrNoConnection,
 			fmt.Sprintf("no open MCP connection for server: %s (tool: %s)", serverName, toolName))
 	}
 
@@ -112,22 +101,13 @@ func (ts *ToolSet) ExecuteToolWithContext(tec *ToolExecutionContext, toolId stri
 		Name:      toolName,
 		Arguments: arguments,
 	}
-	// ---- SDK 原始调用边界 ----
 	result, execErr := conn.CallTool(ctx, req)
-	// --------------------------
-	return CallToolResultToExternalResult(result, execErr)
-}
-
-// ---- 旧 API 兼容层 ----
-// 新代码请使用 ExecuteToolWithContext 返回 ExternalCallResult。
-// 本函数仅保留向后兼容，内部直接委托给 ExecuteToolWithContext。
-func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
-	tec := NewToolExecutionContext(ctx)
-	result := ts.ExecuteToolWithContext(tec, toolId, arguments)
-	if !result.Success {
-		return nil, NewToolCallError(string(result.ErrorKind), result.Error, result.Err)
+	if execErr != nil {
+		return nil, NewToolCallError(ToolCallErrRemoteCall,
+			fmt.Sprintf("remote MCP call failed for server %s tool %s", serverName, toolName),
+			execErr)
 	}
-	return result.RawResult, nil
+	return result, nil
 }
 
 func IsToolCallError(err error) (*ToolCallError, bool) {

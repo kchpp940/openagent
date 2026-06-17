@@ -43,3 +43,23 @@ export function getPrometheusInfo() {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getConfigMetadata() {
+  return fetch(`${Setting.ServerUrl}/api/get-config-metadata`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getWebConfig() {
+  return fetch(`${Setting.ServerUrl}/api/get-web-config`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

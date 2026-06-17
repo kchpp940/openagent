@@ -25,6 +25,7 @@ import (
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/mcp"
+	mcppkg "github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -182,18 +183,10 @@ func syncServerTools(server *Server) error {
 		oldTools = []*McpTool{}
 	}
 
-	tec := mcp.NewToolExecutionContext(context.Background()).
-		WithTimeout(mcp.DefaultSyncTimeout).
-		WithServerName(server.Name)
-
-	result := mcp.ListToolsWithContext(tec, server.Url, server.Token)
-	if result.Client != nil {
-		defer result.Client.Close()
+	tools, err := mcppkg.GetToolsFromURL(server.Url, server.Token)
+	if err != nil {
+		return err
 	}
-	if result.Error != nil {
-		return result.Error
-	}
-	tools := result.Tools
 
 	newTools := make([]*McpTool, 0, len(tools))
 	for _, t := range tools {
@@ -204,11 +197,7 @@ func syncServerTools(server *Server) error {
 				break
 			}
 		}
-		// ---- 数据持久化边界：protocol.InputSchema -> JSON 字符串 ----
-		// 此处方向与 SchemaParseResult（JSON 字符串 -> 解析）相反，
-		// 是将内存中的 schema 对象序列化为字符串存入数据库。
 		schemaJSON, _ := json.Marshal(t.InputSchema)
-		// --------------------------------------------------------------
 		newTools = append(newTools, &McpTool{
 			Name:        t.Name,
 			Description: t.Description,
@@ -252,11 +241,7 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	// ---- SDK 原始调用边界 ----
-	// 此处保留直接调用是因为 BuildMcpToolSet 需要长期持有连接（不能关闭），
-	// 与 ListToolsWithContext 的短连接语义不同。
 	list, err := cli.ListTools(ctx)
-	// --------------------------
 	if err != nil {
 		cli.Close()
 		return nil, err
@@ -300,27 +285,26 @@ func GetServerMcpToolSet(owner, serverName, lang string) (*mcp.ToolSet, error) {
 	return server.BuildMcpToolSet()
 }
 
+// TestMcpServer connects to the server URL and calls the tool specified in
+// TestContent (JSON: {"tool": "toolName", "arguments": {...}}).
 func TestMcpServer(s *Server, lang string) (string, error) {
 	if s.Url == "" {
 		return "", fmt.Errorf(i18n.Translate(lang, "object:Server URL is empty"))
 	}
-
-	payload, err := mcp.ParseTestContent(s.TestContent)
-	if err != nil {
+	var payload struct {
+		Tool      string                 `json:"tool"`
+		Arguments map[string]interface{} `json:"arguments"`
+	}
+	if err := json.Unmarshal([]byte(s.TestContent), &payload); err != nil {
 		return "", fmt.Errorf(i18n.Translate(lang, "object:invalid MCP test JSON: %v"), err)
 	}
-
-	tec := mcp.NewToolExecutionContext(context.Background()).
-		WithTimeout(mcp.DefaultToolCallTimeout).
-		WithLang(lang).
-		WithServerName(s.Name).
-		WithToolName(payload.Tool)
-
-	result := mcp.CallToolWithContext(tec, s.Url, s.Token, payload.Tool, payload.Arguments)
-	if !result.Success {
-		return "", fmt.Errorf("%s", result.ErrorWithKind())
+	if strings.TrimSpace(payload.Tool) == "" {
+		return "", fmt.Errorf(i18n.Translate(lang, "object:MCP test JSON must include non-empty \"tool\""))
 	}
-	return result.Data, nil
+	if payload.Arguments == nil {
+		payload.Arguments = map[string]interface{}{}
+	}
+	return mcp.CallTool(s.Url, s.Token, payload.Tool, payload.Arguments)
 }
 
 func GetServerCount(owner, field, value string) (int64, error) {
