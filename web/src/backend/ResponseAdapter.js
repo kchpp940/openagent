@@ -12,6 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * ResponseAdapter — Centralized response parsing and error handling for API calls.
+ *
+ * Used internally by ApiClient.request(), but can also be used standalone for
+ * the "custom serverUrl" path (see ApiClient.js header docs, path #5).
+ *
+ * Key behaviors:
+ *   - Parses response body as JSON
+ *   - On HTTP error (4xx/5xx): throws ApiError with appropriate ErrorCode
+ *   - On HTTP 401 or session-expired message: auto-redirects to login
+ *   - On HTTP 403 or denial message: marks error as OPERATION_DENIED
+ *   - On business error (status !== "ok"): throws ApiError
+ *   - On success: resolves with full parsed JSON object
+ *
+ * Page components should use:
+ *   - ResponseAdapter.showErrorMessage(error, prefix) — display error toast
+ *   - ResponseAdapter.showSuccessMessage(text) — display success toast
+ *   - ResponseAdapter.getErrorMessage(error, prefix) — get formatted message without showing
+ *   - error.isPermissionDenied() — check if error is a permission denial
+ *   - error.isSessionExpired() — check if error is a session expiry
+ */
+
 import i18next from "i18next";
 import * as Setting from "../Setting";
 
