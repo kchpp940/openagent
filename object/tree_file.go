@@ -15,7 +15,6 @@
 package object
 
 import (
-	"bytes"
 	"fmt"
 	"mime/multipart"
 	"strings"
@@ -94,14 +93,23 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 	} else {
 		objectKey := fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
 		objectKey = strings.TrimLeft(objectKey, "/")
-		fileBuffer := bytes.NewBuffer(nil)
-		bs := fileBuffer.Bytes()
-		_, err = storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
+
+		uploadOpts := UploadOptions{
+			FileName:        "_hidden.ini",
+			FullStorageKey:  objectKey,
+			AddRandomSuffix: false,
+			Lang:            lang,
+			StorageProvider: storageProviderObj,
+			User:            userName,
+			Parent:          store.Name,
+		}
+
+		_, err := UploadFromBytes([]byte{}, uploadOpts)
 		if err != nil {
 			return false, nil, err
 		}
 
-		return true, bs, nil
+		return true, []byte{}, nil
 	}
 }
 

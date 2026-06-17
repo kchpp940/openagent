@@ -271,22 +271,23 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 
 			filePath := fmt.Sprintf("%s/%s/%s/%s", message.Organization, message.User, message.Chat, message.FileName)
 
-			var fileUrl string
-			fileUrl, err = obj.PutObject(message.User, message.Chat, filePath, bytes.NewBuffer(content))
+			uploadOpts := UploadOptions{
+				FileName:        message.FileName,
+				FullStorageKey:  filePath,
+				AddRandomSuffix: false,
+				Origin:          origin,
+				Lang:            lang,
+				StorageProvider: obj,
+				User:            message.User,
+				Parent:          message.Chat,
+			}
+
+			uploadResult, err := UploadFromBytes(content, uploadOpts)
 			if err != nil {
 				return err
 			}
 
-			if strings.Contains(fileUrl, "?") {
-				tokens := strings.Split(fileUrl, "?")
-				fileUrl = tokens[0]
-			}
-
-			var httpUrl string
-			httpUrl, err = getUrlFromPath(fileUrl, origin)
-			if err != nil {
-				return err
-			}
+			httpUrl := uploadResult.Url
 
 			text = strings.Replace(text, match, httpUrl, 1)
 		}

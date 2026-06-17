@@ -20,6 +20,7 @@ import * as SiteBackend from "./backend/SiteBackend";
 import * as ResourceBackend from "./backend/ResourceBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
+import {parseUploadResult} from "./UploadUtil";
 import {LinkOutlined, UploadOutlined} from "@ant-design/icons";
 import Editor from "./common/Editor";
 import {NavItemTree} from "./component/nav-item-tree/NavItemTree";
@@ -62,8 +63,9 @@ class SiteEditPage extends React.Component {
     this.setState({[loadingKey]: true});
     ResourceBackend.uploadResource("admin", "avatar", "site", this.state.site.name, file)
       .then((res) => {
-        if (res.status === "ok") {
-          this.updateSiteField(field, res.data);
+        const uploadResult = parseUploadResult(res);
+        if (uploadResult) {
+          this.updateSiteField(field, uploadResult.url);
           Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);

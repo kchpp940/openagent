@@ -138,17 +138,22 @@ func (c *ApiController) UploadTaskDocument() {
 	}
 
 	result := map[string]interface{}{
-		"url":                fileUrl,
-		"text":               task.DocumentText,
-		"parseStatus":        task.DocumentParseStatus,
-		"error":              task.DocumentError,
-		"fileType":           task.DocumentFileType,
-		"typeSource":         task.DocumentTypeSource,
-		"typeConflict":       task.DocumentTypeConflict,
-		"conflictMessage":    task.DocumentConflictMsg,
-		"fileNameExt":        typeDetection.FileNameExt,
-		"mimeTypeExt":        typeDetection.MimeTypeExt,
-		"parseSuccess":       task.DocumentParseStatus == object.DocumentParseStatusSuccess,
+		"url":             fileUrl,
+		"text":            task.DocumentText,
+		"parseStatus":     task.DocumentParseStatus,
+		"error":           task.DocumentError,
+		"fileType":        task.DocumentFileType,
+		"typeSource":      task.DocumentTypeSource,
+		"typeConflict":    task.DocumentTypeConflict,
+		"conflictMessage": task.DocumentConflictMsg,
+		"fileNameExt":     typeDetection.FileNameExt,
+		"mimeTypeExt":     typeDetection.MimeTypeExt,
+		"parseSuccess":    task.DocumentParseStatus == object.DocumentParseStatusSuccess,
+		"fileName":        uploadResult.FileName,
+		"fileSize":        uploadResult.FileSize,
+		"fileFormat":      uploadResult.FileFormat,
+		"mimeType":        uploadResult.MimeType,
+		"storageKey":      uploadResult.StorageKey,
 	}
 	c.ResponseOk(result)
 }

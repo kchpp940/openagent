@@ -263,5 +263,16 @@ func (c *ApiController) UploadResource() {
 		return
 	}
 
-	c.ResponseOk(fileUrl, fullFilePath)
+	result := map[string]interface{}{
+		"fileName":     uploadResult.FileName,
+		"fileSize":     uploadResult.FileSize,
+		"fileType":     uploadResult.FileType,
+		"fileFormat":   uploadResult.FileFormat,
+		"mimeType":     uploadResult.MimeType,
+		"storageKey":   uploadResult.StorageKey,
+		"url":          uploadResult.Url,
+		"fileUrl":      uploadResult.Url,
+		"fullFilePath": uploadResult.StorageKey,
+	}
+	c.ResponseOk(result)
 }

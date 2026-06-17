@@ -17,6 +17,7 @@ import {Button, Col, Image, Input, Row, Space, Upload} from "antd";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import * as ResourceBackend from "./backend/ResourceBackend";
+import {parseUploadResult} from "./UploadUtil";
 
 const StoreAvatarUploader = (props) => {
   const {store, onUpdate, onUploadComplete, imageUrl, disableUpload} = props;
@@ -30,9 +31,10 @@ const StoreAvatarUploader = (props) => {
     setLoading(true);
     ResourceBackend.uploadResource(store.owner, "avatar", "store", store.name, file)
       .then((res) => {
-        if (res.status === "ok") {
-          const newAvatarUrl = res.data;
-          if (typeof newAvatarUrl !== "string" || newAvatarUrl === "") {
+        const uploadResult = parseUploadResult(res);
+        if (uploadResult) {
+          const newAvatarUrl = uploadResult.url;
+          if (!newAvatarUrl) {
             Setting.showMessage("error", i18next.t("general:Failed to get"));
             return;
           }

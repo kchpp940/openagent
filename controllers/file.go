@@ -271,5 +271,25 @@ func (c *ApiController) UploadFile() {
 		return
 	}
 
-	c.ResponseOk(fileRecord)
+	result := map[string]interface{}{
+		"owner":           fileRecord.Owner,
+		"name":            fileRecord.Name,
+		"createdTime":     fileRecord.CreatedTime,
+		"filename":        fileRecord.Filename,
+		"size":            fileRecord.Size,
+		"store":           fileRecord.Store,
+		"storageProvider": fileRecord.StorageProvider,
+		"url":             fileRecord.Url,
+		"tokenCount":      fileRecord.TokenCount,
+		"vectorCount":     fileRecord.VectorCount,
+		"status":          fileRecord.Status,
+		"errorText":       fileRecord.ErrorText,
+		"fileName":        fileRecord.Filename,
+		"fileSize":        fileRecord.Size,
+		"fileType":        "",
+		"fileFormat":      "",
+		"mimeType":        "",
+		"storageKey":      fileRecord.Name,
+	}
+	c.ResponseOk(result)
 }
