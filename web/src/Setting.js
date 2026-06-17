@@ -22,12 +22,19 @@ import Sdk from "casdoor-js-sdk";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as Conf from "./Conf";
 import * as Cookie from "cookie";
-import {deepCopy, showMessage} from "./SettingUtil";
+import {deepCopy} from "./SettingUtil";
 import {getLanguage} from "./ProviderSetting";
+import {ResponseAdapter} from "./backend/ResponseAdapter";
 
 export * from "./ProviderSetting";
 export * from "./SettingUtil";
 export * from "./ThemeSetting";
+export {ApiClient, ApiError, ErrorCode} from "./backend/ApiClient";
+export {ResponseAdapter} from "./backend/ResponseAdapter";
+
+export function isResponseDenied(data) {
+  return ResponseAdapter.isResponseDenied(data);
+}
 
 export let ServerUrl = "";
 export let CasdoorSdk;
@@ -220,15 +227,11 @@ export function submitStoreEdit(storeObj) {
   const store = deepCopy(storeObj);
   store.fileTree = undefined;
   StoreBackend.updateStore(storeObj.owner, storeObj.name, store)
-    .then((res) => {
-      if (res.status === "ok") {
-        showMessage("success", i18next.t("general:Successfully saved"));
-      } else {
-        showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-      }
+    .then(() => {
+      ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
     })
     .catch(error => {
-      showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+      ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
     });
 }
 

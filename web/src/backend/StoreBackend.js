@@ -12,124 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getHubStores() {
-  return fetch(`${Setting.ServerUrl}/api/get-hub-stores`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-hub-stores");
 }
 
 export function getGlobalStores(name = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-global-stores?name=${name}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-stores", {
+    queryParams: {name, p: page, pageSize, field, value, sortField, sortOrder},
+  });
 }
 
 export function getStores(owner) {
-  return fetch(`${Setting.ServerUrl}/api/get-stores?owner=${owner}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-stores", {
+    queryParams: {owner},
+  });
 }
 
 export function getStore(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-store?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-store", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function getStoreNames(owner) {
-  return fetch(`${Setting.ServerUrl}/api/get-store-names?owner=${owner}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-store-names", {
+    queryParams: {owner},
+  });
 }
 
 export function updateStore(owner, name, store) {
-  const newStore = Setting.deepCopy(store);
-  return fetch(`${Setting.ServerUrl}/api/update-store?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newStore),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-store", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: store,
+  });
 }
 
 export function addStore(store) {
-  const newStore = Setting.deepCopy(store);
-  return fetch(`${Setting.ServerUrl}/api/add-store`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newStore),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-store", {
+    body: store,
+  });
 }
 
 export function deleteStore(store) {
-  const newStore = Setting.deepCopy(store);
-  return fetch(`${Setting.ServerUrl}/api/delete-store`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newStore),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-store", {
+    body: store,
+  });
 }
 
 export function refreshStoreVectors(store) {
-  const newStore = Setting.deepCopy(store);
-  return fetch(`${Setting.ServerUrl}/api/refresh-store-vectors`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newStore),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/refresh-store-vectors", {
+    body: store,
+  });
 }
 
 export function claimStore(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/claim-store?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/claim-store", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function addSharedStore(owner, name, targetUser) {
-  return fetch(`${Setting.ServerUrl}/api/add-shared-store`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({owner, name, targetUser}),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-shared-store", {
+    body: {owner, name, targetUser},
+  });
 }

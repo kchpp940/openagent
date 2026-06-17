@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getUsages(serverUrl, storeName, selectedUser, days) {
   if (serverUrl === "") {
-    serverUrl = Setting.ServerUrl;
+    return ApiClient.get("/api/get-usages", {queryParams: {days, store: storeName, selectedUser}});
   }
 
   return fetch(`${serverUrl}/api/get-usages?days=${days}&store=${storeName}&selectedUser=${selectedUser}`, {
@@ -30,7 +31,7 @@ export function getUsages(serverUrl, storeName, selectedUser, days) {
 
 export function getRangeUsages(serverUrl, rangeType, count, storeName, selectedUser) {
   if (serverUrl === "") {
-    serverUrl = Setting.ServerUrl;
+    return ApiClient.get("/api/get-range-usages", {queryParams: {rangeType, count, store: storeName, user: selectedUser}});
   }
 
   return fetch(`${serverUrl}/api/get-range-usages?rangeType=${rangeType}&count=${count}&store=${storeName}&user=${selectedUser}`, {
@@ -44,7 +45,7 @@ export function getRangeUsages(serverUrl, rangeType, count, storeName, selectedU
 
 export function getUsers(serverUrl, user, storeName = "") {
   if (serverUrl === "") {
-    serverUrl = Setting.ServerUrl;
+    return ApiClient.get("/api/get-users", {queryParams: {user, store: storeName}});
   }
 
   return fetch(`${serverUrl}/api/get-users?user=${user}&store=${storeName}`, {
@@ -58,8 +59,9 @@ export function getUsers(serverUrl, user, storeName = "") {
 
 export function getUserTableInfos(serverUrl, storeName, user) {
   if (serverUrl === "") {
-    serverUrl = Setting.ServerUrl;
+    return ApiClient.get("/api/get-user-table-infos", {queryParams: {user, store: storeName}});
   }
+
   return fetch(`${serverUrl}/api/get-user-table-infos?user=${user}&store=${storeName}`, {
     method: "GET",
     credentials: "include",
@@ -70,21 +72,9 @@ export function getUserTableInfos(serverUrl, storeName, user) {
 }
 
 export function getUsageProviders(owner) {
-  return fetch(`${Setting.ServerUrl}/api/get-usage-providers?owner=${owner}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-usage-providers", {queryParams: {owner}});
 }
 
 export function getUsageHeatmap(owner) {
-  return fetch(`${Setting.ServerUrl}/api/get-usage-heatmap?owner=${owner}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-usage-heatmap", {queryParams: {owner}});
 }

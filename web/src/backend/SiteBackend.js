@@ -12,80 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalSites() {
-  return fetch(`${Setting.ServerUrl}/api/get-global-sites`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-sites");
 }
 
 export function getSites() {
-  return fetch(`${Setting.ServerUrl}/api/get-sites`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-sites");
 }
 
 export function getSite(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-site?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-site", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function getBuiltInSite() {
-  return fetch(`${Setting.ServerUrl}/api/get-built-in-site`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-built-in-site");
 }
 
 export function updateSite(owner, name, site) {
-  const newSite = Setting.deepCopy(site);
-  return fetch(`${Setting.ServerUrl}/api/update-site?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newSite),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-site", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: site,
+  });
 }
 
 export function addSite(site) {
-  const newSite = Setting.deepCopy(site);
-  return fetch(`${Setting.ServerUrl}/api/add-site`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newSite),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-site", {body: site});
 }
 
 export function deleteSite(site) {
-  const newSite = Setting.deepCopy(site);
-  return fetch(`${Setting.ServerUrl}/api/delete-site`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newSite),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-site", {body: site});
 }

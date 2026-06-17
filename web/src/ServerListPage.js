@@ -51,19 +51,15 @@ class ServerListPage extends BaseListPage {
   addServer() {
     const newServer = this.newServer();
     ServerBackend.addServer(newServer)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.history.push({
-            pathname: `/servers/${newServer.name}`,
-            state: {isNewServer: true},
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.history.push({
+          pathname: `/servers/${newServer.name}`,
+          state: {isNewServer: true},
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   }
 
@@ -86,18 +82,14 @@ class ServerListPage extends BaseListPage {
     ServerBackend.syncIntranetServers([cidr])
       .then((res) => {
         this.setState({scanLoading: false});
-        if (res.status === "ok") {
-          const scanResult = res.data ?? {};
-          const scanServers = scanResult.servers ?? [];
-          this.setState({scanResult, scanServers});
-          Setting.showMessage("success", `${i18next.t("general:Successfully got")}: ${scanServers.length} server(s)`);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        const scanResult = res.data ?? {};
+        const scanServers = scanResult.servers ?? [];
+        this.setState({scanResult, scanServers});
+        Setting.ResponseAdapter.showSuccessMessage(`${i18next.t("general:Successfully got")}: ${scanServers.length} server(s)`);
       })
       .catch(error => {
         this.setState({scanLoading: false});
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   };
 
@@ -113,17 +105,13 @@ class ServerListPage extends BaseListPage {
       isDefault: false,
     };
     ServerBackend.addServer(newServer)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          const {pagination} = this.state;
-          this.fetch({pagination});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        const {pagination} = this.state;
+        this.fetch({pagination});
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   };
 
@@ -133,22 +121,18 @@ class ServerListPage extends BaseListPage {
 
   deleteServer(record) {
     ServerBackend.deleteServer(record)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: this.state.data.filter((item) => item.name !== record.name),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: this.state.data.filter((item) => item.name !== record.name),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 

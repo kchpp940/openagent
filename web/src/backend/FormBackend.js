@@ -12,70 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalForms() {
-  return fetch(`${Setting.ServerUrl}/api/get-global-forms`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-forms");
 }
 
 export function getForms(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-forms?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-forms", {queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder}});
 }
 
 export function getForm(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-form?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-form", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updateForm(owner, name, form) {
-  const newForm = Setting.deepCopy(form);
-  return fetch(`${Setting.ServerUrl}/api/update-form?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newForm),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-form", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: form,
+  });
 }
 
 export function addForm(form) {
-  const newForm = Setting.deepCopy(form);
-  return fetch(`${Setting.ServerUrl}/api/add-form`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newForm),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-form", {body: form});
 }
 
 export function deleteForm(form) {
-  const newForm = Setting.deepCopy(form);
-  return fetch(`${Setting.ServerUrl}/api/delete-form`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newForm),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-form", {body: form});
 }

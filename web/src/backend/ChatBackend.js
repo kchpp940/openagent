@@ -12,80 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalChats(page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "", store = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-global-chats?p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}&store=${encodeURIComponent(store)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-chats", {queryParams: {p: page, pageSize, field, value, sortField, sortOrder, store: encodeURIComponent(store)}});
 }
 
 export function getChats(user, storeName = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "", selectedUser = "", startTime = "", endTime = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-chats?user=${user}&selectedUser=${selectedUser}&store=${storeName}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}&startTime=${startTime}&endTime=${endTime}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-chats", {queryParams: {user, selectedUser, store: storeName, p: page, pageSize, field, value, sortField, sortOrder, startTime, endTime}});
 }
 
 export function getChat(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-chat?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-chat", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function getChatStatus(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-chat-status?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-chat-status", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updateChat(owner, name, chat) {
-  const newChat = Setting.deepCopy(chat);
-  return fetch(`${Setting.ServerUrl}/api/update-chat?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newChat),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-chat", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: chat,
+  });
 }
 
 export function addChat(chat) {
-  const newChat = Setting.deepCopy(chat);
-  return fetch(`${Setting.ServerUrl}/api/add-chat`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newChat),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-chat", {body: chat});
 }
 
 export function deleteChat(chat) {
-  const newChat = Setting.deepCopy(chat);
-  return fetch(`${Setting.ServerUrl}/api/delete-chat`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newChat),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-chat", {body: chat});
 }

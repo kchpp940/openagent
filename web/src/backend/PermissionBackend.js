@@ -12,70 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalPermissions() {
-  return fetch(`${Setting.ServerUrl}/api/get-global-permissions`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-permissions");
 }
 
 export function getPermissions(owner) {
-  return fetch(`${Setting.ServerUrl}/api/get-permissions?owner=${owner}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-permissions", {queryParams: {owner}});
 }
 
 export function getPermission(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-permission?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-permission", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updatePermission(owner, name, permission) {
-  const newPermission = Setting.deepCopy(permission);
-  return fetch(`${Setting.ServerUrl}/api/update-permission?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newPermission),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-permission", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: permission,
+  });
 }
 
 export function addPermission(permission) {
-  const newPermission = Setting.deepCopy(permission);
-  return fetch(`${Setting.ServerUrl}/api/add-permission`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newPermission),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-permission", {body: permission});
 }
 
 export function deletePermission(permission) {
-  const newPermission = Setting.deepCopy(permission);
-  return fetch(`${Setting.ServerUrl}/api/delete-permission`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newPermission),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-permission", {body: permission});
 }

@@ -12,77 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getRecords(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-records?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
-    method: "GET",
-    credentials: "include",
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-records", {queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder}});
 }
 
 export function getRecord(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-record?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-record", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updateRecord(owner, name, record) {
-  const newRecord = Setting.deepCopy(record);
-  return fetch(`${Setting.ServerUrl}/api/update-record?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    body: JSON.stringify(newRecord),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-record", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: record,
+  });
 }
 
 export function addRecord(record) {
-  const newRecord = Setting.deepCopy(record);
-  return fetch(`${Setting.ServerUrl}/api/add-record`, {
-    method: "POST",
-    credentials: "include",
-    body: JSON.stringify(newRecord),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-record", {body: record});
 }
 
 export function deleteRecord(record) {
-  const newRecord = Setting.deepCopy(record);
-  return fetch(`${Setting.ServerUrl}/api/delete-record`, {
-    method: "POST",
-    credentials: "include",
-    body: JSON.stringify(newRecord),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-record", {body: record});
 }
 
 export function commitRecord(record) {
-  const newRecord = Setting.deepCopy(record);
-  return fetch(`${Setting.ServerUrl}/api/commit-record`, {
-    method: "POST",
-    credentials: "include",
-    body: JSON.stringify(newRecord),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/commit-record", {body: record});
 }
 
 export function commitRecordSecond(record) {
-  const newRecord = Setting.deepCopy(record);
-  return fetch(`${Setting.ServerUrl}/api/commit-record-second`, {
-    method: "POST",
-    credentials: "include",
-    body: JSON.stringify(newRecord),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/commit-record-second", {body: record});
 }
 
 export function queryRecord(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/query-record?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/query-record", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function queryRecordSecond(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/query-record-second?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/query-record-second", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }

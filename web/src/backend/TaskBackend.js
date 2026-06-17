@@ -12,72 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalTasks() {
-  return fetch(`${Setting.ServerUrl}/api/get-global-tasks`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-tasks");
 }
 
 export function getTasks(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-tasks?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-tasks", {
+    queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder},
+  });
 }
 
 export function getTask(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-task?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-task", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updateTask(owner, name, task) {
-  const newTask = Setting.deepCopy(task);
-  return fetch(`${Setting.ServerUrl}/api/update-task?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newTask),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-task", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: task,
+  });
 }
 
 export function addTask(task) {
-  const newTask = Setting.deepCopy(task);
-  return fetch(`${Setting.ServerUrl}/api/add-task`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newTask),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-task", {
+    body: task,
+  });
 }
 
 export function deleteTask(task) {
-  const newTask = Setting.deepCopy(task);
-  return fetch(`${Setting.ServerUrl}/api/delete-task`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newTask),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-task", {
+    body: task,
+  });
 }
 
 export function uploadTaskDocument(taskId, base64, filename, filetype) {
@@ -85,22 +54,14 @@ export function uploadTaskDocument(taskId, base64, filename, filetype) {
   formData.append("file", base64);
   formData.append("name", filename);
   formData.append("type", filetype);
-  return fetch(`${Setting.ServerUrl}/api/upload-task-document?id=${taskId}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
+  return ApiClient.post("/api/upload-task-document", {
+    queryParams: {id: taskId},
     body: formData,
-  }).then(res => Setting.handleFetchResponse(res));
+  });
 }
 
 export function analyzeTask(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/analyze-task?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/analyze-task", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }

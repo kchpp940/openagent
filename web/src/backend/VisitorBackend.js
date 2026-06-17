@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getVisitors(serverUrl, selectedUser, days, fields) {
   if (serverUrl === "") {
-    serverUrl = Setting.ServerUrl;
+    return ApiClient.get("/api/get-visitors", {queryParams: {days, selectedUser, field: fields}});
   }
 
   return fetch(`${serverUrl}/api/get-visitors?days=${days}&selectedUser=${selectedUser}&field=${fields}`, {

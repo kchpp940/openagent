@@ -12,95 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function getGlobalProviders() {
-  return fetch(`${Setting.ServerUrl}/api/get-global-providers`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-global-providers");
 }
 
 export function getProviders(owner, storeName = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return fetch(`${Setting.ServerUrl}/api/get-providers?owner=${owner}&store=${storeName}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-providers", {queryParams: {owner, store: storeName, p: page, pageSize, field, value, sortField, sortOrder}});
 }
 
 export function getProvider(owner, name) {
-  return fetch(`${Setting.ServerUrl}/api/get-provider?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.get("/api/get-provider", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+  });
 }
 
 export function updateProvider(owner, name, provider) {
-  const newProvider = Setting.deepCopy(provider);
-  return fetch(`${Setting.ServerUrl}/api/update-provider?id=${owner}/${encodeURIComponent(name)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newProvider),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/update-provider", {
+    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
+    body: provider,
+  });
 }
 
 export function addProvider(provider) {
-  const newProvider = Setting.deepCopy(provider);
-  return fetch(`${Setting.ServerUrl}/api/add-provider`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newProvider),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/add-provider", {body: provider});
 }
 
 export function deleteProvider(provider) {
-  const newProvider = Setting.deepCopy(provider);
-  return fetch(`${Setting.ServerUrl}/api/delete-provider`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newProvider),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/delete-provider", {body: provider});
 }
 
 export function getProviderModels(provider) {
-  const newProvider = Setting.deepCopy(provider);
-  return fetch(`${Setting.ServerUrl}/api/fetch-provider-models`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newProvider),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/fetch-provider-models", {body: provider});
 }
 
 export function testTool(provider) {
-  const newProvider = Setting.deepCopy(provider);
-  return fetch(`${Setting.ServerUrl}/api/test-tool`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-    body: JSON.stringify(newProvider),
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/test-tool", {body: provider});
 }

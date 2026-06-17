@@ -125,32 +125,34 @@ type Store struct {
 	PropertiesMap map[string]*Properties `xorm:"mediumtext" json:"propertiesMap"`
 }
 
+// GetGlobalStores loads every row in the store table (admin UI / init). Not for hot per-request paths.
 func GetGlobalStores() ([]*Store, error) {
-	opts := ListQueryOptions{
-		SortFields: []SortItem{
-			{Field: "owner", Order: OrderAscend},
-			{Field: "created_time", Order: OrderDescend},
-		},
+	stores := []*Store{}
+	err := adapter.engine.Asc("owner").Desc("created_time").Find(&stores)
+	if err != nil {
+		return stores, err
 	}
-	return ListStores(opts)
+
+	return stores, nil
 }
 
 func GetPublishedStores() ([]*Store, error) {
-	opts := ListQueryOptions{
-		SortField:    "created_time",
-		SortOrder:    OrderDescend,
-		PublishState: "Published",
+	stores := []*Store{}
+	err := adapter.engine.Desc("created_time").Where("publish_state = ?", "Published").Find(&stores)
+	if err != nil {
+		return stores, err
 	}
-	return ListStores(opts)
+	return stores, nil
 }
 
 func GetStores(owner string) ([]*Store, error) {
-	opts := ListQueryOptions{
-		SortField: "created_time",
-		SortOrder: OrderDescend,
-		Owner:     owner,
+	stores := []*Store{}
+	err := adapter.engine.Desc("created_time").Where("owner = ?", owner).Find(&stores)
+	if err != nil {
+		return stores, err
 	}
-	return ListStores(opts)
+
+	return stores, nil
 }
 
 func generateStoreApiKey() string {
@@ -553,13 +555,18 @@ func refreshVector(vector *Vector, lang string) (bool, error) {
 }
 
 func GetStoresByFields(owner string, fields ...string) ([]*Store, error) {
-	opts := ListQueryOptions{
-		SortField: "created_time",
-		SortOrder: OrderDescend,
-		Owner:     owner,
-		Cols:      fields,
+	stores := []*Store{}
+	var err error
+	if owner == "" {
+		err = adapter.engine.Desc("created_time").Cols(fields...).Find(&stores)
+	} else {
+		err = adapter.engine.Desc("created_time").Cols(fields...).Find(&stores, &Store{Owner: owner})
 	}
-	return ListStores(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return stores, nil
 }
 
 func GetStoreCount(name, field, value string) (int64, error) {
@@ -583,18 +590,6 @@ func IsStoreVirtualSortField(sortField string) bool {
 	return storeVirtualSortFields[sortField]
 }
 
-func hasStoreVirtualSort(opts ListQueryOptions) (string, string, bool) {
-	if storeVirtualSortFields[opts.SortField] {
-		return opts.SortField, opts.SortOrder, true
-	}
-	for _, si := range opts.SortFields {
-		if storeVirtualSortFields[si.Field] {
-			return si.Field, si.Order, true
-		}
-	}
-	return "", "", false
-}
-
 func SortStoresInMemory(stores []*Store, sortField, sortOrder string) {
 	sort.SliceStable(stores, func(i, j int) bool {
 		var vi, vj int
@@ -614,33 +609,36 @@ func SortStoresInMemory(stores []*Store, sortField, sortOrder string) {
 }
 
 func CountStores(opts ListQueryOptions) (int64, error) {
-	return BuildCountSession(opts).Count(&Store{})
+	session := BuildCountSession(opts)
+	if opts.Name != "" {
+		return session.Count(&Store{Name: opts.Name})
+	}
+	return session.Count(&Store{})
 }
 
 func ListStores(opts ListQueryOptions) ([]*Store, error) {
 	stores := []*Store{}
-	vfield, vorder, doVirtualSort := hasStoreVirtualSort(opts)
-	var dbOpts ListQueryOptions
-	if doVirtualSort {
-		dbOpts = opts
-		dbOpts.SortField = ""
-		dbOpts.SortOrder = ""
-		var dbSorts []SortItem
-		for _, si := range opts.SortFields {
-			if !storeVirtualSortFields[si.Field] {
-				dbSorts = append(dbSorts, si)
-			}
-		}
-		dbOpts.SortFields = dbSorts
-	} else {
-		dbOpts = opts
+	dbSortField, dbSortOrder := opts.SortField, opts.SortOrder
+	if storeVirtualSortFields[opts.SortField] {
+		dbSortField, dbSortOrder = "", ""
 	}
-	err := BuildListSession(dbOpts).Find(&stores)
+	dbOpts := opts
+	dbOpts.SortField = dbSortField
+	dbOpts.SortOrder = dbSortOrder
+
+	session := BuildListSession(dbOpts)
+	var err error
+	if opts.Name != "" {
+		err = session.Find(&stores, &Store{Name: opts.Name})
+	} else {
+		err = session.Find(&stores)
+	}
 	if err != nil {
 		return stores, err
 	}
-	if doVirtualSort {
-		SortStoresInMemory(stores, vfield, vorder)
+
+	if storeVirtualSortFields[opts.SortField] {
+		SortStoresInMemory(stores, opts.SortField, opts.SortOrder)
 	}
 	return stores, nil
 }

@@ -12,14 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as Setting from "../Setting";
+import {ApiClient} from "./ApiClient";
 
 export function installPatch(provider, patchId, scan) {
-  return fetch(`${Setting.ServerUrl}/api/install-patch?provider=${encodeURIComponent(provider)}&patchId=${encodeURIComponent(patchId)}&scan=${encodeURIComponent(scan)}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Accept-Language": Setting.getAcceptLanguage(),
-    },
-  }).then(res => Setting.handleFetchResponse(res));
+  return ApiClient.post("/api/install-patch", {queryParams: {provider: encodeURIComponent(provider), patchId: encodeURIComponent(patchId), scan: encodeURIComponent(scan)}});
 }
