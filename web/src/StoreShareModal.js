@@ -37,11 +37,15 @@ export default function StoreShareModal(props) {
     setLoadingUsers(true);
     OrganizationUserBackend.getOrganizationUsers()
       .then((res) => {
-        const list = (res.data || []).filter((u) => u && u.name && u.name !== store?.owner);
-        setUsers(list);
+        if (res.status === "ok") {
+          const list = (res.data || []).filter((u) => u && u.name && u.name !== store?.owner);
+          setUsers(list);
+        } else {
+          Setting.showMessage("error", res.msg || i18next.t("general:Failed to load"));
+        }
       })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to load"));
+      .catch((err) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to load")}: ${err}`);
       })
       .finally(() => setLoadingUsers(false));
   }, [store]);
@@ -65,16 +69,20 @@ export default function StoreShareModal(props) {
     setSubmitting(true);
     StoreBackend.addSharedStore(store.owner, store.name, selected)
       .then((res) => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("store:Store shared successfully"));
-        setSelected(undefined);
-        window.dispatchEvent(new Event("storesChanged"));
-        if (onSuccess) {
-          onSuccess(res.data);
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("store:Store shared successfully"));
+          setSelected(undefined);
+          window.dispatchEvent(new Event("storesChanged"));
+          if (onSuccess) {
+            onSuccess(res.data);
+          }
+          onCancel();
+        } else {
+          Setting.showMessage("error", res.msg || i18next.t("general:Failed to save"));
         }
-        onCancel();
       })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+      .catch((err) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${err}`);
       })
       .finally(() => setSubmitting(false));
   };

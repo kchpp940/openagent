@@ -72,40 +72,22 @@ class TaskListPage extends BaseListPage {
 
   UNSAFE_componentWillMount() {
     super.UNSAFE_componentWillMount?.();
-    ScaleBackend.getPublicScales()
-      .then((res) => {
-        if (res.data) {
-          this.setState({publicScales: res.data});
-        }
-      })
-      .catch(error => {
-        if (!(error instanceof Setting.ApiError && error.isPermissionDenied())) {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-        }
-      });
-    OrganizationUserBackend.getOrganizationUsers()
-      .then((res) => {
-        if (Array.isArray(res.data)) {
-          this.setState({organizationUsers: res.data});
-        }
-      })
-      .catch(error => {
-        if (!(error instanceof Setting.ApiError && error.isPermissionDenied())) {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-        }
-      });
+    ScaleBackend.getPublicScales().then((res) => {
+      if (res.status === "ok" && res.data) {
+        this.setState({publicScales: res.data});
+      }
+    });
+    OrganizationUserBackend.getOrganizationUsers().then((res) => {
+      if (res.status === "ok" && Array.isArray(res.data)) {
+        this.setState({organizationUsers: res.data});
+      }
+    });
     if (Setting.isAdminUser(this.props.account)) {
-      ProviderBackend.getProviders(this.props.account.name)
-        .then((res) => {
-          if (res.data) {
-            this.setState({modelProviders: (res.data || []).filter((p) => p.category === "Model")});
-          }
-        })
-        .catch(error => {
-          if (!(error instanceof Setting.ApiError && error.isPermissionDenied())) {
-            Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-          }
-        });
+      ProviderBackend.getProviders(this.props.account.name).then((res) => {
+        if (res.status === "ok" && res.data) {
+          this.setState({modelProviders: (res.data || []).filter((p) => p.category === "Model")});
+        }
+      });
     }
   }
 
@@ -163,15 +145,19 @@ class TaskListPage extends BaseListPage {
   addTask() {
     const newTask = this.newTask();
     TaskBackend.addTask(newTask)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        this.props.history.push({
-          pathname: `/tasks/${newTask.owner}/${newTask.name}`,
-          state: {isNewTask: true},
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          this.props.history.push({
+            pathname: `/tasks/${newTask.owner}/${newTask.name}`,
+            state: {isNewTask: true},
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -181,18 +167,22 @@ class TaskListPage extends BaseListPage {
 
   deleteTask(record) {
     TaskBackend.deleteTask(record)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-        this.setState({
-          data: this.state.data.filter((item) => item.name !== record.name),
-          pagination: {
-            ...this.state.pagination,
-            total: this.state.pagination.total - 1,
-          },
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+          this.setState({
+            data: this.state.data.filter((item) => item.name !== record.name),
+            pagination: {
+              ...this.state.pagination,
+              total: this.state.pagination.total - 1,
+            },
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
 
@@ -499,21 +489,25 @@ class TaskListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
-          data: res.data,
-          pagination: {
-            ...params.pagination,
-            total: res.data2,
-          },
-          searchText: params.searchText,
-          searchedColumn: params.searchedColumn,
         });
-      })
-      .catch(error => {
-        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
-          this.setState({isAuthorized: false, loading: false});
+        if (res.status === "ok") {
+          this.setState({
+            data: res.data,
+            pagination: {
+              ...params.pagination,
+              total: res.data2,
+            },
+            searchText: params.searchText,
+            searchedColumn: params.searchedColumn,
+          });
         } else {
-          this.setState({loading: false});
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+          if (Setting.isResponseDenied(res)) {
+            this.setState({
+              isAuthorized: false,
+            });
+          } else {
+            Setting.showMessage("error", res.msg);
+          }
         }
       });
   };

@@ -40,15 +40,19 @@ class ScaleListPage extends BaseListPage {
   addScale() {
     const newScale = this.newScale();
     ScaleBackend.addScale(newScale)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        this.props.history.push({
-          pathname: `/scales/${newScale.owner}/${newScale.name}`,
-          state: {isNewScale: true},
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          this.props.history.push({
+            pathname: `/scales/${newScale.owner}/${newScale.name}`,
+            state: {isNewScale: true},
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -58,18 +62,22 @@ class ScaleListPage extends BaseListPage {
 
   deleteScale(record) {
     ScaleBackend.deleteScale(record)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-        this.setState({
-          data: this.state.data.filter((item) => item.name !== record.name),
-          pagination: {
-            ...this.state.pagination,
-            total: this.state.pagination.total - 1,
-          },
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+          this.setState({
+            data: this.state.data.filter((item) => item.name !== record.name),
+            pagination: {
+              ...this.state.pagination,
+              total: this.state.pagination.total - 1,
+            },
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
 
@@ -207,23 +215,23 @@ class ScaleListPage extends BaseListPage {
     this.setState({loading: true});
     ScaleBackend.getScales(this.props.account.name, params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder)
       .then((res) => {
-        this.setState({
-          loading: false,
-          data: res.data,
-          pagination: {
-            ...params.pagination,
-            total: res.data2,
-          },
-          searchText: params.searchText,
-          searchedColumn: params.searchedColumn,
-        });
-      })
-      .catch(error => {
         this.setState({loading: false});
-        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
-          this.setState({isAuthorized: false});
+        if (res.status === "ok") {
+          this.setState({
+            data: res.data,
+            pagination: {
+              ...params.pagination,
+              total: res.data2,
+            },
+            searchText: params.searchText,
+            searchedColumn: params.searchedColumn,
+          });
         } else {
-          Setting.ResponseAdapter.showErrorMessage(error);
+          if (Setting.isResponseDenied(res)) {
+            this.setState({isAuthorized: false});
+          } else {
+            Setting.showMessage("error", res.msg);
+          }
         }
       });
   };

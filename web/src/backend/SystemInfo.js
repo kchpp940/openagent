@@ -12,16 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getSystemInfo() {
-  return ApiClient.get("/api/get-system-info");
+  return fetch(`${Setting.ServerUrl}/api/get-system-info`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getVersionInfo() {
-  return ApiClient.get("/api/get-version-info");
+  return fetch(`${Setting.ServerUrl}/api/get-version-info`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getPrometheusInfo() {
-  return ApiClient.get("/api/get-prometheus-info");
+  return fetch(`${Setting.ServerUrl}/api/get-prometheus-info `, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

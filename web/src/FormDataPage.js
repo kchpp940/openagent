@@ -36,12 +36,13 @@ class FormDataPage extends Component {
   getForm() {
     FormBackend.getForm(this.props.account.owner, this.state.formName)
       .then((res) => {
-        this.setState({
-          form: res.data,
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            form: res.data,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 

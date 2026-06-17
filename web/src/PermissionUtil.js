@@ -14,7 +14,6 @@
 
 import * as PermissionBackend from "./backend/PermissionBackend";
 import * as Setting from "./Setting";
-import ResponseAdapter from "./backend/ResponseAdapter";
 import moment from "moment";
 import i18next from "i18next";
 
@@ -50,10 +49,14 @@ export function addPermission(account, store, isAdmin, file = null, fileKeys = n
   }
 
   PermissionBackend.addPermission(newPermission)
-    .then(() => {
-      Setting.openLink(Setting.getMyProfileUrl(account).replace("/account", `/permissions/${newPermission.owner}/${newPermission.name}`));
+    .then((res) => {
+      if (res.status === "ok") {
+        Setting.openLink(Setting.getMyProfileUrl(account).replace("/account", `/permissions/${newPermission.owner}/${newPermission.name}`));
+      } else {
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+      }
     })
     .catch(error => {
-      ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+      Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
     });
 }

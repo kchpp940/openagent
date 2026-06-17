@@ -13,24 +13,17 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
-import {ApiClient} from "./ApiClient";
-import {ResponseAdapter} from "./ResponseAdapter";
 
-// [EXEMPT] Custom serverUrl — same reason as UsageBackend.
-// See UsageBackend.js fetchWithCustomServerUrl for details.
-function fetchWithCustomServerUrl(url) {
-  return fetch(url, {
+export function getVisitors(serverUrl, selectedUser, days, fields) {
+  if (serverUrl === "") {
+    serverUrl = Setting.ServerUrl;
+  }
+
+  return fetch(`${serverUrl}/api/get-visitors?days=${days}&selectedUser=${selectedUser}&field=${fields}`, {
     method: "GET",
     credentials: "include",
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => ResponseAdapter.handleResponse(res));
-}
-
-export function getVisitors(serverUrl, selectedUser, days, fields) {
-  if (serverUrl === "") {
-    return ApiClient.get("/api/get-visitors", {queryParams: {days, selectedUser, field: fields}});
-  }
-  return fetchWithCustomServerUrl(`${serverUrl}/api/get-visitors?days=${days}&selectedUser=${selectedUser}&field=${fields}`);
+  }).then(res => Setting.handleFetchResponse(res));
 }

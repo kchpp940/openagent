@@ -13,25 +13,39 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
-import {ApiClient} from "./ApiClient";
 
 export function getGlobalMessages(page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "", store = "") {
-  return ApiClient.get("/api/get-global-messages", {queryParams: {p: page, pageSize, field, value, sortField, sortOrder, store: encodeURIComponent(store)}});
+  return fetch(`${Setting.ServerUrl}/api/get-global-messages?p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}&store=${encodeURIComponent(store)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getMessages(user, selectedUser = "") {
-  return ApiClient.get("/api/get-messages", {queryParams: {user, selectedUser}});
+  return fetch(`${Setting.ServerUrl}/api/get-messages?user=${user}&selectedUser=${selectedUser}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getChatMessages(owner, chat) {
-  return ApiClient.get("/api/get-messages", {queryParams: {owner, chat}});
+  return fetch(`${Setting.ServerUrl}/api/get-messages?owner=${owner}&chat=${chat}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 const eventSourceMap = new Map();
 
-// [EXEMPT] EventSource stream — cannot use ApiClient.
-// This returns an EventSource object for server-sent events (streaming AI responses).
-// ApiClient would incorrectly try to buffer the entire stream as a single JSON response.
 export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd, onInfo, onChat, onToolDelta) {
   if (eventSourceMap.has(`${owner}/${name}`)) {
     return;
@@ -113,20 +127,35 @@ export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSea
 }
 
 export function getAnswer(provider, question, framework, video, tool = "") {
-  return ApiClient.get("/api/get-answer", {queryParams: {provider, question: encodeURIComponent(question), framework: encodeURIComponent(framework), video: encodeURIComponent(video), tool: encodeURIComponent(tool)}});
+  return fetch(`${Setting.ServerUrl}/api/get-answer?provider=${provider}&question=${encodeURIComponent(question)}&framework=${encodeURIComponent(framework)}&video=${encodeURIComponent(video)}&tool=${encodeURIComponent(tool)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getMessage(owner, name) {
-  return ApiClient.get("/api/get-message", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-message?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateMessage(owner, name, message, isHitOnly = false) {
-  return ApiClient.post("/api/update-message", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`, isHitOnly},
-    body: message,
-  });
+  const newMessage = Setting.deepCopy(message);
+  return fetch(`${Setting.ServerUrl}/api/update-message?id=${owner}/${encodeURIComponent(name)}&isHitOnly=${isHitOnly}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newMessage),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function closeMessageEventSource(owner, name, cancel = false) {
@@ -143,19 +172,47 @@ export function closeMessageEventSource(owner, name, cancel = false) {
 }
 
 export function cancelMessageAnswer(owner, name) {
-  return ApiClient.post("/api/cancel-message-answer", {
-    queryParams: {id: `${encodeURIComponent(owner)}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/cancel-message-answer?id=${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addMessage(message) {
-  return ApiClient.post("/api/add-message", {body: message});
+  const newMessage = Setting.deepCopy(message);
+  return fetch(`${Setting.ServerUrl}/api/add-message`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newMessage),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteMessage(message) {
-  return ApiClient.post("/api/delete-message", {body: message});
+  const newMessage = Setting.deepCopy(message);
+  return fetch(`${Setting.ServerUrl}/api/delete-message`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newMessage),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteWelcomeMessage(message) {
-  return ApiClient.post("/api/delete-welcome-message", {body: message});
+  const newMessage = Setting.deepCopy(message);
+  return fetch(`${Setting.ServerUrl}/api/delete-welcome-message`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newMessage),
+  }).then(res => Setting.handleFetchResponse(res));
 }

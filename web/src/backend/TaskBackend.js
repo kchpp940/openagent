@@ -12,41 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalTasks() {
-  return ApiClient.get("/api/get-global-tasks");
+  return fetch(`${Setting.ServerUrl}/api/get-global-tasks`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getTasks(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-tasks", {
-    queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-tasks?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getTask(owner, name) {
-  return ApiClient.get("/api/get-task", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-task?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateTask(owner, name, task) {
-  return ApiClient.post("/api/update-task", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: task,
-  });
+  const newTask = Setting.deepCopy(task);
+  return fetch(`${Setting.ServerUrl}/api/update-task?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTask),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addTask(task) {
-  return ApiClient.post("/api/add-task", {
-    body: task,
-  });
+  const newTask = Setting.deepCopy(task);
+  return fetch(`${Setting.ServerUrl}/api/add-task`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTask),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteTask(task) {
-  return ApiClient.post("/api/delete-task", {
-    body: task,
-  });
+  const newTask = Setting.deepCopy(task);
+  return fetch(`${Setting.ServerUrl}/api/delete-task`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTask),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function uploadTaskDocument(taskId, base64, filename, filetype) {
@@ -54,14 +85,22 @@ export function uploadTaskDocument(taskId, base64, filename, filetype) {
   formData.append("file", base64);
   formData.append("name", filename);
   formData.append("type", filetype);
-  return ApiClient.post("/api/upload-task-document", {
-    queryParams: {id: taskId},
+  return fetch(`${Setting.ServerUrl}/api/upload-task-document?id=${taskId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
     body: formData,
-  });
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function analyzeTask(owner, name) {
-  return ApiClient.post("/api/analyze-task", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/analyze-task?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

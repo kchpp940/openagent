@@ -50,8 +50,11 @@ class VisitorPage extends BaseListPage {
   }
 
   extractAllOperations(apiResponse) {
+    if (!apiResponse || apiResponse.status !== "ok" || !apiResponse.data) {
+      return [];
+    }
     const opsSet = new Set();
-    apiResponse.action.forEach(item => {
+    apiResponse.data.action.forEach(item => {
       Object.keys(item.FieldCount).forEach(op => opsSet.add(op));
     });
 
@@ -61,21 +64,22 @@ class VisitorPage extends BaseListPage {
   getVisitors(serverUrl, fieldNames) {
     VisitorBackend.getVisitors(serverUrl, this.state.selectedUser, 30, fieldNames)
       .then((res) => {
-        const state = {};
-        const fieldCount = res.data;
-        Object.entries(fieldCount).forEach(([fieldName, data]) => {
-          const visitorKey = `visitors${fieldName}`;
-          state[visitorKey] = data;
-          if (fieldName === "action") {
-            const allOps = this.extractAllOperations(res.data);
-            state["allOps"] = allOps;
-            state["selectedOps"] = allOps;
-          }
-          this.setState(state);
-        });
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          const state = {};
+          const fieldCount = res.data;
+          Object.entries(fieldCount).forEach(([fieldName, data]) => {
+            const visitorKey = `visitors${fieldName}`;
+            state[visitorKey] = data;
+            if (fieldName === "action") {
+              const allOps = this.extractAllOperations(res);
+              state["allOps"] = allOps;
+              state["selectedOps"] = allOps;
+            }
+            this.setState(state);
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -102,17 +106,18 @@ class VisitorPage extends BaseListPage {
   getUsers(serverUrl) {
     UsageBackend.getUsers(serverUrl, this.props.account.name)
       .then((res) => {
-        this.setState({
-          users: res.data,
-          usageMetadata: res.data2,
-          selectedUser: !Setting.canViewAllUsers(this.props.account) ? res.data[0] : "All",
-        }, () => {
-          this.getVisitorsAll("");
+        if (res.status === "ok") {
+          this.setState({
+            users: res.data,
+            usageMetadata: res.data2,
+          }, () => {
+            this.getVisitorsAll("");
+          }
+          );
+          this.state.selectedUser = !Setting.canViewAllUsers(this.props.account) ? res.data[0] : "All";
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
-        );
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 

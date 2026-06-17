@@ -32,11 +32,15 @@ class AccountPage extends React.Component {
 
   onFinish(values) {
     AccountBackend.updateAccount(values)
-      .then(() => {
-        message.success(i18next.t("general:Successfully saved"));
-        window.location.reload();
+      .then((res) => {
+        if (res.status === "ok") {
+          message.success(i18next.t("general:Successfully saved"));
+          window.location.reload();
+        } else {
+          message.error(res.msg);
+        }
       })
-      .catch((error) => Setting.ResponseAdapter.showErrorMessage(error));
+      .catch((error) => message.error(error.message));
   }
 
   closePasswordModal() {
@@ -50,11 +54,15 @@ class AccountPage extends React.Component {
   setPassword() {
     const values = this.formRef.current.getFieldsValue();
     AccountBackend.updateAccount({...values, currentPassword: this.state.currentPassword, newPassword: this.state.newPassword})
-      .then(() => {
-        message.success(i18next.t("general:Successfully saved"));
-        this.closePasswordModal();
+      .then((res) => {
+        if (res.status === "ok") {
+          message.success(i18next.t("general:Successfully saved"));
+          this.closePasswordModal();
+        } else {
+          message.error(res.msg);
+        }
       })
-      .catch((error) => Setting.ResponseAdapter.showErrorMessage(error));
+      .catch((error) => message.error(error.message));
   }
 
   renderAvatar() {

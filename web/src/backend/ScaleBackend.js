@@ -3,37 +3,80 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalScales() {
-  return ApiClient.get("/api/get-global-scales");
+  return fetch(`${Setting.ServerUrl}/api/get-global-scales`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getScales(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-scales", {queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder}});
+  return fetch(`${Setting.ServerUrl}/api/get-scales?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getScale(owner, name) {
-  return ApiClient.get("/api/get-scale", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-scale?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getPublicScales() {
-  return ApiClient.get("/api/get-public-scales");
+  return fetch(`${Setting.ServerUrl}/api/get-public-scales`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateScale(owner, name, scale) {
-  return ApiClient.post("/api/update-scale", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: scale,
-  });
+  const newScale = Setting.deepCopy(scale);
+  return fetch(`${Setting.ServerUrl}/api/update-scale?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newScale),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addScale(scale) {
-  return ApiClient.post("/api/add-scale", {body: scale});
+  const newScale = Setting.deepCopy(scale);
+  return fetch(`${Setting.ServerUrl}/api/add-scale`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newScale),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteScale(scale) {
-  return ApiClient.post("/api/delete-scale", {body: scale});
+  const newScale = Setting.deepCopy(scale);
+  return fetch(`${Setting.ServerUrl}/api/delete-scale`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newScale),
+  }).then(res => Setting.handleFetchResponse(res));
 }

@@ -139,7 +139,12 @@ function QuickSetupPage() {
     };
 
     try {
-      await ProviderBackend.addProvider(provider);
+      const res = await ProviderBackend.addProvider(provider);
+      if (res.status !== "ok") {
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        setSaving(false);
+        return;
+      }
       setSavedProvider(provider);
 
       if (selectedPipeType && !pipeSkipped && pipeToken.trim()) {
@@ -155,13 +160,18 @@ function QuickSetupPage() {
           isDefault: false,
           state: "Active",
         };
-        await PipeBackend.addPipe(pipe);
+        const pipeRes = await PipeBackend.addPipe(pipe);
+        if (pipeRes.status !== "ok") {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")} pipe: ${pipeRes.msg}`);
+          setSaving(false);
+          return;
+        }
         setSavedPipe(pipe);
       }
 
-      Setting.ResponseAdapter.showSuccessMessage(i18next.t("setup:Configuration saved successfully"));
+      Setting.showMessage("success", i18next.t("setup:Configuration saved successfully"));
     } catch (err) {
-      Setting.ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to add"));
+      Setting.showMessage("error", String(err));
     } finally {
       setSaving(false);
     }

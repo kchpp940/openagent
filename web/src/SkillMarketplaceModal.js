@@ -16,7 +16,7 @@ import React, {useCallback, useEffect, useRef, useState} from "react";
 import {Badge, Button, Card, Col, Empty, Input, Modal, Row, Select, Spin, Tag, Tooltip, Typography} from "antd";
 import {CheckCircleOutlined, CloudDownloadOutlined, SearchOutlined} from "@ant-design/icons";
 import * as SkillBackend from "./backend/SkillBackend";
-import ResponseAdapter from "./backend/ResponseAdapter";
+import * as Setting from "./Setting";
 import i18next from "i18next";
 
 const {Text, Paragraph} = Typography;
@@ -48,14 +48,13 @@ function SkillMarketplaceModal({open, onClose, onInstalled, installedNames = []}
     }
     SkillBackend.getMarketplaceSources()
       .then((res) => {
-        if (res.data) {
+        if (res.status === "ok" && res.data) {
           setSources(res.data);
           if (res.data.length > 0 && !selectedSource) {
             setSelectedSource(res.data[0].id);
           }
         }
-      })
-      .catch(() => {});
+      });
   }, [open]); // eslint-disable-line
 
   const doSearch = useCallback((src, kw) => {
@@ -64,11 +63,15 @@ function SkillMarketplaceModal({open, onClose, onInstalled, installedNames = []}
     SkillBackend.getMarketplaceSkills(src, kw)
       .then((res) => {
         setLoading(false);
-        setSkills(res.data || []);
+        if (res.status === "ok") {
+          setSkills(res.data || []);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       })
       .catch((err) => {
         setLoading(false);
-        ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to get"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err}`);
       });
   }, []);
 
@@ -93,12 +96,16 @@ function SkillMarketplaceModal({open, onClose, onInstalled, installedNames = []}
     SkillBackend.installMarketplaceSkill(item)
       .then((res) => {
         setInstalling((prev) => ({...prev, [item.name]: false}));
-        ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        onInstalled && onInstalled(res.data.name);
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          onInstalled && onInstalled(res.data.name);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch((err) => {
         setInstalling((prev) => ({...prev, [item.name]: false}));
-        ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${err}`);
       });
   }
 

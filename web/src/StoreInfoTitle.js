@@ -130,18 +130,19 @@ const StoreInfoTitle = (props) => {
       const owner = chat?.owner || account?.owner || "admin";
       ProviderBackend.getProviders(owner)
         .then((res) => {
-          const providers = res.data.filter(provider =>
-            provider.category === "Model" && defaultStore.childModelProviders.includes(provider.name)
-          );
-          if (storeInfo?.modelProvider && !providers.some(p => p.name === storeInfo.modelProvider)) {
-            const missingProvider = res.data.find(p => p.name === storeInfo.modelProvider && p.category === "Model");
-            if (missingProvider) {
-              providers.unshift(missingProvider);
+          if (res.status === "ok") {
+            const providers = res.data.filter(provider =>
+              provider.category === "Model" && defaultStore.childModelProviders.includes(provider.name)
+            );
+            if (storeInfo?.modelProvider && !providers.some(p => p.name === storeInfo.modelProvider)) {
+              const missingProvider = res.data.find(p => p.name === storeInfo.modelProvider && p.category === "Model");
+              if (missingProvider) {
+                providers.unshift(missingProvider);
+              }
             }
+            setModelProviders(providers);
           }
-          setModelProviders(providers);
-        })
-        .catch(() => {});
+        });
     }
   }, [chat?.owner, defaultStore?.name, defaultStore?.childModelProviders?.join(","), storeInfo?.modelProvider]);
 
@@ -179,7 +180,11 @@ const StoreInfoTitle = (props) => {
 
       // Save changes to the backend
       if (storeChanged || providerChanged) {
-        await ChatBackend.updateChat(updatedChat.owner, updatedChat.name, updatedChat);
+        const chatRes = await ChatBackend.updateChat(updatedChat.owner, updatedChat.name, updatedChat);
+
+        if (chatRes.status !== "ok") {
+          throw new Error("Failed to update settings");
+        }
 
         // Update was successful
         if (onChatUpdated) {
@@ -194,7 +199,7 @@ const StoreInfoTitle = (props) => {
         }
       }
     } catch (error) {
-      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+      Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error.message}`);
 
       // Revert UI state on error
       setSelectedStore(storeRef.current);

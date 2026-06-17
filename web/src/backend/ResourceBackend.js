@@ -12,31 +12,62 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalResources(owner = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-global-resources", {queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder}});
+  return fetch(`${Setting.ServerUrl}/api/get-global-resources?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getResource(owner, name) {
-  return ApiClient.get("/api/get-resource", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-resource?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateResource(owner, name, resource) {
-  return ApiClient.post("/api/update-resource", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: resource,
-  });
+  const newResource = Setting.deepCopy(resource);
+  return fetch(`${Setting.ServerUrl}/api/update-resource?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newResource),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addResource(resource) {
-  return ApiClient.post("/api/add-resource", {body: resource});
+  const newResource = Setting.deepCopy(resource);
+  return fetch(`${Setting.ServerUrl}/api/add-resource`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newResource),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteResource(resource) {
-  return ApiClient.post("/api/delete-resource", {body: resource});
+  const newResource = Setting.deepCopy(resource);
+  return fetch(`${Setting.ServerUrl}/api/delete-resource`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newResource),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 // uploadResource sends a file as multipart/form-data and creates a Resource record.
@@ -47,5 +78,12 @@ export function uploadResource(user, category, objectType, objectId, file) {
   formData.append("category", category);
   formData.append("objectType", objectType || "");
   formData.append("objectId", objectId || "");
-  return ApiClient.post("/api/upload-resource", {body: formData});
+  return fetch(`${Setting.ServerUrl}/api/upload-resource`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: formData,
+  }).then(res => Setting.handleFetchResponse(res));
 }

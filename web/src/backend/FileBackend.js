@@ -12,43 +12,95 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalFiles(store = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-global-files", {queryParams: {store, p: page, pageSize, field, value, sortField, sortOrder}});
+  return fetch(`${Setting.ServerUrl}/api/get-global-files?store=${store}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getFiles(owner, store = "") {
-  return ApiClient.get("/api/get-files", {queryParams: {owner, store}});
+  return fetch(`${Setting.ServerUrl}/api/get-files?owner=${owner}&store=${store}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getFile(owner, name) {
-  return ApiClient.get("/api/get-file", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-file?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateFile(owner, name, file) {
-  return ApiClient.post("/api/update-file", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: file,
-  });
+  const newFile = Setting.deepCopy(file);
+  return fetch(`${Setting.ServerUrl}/api/update-file?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newFile),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function uploadFile(filename, file) {
   const formData = new FormData();
   formData.append("file", file);
-  return ApiClient.post("/api/upload-file", {queryParams: {filename: encodeURIComponent(filename)}, body: formData});
+  return fetch(`${Setting.ServerUrl}/api/upload-file?filename=${encodeURIComponent(filename)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: formData,
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addFile(file) {
-  return ApiClient.post("/api/add-file", {body: file});
+  const newFile = Setting.deepCopy(file);
+  return fetch(`${Setting.ServerUrl}/api/add-file`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newFile),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteFile(file) {
-  return ApiClient.post("/api/delete-file", {body: file});
+  const newFile = Setting.deepCopy(file);
+  return fetch(`${Setting.ServerUrl}/api/delete-file`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newFile),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function refreshFileVectors(file) {
-  return ApiClient.post("/api/refresh-file-vectors", {body: file});
+  const newFile = Setting.deepCopy(file);
+  return fetch(`${Setting.ServerUrl}/api/refresh-file-vectors`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newFile),
+  }).then(res => Setting.handleFetchResponse(res));
 }

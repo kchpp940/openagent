@@ -73,33 +73,47 @@ class SystemInfo extends React.Component {
 
   UNSAFE_componentWillMount() {
     SystemBackend.getSystemInfo("").then(res => {
-      this.setState({loading: false, systemInfo: res.data});
+      this.setState({loading: false});
+      if (res.status === "ok") {
+        this.setState({systemInfo: res.data});
+      } else {
+        Setting.showMessage("error", res.msg);
+        this.stopTimer();
+      }
 
       const id = setInterval(() => {
         SystemBackend.getSystemInfo("").then(res => {
-          this.setState({loading: false, systemInfo: res.data});
+          this.setState({loading: false});
+          if (res.status === "ok") {
+            this.setState({systemInfo: res.data});
+          } else {
+            Setting.showMessage("error", res.msg);
+            this.stopTimer();
+          }
         }).catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
           this.stopTimer();
         });
 
         SystemBackend.getPrometheusInfo().then(res => {
           this.setState({prometheusInfo: res.data});
-        }).catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         });
       }, 1000 * 2);
 
       this.setState({intervalId: id});
     }).catch(error => {
-      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+      Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
       this.stopTimer();
     });
 
     SystemBackend.getVersionInfo().then(res => {
-      this.setState({versionInfo: res.data});
-    }).catch(error => {
-      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+      if (res.status === "ok") {
+        this.setState({versionInfo: res.data});
+      } else {
+        Setting.showMessage("error", res.msg);
+      }
+    }).catch(err => {
+      Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err}`);
     });
   }
 

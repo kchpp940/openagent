@@ -250,9 +250,6 @@ export function deleteElementFromSet(set, newUser) {
   return set.filter(user => user !== newUser);
 }
 
-// [EXEMPT] Unused legacy function — uses raw fetch + handleFetchResponse.
-// Not refactored to ApiClient because it's dead code (no callers found).
-// Also has a bug: uses `this.props` in an arrow function (this is undefined).
 export const redirectCatchJsonError = async(url) => {
   try {
     const response = await fetch(url);

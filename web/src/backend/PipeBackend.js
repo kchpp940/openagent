@@ -12,43 +12,90 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalPipes() {
-  return ApiClient.get("/api/get-global-pipes");
+  return fetch(`${Setting.ServerUrl}/api/get-global-pipes`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getPipes(owner) {
-  return ApiClient.get("/api/get-pipes", {queryParams: {owner}});
+  return fetch(`${Setting.ServerUrl}/api/get-pipes?owner=${owner}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getPipe(owner, name) {
-  return ApiClient.get("/api/get-pipe", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-pipe?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updatePipe(owner, name, pipe) {
-  return ApiClient.post("/api/update-pipe", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: pipe,
-  });
+  const newPipe = Setting.deepCopy(pipe);
+  return fetch(`${Setting.ServerUrl}/api/update-pipe?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newPipe),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addPipe(pipe) {
-  return ApiClient.post("/api/add-pipe", {body: pipe});
+  const newPipe = Setting.deepCopy(pipe);
+  return fetch(`${Setting.ServerUrl}/api/add-pipe`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newPipe),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deletePipe(pipe) {
-  return ApiClient.post("/api/delete-pipe", {body: pipe});
+  const newPipe = Setting.deepCopy(pipe);
+  return fetch(`${Setting.ServerUrl}/api/delete-pipe`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newPipe),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function setPipeWebhook(id) {
-  return ApiClient.post("/api/set-pipe-webhook", {
-    queryParams: {id: encodeURIComponent(id)},
-  });
+  return fetch(`${Setting.ServerUrl}/api/set-pipe-webhook?id=${encodeURIComponent(id)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function chatTest(id, chatId, message) {
-  return ApiClient.post("/api/chat-test", {queryParams: {id: encodeURIComponent(id), chatId: encodeURIComponent(chatId), message: encodeURIComponent(message)}});
+  return fetch(`${Setting.ServerUrl}/api/chat-test?id=${encodeURIComponent(id)}&chatId=${encodeURIComponent(chatId)}&message=${encodeURIComponent(message)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

@@ -12,29 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getAccount() {
   const fromPath = encodeURIComponent(window.location.pathname);
-  return ApiClient.get("/api/get-account", {queryParams: {fromPath}});
+  return fetch(`${Setting.ServerUrl}/api/get-account?fromPath=${fromPath}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getSigninOptions() {
-  return ApiClient.get("/api/get-signin-options");
+  return fetch(`${Setting.ServerUrl}/api/get-signin-options`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateAccount(account) {
-  return ApiClient.post("/api/update-account", {body: account});
+  return fetch(`${Setting.ServerUrl}/api/update-account`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(account),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function signin(code, state) {
-  return ApiClient.post("/api/signin", {queryParams: {code, state}});
+  return fetch(`${Setting.ServerUrl}/api/signin?code=${code}&state=${state}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function signinWithPassword(username, password) {
-  return ApiClient.post("/api/signin", {body: {username, password}});
+  return fetch(`${Setting.ServerUrl}/api/signin`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({username, password}),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function signout() {
-  return ApiClient.post("/api/signout");
+  return fetch(`${Setting.ServerUrl}/api/signout`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

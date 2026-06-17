@@ -12,8 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getStorageProviders(owner) {
-  return ApiClient.get("/api/get-storage-providers", {queryParams: {owner}});
+  return fetch(`${Setting.ServerUrl}/api/get-storage-providers?owner=${owner}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

@@ -73,26 +73,28 @@ class StoreListPage extends BaseListPage {
 
   getAllProviders() {
     this.setState({loading: true});
-    const storageProvidersPromise = StorageProviderBackend.getStorageProviders(this.props.account.name)
-      .then(res => res.data)
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-        return [];
-      });
+    const storageProvidersPromise = StorageProviderBackend.getStorageProviders(this.props.account.name);
     Promise.all([
       storageProvidersPromise,
-      ProviderBackend.getProviders(this.props.account.name)
-        .then(res => res.data)
-        .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-          return [];
-        }),
-    ]).then(([providers1, providers2]) => {
+      ProviderBackend.getProviders(this.props.account.name),
+    ]).then(([res1, res2]) => {
+      if (res1.status !== "ok") {
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res1.msg}`);
+        this.setState({loading: false});
+        return;
+      }
+
+      if (res2.status !== "ok") {
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res2.msg}`);
+        this.setState({loading: false});
+        return;
+      }
+
       const newProviders = {};
-      providers1.forEach(provider => {
+      res1.data.forEach(provider => {
         newProviders[provider.name] = provider;
       });
-      providers2.forEach(provider => {
+      res2.data.forEach(provider => {
         newProviders[provider.name] = provider;
       });
 
@@ -101,7 +103,7 @@ class StoreListPage extends BaseListPage {
         loading: false,
       });
     }).catch(error => {
-      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+      Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
       this.setState({loading: false});
     });
   }
@@ -186,16 +188,20 @@ class StoreListPage extends BaseListPage {
   addStore() {
     const newStore = this.newStore();
     StoreBackend.addStore(newStore)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        window.dispatchEvent(new Event("storesChanged"));
-        this.props.history.push({
-          pathname: `/stores/${newStore.owner}/${newStore.name}`,
-          state: {isNewStore: true},
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          window.dispatchEvent(new Event("storesChanged"));
+          this.props.history.push({
+            pathname: `/stores/${newStore.owner}/${newStore.name}`,
+            state: {isNewStore: true},
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -205,19 +211,23 @@ class StoreListPage extends BaseListPage {
 
   deleteStore(record) {
     StoreBackend.deleteStore(record)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-        window.dispatchEvent(new Event("storesChanged"));
-        this.setState({
-          data: this.state.data.filter((item) => item.name !== record.name),
-          pagination: {
-            ...this.state.pagination,
-            total: this.state.pagination.total - 1,
-          },
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+          window.dispatchEvent(new Event("storesChanged"));
+          this.setState({
+            data: this.state.data.filter((item) => item.name !== record.name),
+            pagination: {
+              ...this.state.pagination,
+              total: this.state.pagination.total - 1,
+            },
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
 
@@ -229,13 +239,21 @@ class StoreListPage extends BaseListPage {
       },
     }));
     StoreBackend.refreshStoreVectors(this.state.data[i])
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Vectors generated successfully"));
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
+        }
+        this.setState(prevState => ({
+          generating: {
+            ...prevState.generating,
+            [i]: false,
+          },
+        }));
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Vectors failed to generate"));
-      })
-      .finally(() => {
+        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
         this.setState(prevState => ({
           generating: {
             ...prevState.generating,
@@ -577,21 +595,25 @@ class StoreListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
-          data: res.data,
-          pagination: {
-            ...params.pagination,
-            total: res.data2,
-          },
-          searchText: params.searchText,
-          searchedColumn: params.searchedColumn,
         });
-      })
-      .catch(error => {
-        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
-          this.setState({isAuthorized: false, loading: false});
+        if (res.status === "ok") {
+          this.setState({
+            data: res.data,
+            pagination: {
+              ...params.pagination,
+              total: res.data2,
+            },
+            searchText: params.searchText,
+            searchedColumn: params.searchedColumn,
+          });
         } else {
-          this.setState({loading: false});
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+          if (Setting.isResponseDenied(res)) {
+            this.setState({
+              isAuthorized: false,
+            });
+          } else {
+            Setting.showMessage("error", res.msg);
+          }
         }
       });
   };

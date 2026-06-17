@@ -118,14 +118,15 @@ class FileTree extends React.Component {
   getPermissions() {
     PermissionBackend.getPermissions(Conf.AuthConfig.organizationName)
       .then((res) => {
-        const permissions = res.data.filter(permission => (permission.domains[0] === this.props.store.name) && permission.users.length !== 0);
-        this.setState({
-          permissions: permissions,
-          permissionMap: this.getPermissionMap(permissions),
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          const permissions = res.data.filter(permission => (permission.domains[0] === this.props.store.name) && permission.users.length !== 0);
+          this.setState({
+            permissions: permissions,
+            permissionMap: this.getPermissionMap(permissions),
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -208,35 +209,42 @@ class FileTree extends React.Component {
       promises.push(TreeFileBackend.addFile(storeId, file.key, true, uploadedFile.name, uploadedFile.originFileObj));
     });
 
-    if (promises.length === 0) {
-      return;
-    }
-
-    Promise.allSettled(promises)
-      .then((results) => {
+    Promise.all(promises)
+      .then((values) => {
+        if (promises.length === 0) {
+          // no new file was uploaded
+          return;
+        }
         let hasError = false;
-        results.forEach((result, _index) => {
-          if (result.status === "rejected") {
+        values.forEach((res, _index) => {
+          if (res.status !== "ok") {
             hasError = true;
-            Setting.ResponseAdapter.showErrorMessage(result.reason, i18next.t("general:Failed to add"));
+            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
           }
         });
         if (!hasError) {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
+          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
         }
         this.props.onRefresh();
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
   addFile(file, newFolder) {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.addFile(storeId, file.key, false, newFolder, null)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        this.props.onRefresh();
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          this.props.onRefresh();
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -244,15 +252,19 @@ class FileTree extends React.Component {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.deleteFile(storeId, file.key, isLeaf)
       .then((res) => {
-        if (res.data === true) {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-          this.props.onRefresh();
+        if (res.status === "ok") {
+          if (res.data === true) {
+            Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+            this.props.onRefresh();
+          } else {
+            Setting.showMessage("error", i18next.t("general:Failed to connect to server"));
+          }
         } else {
-          Setting.showMessage("error", i18next.t("general:Failed to connect to server"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
 
@@ -421,9 +433,6 @@ class FileTree extends React.Component {
     if (ext && file.url && !this.isExtForDocViewer(ext) && !this.isExtForFileViewer(ext)) {
       this.setState({loading: true});
 
-      // [EXEMPT] Plain text response — cannot use ApiClient.
-      // This fetches a raw text file (e.g. source code) for display in a viewer.
-      // ApiClient would incorrectly try to parse it as JSON.
       fetch(file.url, {
         method: "GET",
         credentials: "include",
@@ -460,7 +469,6 @@ class FileTree extends React.Component {
                 loading: true,
               });
 
-              // [EXEMPT] Same as above — plain text file response.
               fetch(url, {
                 method: "GET",
                 credentials: "include",

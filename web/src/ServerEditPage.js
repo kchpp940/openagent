@@ -42,13 +42,14 @@ class ServerEditPage extends React.Component {
   getServer() {
     ServerBackend.getServer("admin", this.state.serverName)
       .then((res) => {
-        this.setState({
-          server: res.data,
-          originalServer: Setting.deepCopy(res.data),
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            server: res.data,
+            originalServer: Setting.deepCopy(res.data),
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -61,26 +62,26 @@ class ServerEditPage extends React.Component {
   submitServerEdit(willExist) {
     const server = Setting.deepCopy(this.state.server);
     ServerBackend.updateServer(this.state.originalServer.owner, this.state.originalServer.name, server)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        this.setState({originalServer: Setting.deepCopy(this.state.server)});
-        if (willExist) {
-          this.props.history.push("/servers");
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          this.setState({originalServer: Setting.deepCopy(this.state.server)});
+          if (willExist) {
+            this.props.history.push("/servers");
+          }
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   }
 
   cancelServerEdit() {
     ServerBackend.deleteServer(this.state.server)
       .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
         this.props.history.push("/servers");
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
       });
   }
 
@@ -88,12 +89,16 @@ class ServerEditPage extends React.Component {
     const server = Setting.deepCopy(this.state.server);
     this.setState({syncButtonLoading: true});
     ServerBackend.syncMcpTool(this.state.originalServer.owner, this.state.originalServer.name, server, isCleared)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        this.getServer();
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          this.getServer();
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       })
       .finally(() => {
         this.setState({syncButtonLoading: false});

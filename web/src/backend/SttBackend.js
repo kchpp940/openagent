@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function processSpeechToText(storeId, audioBlob) {
+  // Create a FormData object to send the audio file
   const formData = new FormData();
   formData.append("audio", audioBlob);
   formData.append("storeId", storeId);
 
-  return ApiClient.post("/api/process-speech-to-text", {body: formData});
+  return fetch(`${Setting.ServerUrl}/api/process-speech-to-text`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: formData,
+  }).then(res => Setting.handleFetchResponse(res))
+    .then(data => {
+      if (data && data.status === "error") {
+        throw new Error(data.msg || "Speech-to-text request failed");
+      }
+      return data;
+    });
 }

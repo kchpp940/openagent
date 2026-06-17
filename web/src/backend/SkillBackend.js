@@ -12,61 +12,111 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalSkills() {
-  return ApiClient.get("/api/get-global-skills");
+  return fetch(`${Setting.ServerUrl}/api/get-global-skills`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getSkills(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-skills", {
-    queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-skills?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getSkill(owner, name) {
-  return ApiClient.get("/api/get-skill", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-skill?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateSkill(owner, name, skill) {
-  return ApiClient.post("/api/update-skill", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: skill,
-  });
+  const newSkill = Setting.deepCopy(skill);
+  return fetch(`${Setting.ServerUrl}/api/update-skill?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newSkill),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addSkill(skill) {
-  return ApiClient.post("/api/add-skill", {
-    body: skill,
-  });
+  const newSkill = Setting.deepCopy(skill);
+  return fetch(`${Setting.ServerUrl}/api/add-skill`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newSkill),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteSkill(skill) {
-  return ApiClient.post("/api/delete-skill", {
-    body: skill,
-  });
+  const newSkill = Setting.deepCopy(skill);
+  return fetch(`${Setting.ServerUrl}/api/delete-skill`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newSkill),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function loadSkill(path) {
-  return ApiClient.get("/api/load-skill", {
-    queryParams: {path: encodeURIComponent(path)},
-  });
+  return fetch(`${Setting.ServerUrl}/api/load-skill?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getMarketplaceSources() {
-  return ApiClient.get("/api/get-marketplace-sources");
+  return fetch(`${Setting.ServerUrl}/api/get-marketplace-sources`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getMarketplaceSkills(source = "", keyword = "") {
-  return ApiClient.get("/api/get-marketplace-skills", {
-    queryParams: {source: encodeURIComponent(source), keyword: encodeURIComponent(keyword)},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-marketplace-skills?source=${encodeURIComponent(source)}&keyword=${encodeURIComponent(keyword)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function installMarketplaceSkill(item) {
-  return ApiClient.post("/api/install-marketplace-skill", {
-    body: item,
-  });
+  return fetch(`${Setting.ServerUrl}/api/install-marketplace-skill`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(item),
+  }).then(res => Setting.handleFetchResponse(res));
 }

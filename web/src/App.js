@@ -70,17 +70,17 @@ class App extends Component {
   }
 
   setTheme() {
-    SiteBackend.getBuiltInSite()
-      .then((res) => {
-        const site = res.data;
-        if (!site) {
-          return;
-        }
-        Setting.setThemeColor(site.themeColor);
-        this.setState({site});
-      })
-      .catch(() => {
-      });
+    SiteBackend.getBuiltInSite().then((res) => {
+      if (res.status !== "ok") {
+        return;
+      }
+      const site = res.data;
+      if (!site) {
+        return;
+      }
+      Setting.setThemeColor(site.themeColor);
+      this.setState({site});
+    });
   }
 
   componentDidUpdate() {
@@ -180,32 +180,31 @@ class App extends Component {
         }
 
         this.setState({account: null});
-      })
-      .catch(() => {
-        this.setState({account: null});
       });
   }
 
   getForms() {
     FormBackend.getForms("admin")
       .then((res) => {
-        this.setState({forms: res.data});
-        this.updateMenuKeyForm(res.data);
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({forms: res.data});
+          this.updateMenuKeyForm(res.data);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
   signout() {
     AccountBackend.signout()
-      .then(() => {
-        this.setState({account: null});
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("account:Successfully signed out, redirected to homepage"));
-        Setting.goToLink(Setting.isCasdoorAvailable() ? "/" : "/signin");
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("account:Signout failed"));
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({account: null});
+          Setting.showMessage("success", i18next.t("account:Successfully signed out, redirected to homepage"));
+          Setting.goToLink(Setting.isCasdoorAvailable() ? "/" : "/signin");
+        } else {
+          Setting.showMessage("error", `${i18next.t("account:Signout failed")}: ${res.msg}`);
+        }
       });
   }
 

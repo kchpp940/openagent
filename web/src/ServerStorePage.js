@@ -42,12 +42,17 @@ class ServerStorePage extends React.Component {
     this.setState({onlineListLoading: true, onlineNameFilter: "", onlineCategoryFilter: []});
     ServerBackend.getOnlineServers()
       .then((res) => {
-        const onlineServerList = this.normalizeOnlineServers(this.getOnlineServersFromResponse(res.data));
-        this.setState({onlineServerList, onlineListLoading: false});
+        if (res.status === "ok") {
+          const onlineServerList = this.normalizeOnlineServers(this.getOnlineServersFromResponse(res.data));
+          this.setState({onlineServerList, onlineListLoading: false});
+        } else {
+          this.setState({onlineListLoading: false});
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       })
       .catch(error => {
         this.setState({onlineListLoading: false});
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   };
 
@@ -78,14 +83,18 @@ class ServerStorePage extends React.Component {
 
     this.setState({creatingOnlineServerId: onlineServer.id});
     ServerBackend.addServer(newServer)
-      .then(() => {
+      .then((res) => {
         this.setState({creatingOnlineServerId: ""});
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        this.props.history.push({pathname: `/servers/${newServer.name}`, state: {isNewServer: true}});
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          this.props.history.push({pathname: `/servers/${newServer.name}`, state: {isNewServer: true}});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
         this.setState({creatingOnlineServerId: ""});
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   };
 

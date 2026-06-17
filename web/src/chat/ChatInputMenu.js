@@ -46,7 +46,7 @@ const ChatInputMenu = ({disabled, webSearchEnabled, onWebSearchChange, onFileUpl
 
     ProviderBackend.getProvider("admin", modelProvider)
       .then((res) => {
-        if (res.data) {
+        if (res.status === "ok" && res.data) {
           setWebSearchSupported(Setting.isProviderSupportWebSearch(res.data));
         } else {
           setWebSearchSupported(false);

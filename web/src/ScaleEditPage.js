@@ -30,10 +30,11 @@ class ScaleEditPage extends React.Component {
   getScale() {
     ScaleBackend.getScale(this.state.owner, this.state.scaleName)
       .then((res) => {
-        this.setState({scale: res.data});
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({scale: res.data});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -133,18 +134,20 @@ class ScaleEditPage extends React.Component {
     const scale = Setting.deepCopy(this.state.scale);
     ScaleBackend.updateScale(this.state.owner, this.state.scaleName, scale)
       .then((res) => {
-        if (res.data) {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        if (res.status === "ok" && res.data) {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
           this.setState({isNewScale: false, scaleName: this.state.scale.name});
           if (exitAfterSave) {
             this.props.history.push("/scales");
           } else {
             this.props.history.push(`/scales/${this.state.scale.owner}/${this.state.scale.name}`);
           }
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
 

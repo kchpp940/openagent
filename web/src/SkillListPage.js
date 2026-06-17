@@ -58,15 +58,19 @@ class SkillListPage extends BaseListPage {
   addSkill() {
     const newSkill = this.newSkill();
     SkillBackend.addSkill(newSkill)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
-        this.props.history.push({
-          pathname: `/skills/${newSkill.name}`,
-          state: {isNewSkill: true},
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully added"));
+          this.props.history.push({
+            pathname: `/skills/${newSkill.name}`,
+            state: {isNewSkill: true},
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -76,18 +80,22 @@ class SkillListPage extends BaseListPage {
 
   deleteSkill(record) {
     SkillBackend.deleteSkill(record)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-        this.setState({
-          data: this.state.data.filter((item) => item.name !== record.name),
-          pagination: {
-            ...this.state.pagination,
-            total: this.state.pagination.total - 1,
-          },
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+          this.setState({
+            data: this.state.data.filter((item) => item.name !== record.name),
+            pagination: {
+              ...this.state.pagination,
+              total: this.state.pagination.total - 1,
+            },
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
       });
   }
 
@@ -254,21 +262,21 @@ class SkillListPage extends BaseListPage {
     this.setState({loading: true});
     SkillBackend.getSkills("admin", pagination.current, pagination.pageSize, this.state.searchField, this.state.searchValue, params.sortField, params.sortOrder)
       .then((res) => {
-        this.setState({
-          loading: false,
-          data: res.data,
-          pagination: {
-            ...pagination,
-            total: res.data2,
-          },
-        });
-      })
-      .catch(error => {
-        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
-          this.setState({isAuthorized: false, loading: false});
+        if (res.status === "ok") {
+          this.setState({
+            loading: false,
+            data: res.data,
+            pagination: {
+              ...pagination,
+              total: res.data2,
+            },
+          });
         } else {
-          this.setState({loading: false});
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+          if (res.status === "error" && res.msg === "Unauthorized") {
+            this.setState({isAuthorized: false, loading: false});
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+          }
         }
       });
   };

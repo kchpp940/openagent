@@ -62,16 +62,14 @@ const MultiPaneManager = ({
       return;
     }
 
-    ProviderBackend.getProviders("admin")
-      .then((res) => {
+    ProviderBackend.getProviders("admin").then((res) => {
+      if (res.status === "ok") {
         const providers = res.data.filter(provider =>
           provider.category === "Model" && defaultStore.childModelProviders.includes(provider.name)
         );
         setModelProviders(providers);
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to load providers");
-      });
+      }
+    });
   }, [defaultStore]);
 
   const createNewChat = useCallback((baseChat, selectStore = {}) => {
@@ -99,7 +97,7 @@ const MultiPaneManager = ({
 
     addedChatsRef.current.add(chat.name);
     ChatBackend.addChat(chat).catch(error => {
-      Setting.ResponseAdapter.showErrorMessage(error, "Failed to create chat");
+      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
     });
   }, []);
 
@@ -111,24 +109,20 @@ const MultiPaneManager = ({
   const getMessages = useCallback((paneIndex, chat) => {
     if (!chat) {return;}
 
-    MessageBackend.getChatMessages("admin", chat.name)
-      .then((res) => {
-        res.data.forEach(message => {
-          message.html = renderText(message.text);
-        });
-
-        setPanes(prev => prev.map((pane, i) =>
-          i === paneIndex ? {...pane, messages: res.data} : pane
-        ));
-
-        const lastMessage = res.data[res.data.length - 1];
-        if (lastMessage?.author === "AI" && lastMessage.replyTo && !lastMessage.text) {
-          handleAIResponse(paneIndex, chat, res.data, lastMessage);
-        }
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to get messages");
+    MessageBackend.getChatMessages("admin", chat.name).then((res) => {
+      res.data.forEach(message => {
+        message.html = renderText(message.text);
       });
+
+      setPanes(prev => prev.map((pane, i) =>
+        i === paneIndex ? {...pane, messages: res.data} : pane
+      ));
+
+      const lastMessage = res.data[res.data.length - 1];
+      if (lastMessage?.author === "AI" && lastMessage.replyTo && !lastMessage.text) {
+        handleAIResponse(paneIndex, chat, res.data, lastMessage);
+      }
+    });
   }, []);
 
   const handleAIResponse = useCallback((paneIndex, chat, messages, lastMessage) => {
@@ -370,7 +364,7 @@ const MultiPaneManager = ({
       if (paneIndex === 0) {onChatUpdate?.(updatedChat);}
 
       ChatBackend.updateChat(updatedChat.owner, updatedChat.name, updatedChat).catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to save chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
     }
   }, [panes, onChatUpdate]);
@@ -386,7 +380,7 @@ const MultiPaneManager = ({
       if (paneIndex === 0) {onChatUpdate?.(updatedChat);}
 
       ChatBackend.updateChat(updatedChat.owner, updatedChat.name, updatedChat).catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to save chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
     }
   }, [panes, onChatUpdate]);
@@ -414,13 +408,15 @@ const MultiPaneManager = ({
       modelProvider: chat?.modelProvider || panes[paneIndex]?.store?.modelProvider || modelProviders[0]?.name || "",
     };
 
-    MessageBackend.addMessage(newMessage)
-      .then((res) => {
+    MessageBackend.addMessage(newMessage).then((res) => {
+      if (res.status === "ok") {
         getMessages(paneIndex, chat);
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to send message");
-      });
+      } else {
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+      }
+    }).catch(error => {
+      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+    });
   }, [panes, account, getMessages]);
 
   const handleGlobalInput = useCallback(() => {

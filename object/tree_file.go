@@ -17,7 +17,6 @@ package object
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"strings"
 
@@ -43,35 +42,40 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 		return false, nil, err
 	}
 
-	var objectKey string
-	var fileBuffer *bytes.Buffer
 	if isLeaf {
-		objectKey = fmt.Sprintf("%s/%s", key, filename)
-		objectKey = strings.TrimLeft(objectKey, "/")
-		fileBuffer = bytes.NewBuffer(nil)
-		_, err = io.Copy(fileBuffer, file)
+		fullKey := fmt.Sprintf("%s/%s", key, filename)
+		fullKey = strings.TrimLeft(fullKey, "/")
+
+		uploadOpts := UploadOptions{
+			FileName:        filename,
+			FullStorageKey:  fullKey,
+			AddRandomSuffix: false,
+			Lang:            lang,
+			StorageProvider: storageProviderObj,
+			User:            userName,
+			Parent:          store.Name,
+		}
+
+		uploadResult, err := UploadFromReader(file, uploadOpts)
 		if err != nil {
 			return false, nil, err
 		}
 
-		bs := fileBuffer.Bytes()
-		fileUrl, err := storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
-		if err != nil {
-			return false, nil, err
-		}
+		objectKey := uploadResult.StorageKey
+		fileUrl := uploadResult.Url
+		fileSize := uploadResult.FileSize
 
-		// Persist file information in the file table
 		fileRecord := &File{
 			Owner:           store.Owner,
 			Name:            getFileName(store.Name, objectKey),
 			CreatedTime:     util.GetCurrentTime(),
 			Filename:        filename,
-			Size:            int64(len(bs)),
+			Size:            fileSize,
 			Store:           store.Name,
 			StorageProvider: store.StorageProvider,
 			Url:             fileUrl,
 			TokenCount:      0,
-			Status:          FileStatusPending, // Initial status before embedding
+			Status:          FileStatusPending,
 		}
 		_, err = AddFile(fileRecord)
 		if err != nil {
@@ -85,11 +89,12 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			}
 		}()
 
-		return true, bs, nil
+		fileBytes := make([]byte, fileSize)
+		return true, fileBytes, nil
 	} else {
-		objectKey = fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
+		objectKey := fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
 		objectKey = strings.TrimLeft(objectKey, "/")
-		fileBuffer = bytes.NewBuffer(nil)
+		fileBuffer := bytes.NewBuffer(nil)
 		bs := fileBuffer.Bytes()
 		_, err = storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
 		if err != nil {

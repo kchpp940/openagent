@@ -50,11 +50,12 @@ class MessageEditPage extends React.Component {
   getProviders() {
     ProviderBackend.getProviders("admin")
       .then((res) => {
-        this.setState({
-          providers: res.data.filter(p => p.category === "Model"),
-        });
-      })
-      .catch(error => {});
+        if (res.status === "ok") {
+          this.setState({
+            providers: res.data.filter(p => p.category === "Model"),
+          });
+        }
+      });
   }
 
   getProvider(providerName) {
@@ -63,59 +64,64 @@ class MessageEditPage extends React.Component {
     }
     ProviderBackend.getProvider("admin", providerName)
       .then((res) => {
-        this.setState({
-          provider: res.data,
-        });
-      })
-      .catch(error => {});
+        if (res.status === "ok") {
+          this.setState({
+            provider: res.data,
+          });
+        }
+      });
   }
 
   getChats() {
     ChatBackend.getChats(this.props.account.name)
       .then((res) => {
-        this.setState({
-          chats: res.data,
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            chats: res.data,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
   getChat(chatName) {
     ChatBackend.getChat("admin", chatName)
       .then((res) => {
-        this.setState({
-          chat: res.data,
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            chat: res.data,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
   getMessage() {
     MessageBackend.getMessage("admin", this.state.messageName)
       .then((res) => {
-        this.setState({
-          message: res.data,
-        });
-        this.getProvider(res.data.modelProvider);
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            message: res.data,
+          });
+          this.getProvider(res.data.modelProvider);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
   getMessages() {
     MessageBackend.getMessages(this.props.account.name)
       .then((res) => {
-        this.setState({
-          messages: res.data,
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            messages: res.data,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -321,19 +327,23 @@ class MessageEditPage extends React.Component {
     const message = Setting.deepCopy(this.state.message);
     MessageBackend.updateMessage(this.state.message.owner, this.state.messageName, message)
       .then((res) => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        this.setState({
-          messageName: this.state.message.name,
-          isNewMessage: false,
-        });
-        if (exitAfterSave) {
-          this.props.history.push("/messages");
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          this.setState({
+            messageName: this.state.message.name,
+            isNewMessage: false,
+          });
+          if (exitAfterSave) {
+            this.props.history.push("/messages");
+          } else {
+            this.props.history.push(`/messages/${this.state.message.name}`);
+          }
         } else {
-          this.props.history.push(`/messages/${this.state.message.name}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
 
@@ -341,11 +351,15 @@ class MessageEditPage extends React.Component {
     if (this.state.isNewMessage) {
       MessageBackend.deleteMessage(this.state.message)
         .then((res) => {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
-          this.props.history.push("/messages");
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/messages");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
         })
         .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
         });
     } else {
       this.props.history.push("/messages");

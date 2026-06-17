@@ -13,55 +13,78 @@
 // limitations under the License.
 
 import * as Setting from "../Setting";
-import {ApiClient} from "./ApiClient";
-import {ResponseAdapter} from "./ResponseAdapter";
 
-// [EXEMPT] Custom serverUrl — uses ResponseAdapter directly instead of ApiClient
-// because the URL target is a different host (monitoring server), not Setting.ServerUrl.
-// ApiClient.buildUrl() always prefixes with Setting.ServerUrl, so it cannot be used here.
-// ResponseAdapter.handleResponse() is used to ensure consistent error handling (throws ApiError).
-function fetchWithCustomServerUrl(url) {
-  return fetch(url, {
+export function getUsages(serverUrl, storeName, selectedUser, days) {
+  if (serverUrl === "") {
+    serverUrl = Setting.ServerUrl;
+  }
+
+  return fetch(`${serverUrl}/api/get-usages?days=${days}&store=${storeName}&selectedUser=${selectedUser}`, {
     method: "GET",
     credentials: "include",
     headers: {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
-  }).then(res => ResponseAdapter.handleResponse(res));
-}
-
-export function getUsages(serverUrl, storeName, selectedUser, days) {
-  if (serverUrl === "") {
-    return ApiClient.get("/api/get-usages", {queryParams: {days, store: storeName, selectedUser}});
-  }
-  return fetchWithCustomServerUrl(`${serverUrl}/api/get-usages?days=${days}&store=${storeName}&selectedUser=${selectedUser}`);
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getRangeUsages(serverUrl, rangeType, count, storeName, selectedUser) {
   if (serverUrl === "") {
-    return ApiClient.get("/api/get-range-usages", {queryParams: {rangeType, count, store: storeName, user: selectedUser}});
+    serverUrl = Setting.ServerUrl;
   }
-  return fetchWithCustomServerUrl(`${serverUrl}/api/get-range-usages?rangeType=${rangeType}&count=${count}&store=${storeName}&user=${selectedUser}`);
+
+  return fetch(`${serverUrl}/api/get-range-usages?rangeType=${rangeType}&count=${count}&store=${storeName}&user=${selectedUser}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getUsers(serverUrl, user, storeName = "") {
   if (serverUrl === "") {
-    return ApiClient.get("/api/get-users", {queryParams: {user, store: storeName}});
+    serverUrl = Setting.ServerUrl;
   }
-  return fetchWithCustomServerUrl(`${serverUrl}/api/get-users?user=${user}&store=${storeName}`);
+
+  return fetch(`${serverUrl}/api/get-users?user=${user}&store=${storeName}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getUserTableInfos(serverUrl, storeName, user) {
   if (serverUrl === "") {
-    return ApiClient.get("/api/get-user-table-infos", {queryParams: {user, store: storeName}});
+    serverUrl = Setting.ServerUrl;
   }
-  return fetchWithCustomServerUrl(`${serverUrl}/api/get-user-table-infos?user=${user}&store=${storeName}`);
+  return fetch(`${serverUrl}/api/get-user-table-infos?user=${user}&store=${storeName}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getUsageProviders(owner) {
-  return ApiClient.get("/api/get-usage-providers", {queryParams: {owner}});
+  return fetch(`${Setting.ServerUrl}/api/get-usage-providers?owner=${owner}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getUsageHeatmap(owner) {
-  return ApiClient.get("/api/get-usage-heatmap", {queryParams: {owner}});
+  return fetch(`${Setting.ServerUrl}/api/get-usage-heatmap?owner=${owner}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

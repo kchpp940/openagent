@@ -46,13 +46,14 @@ class SkillEditPage extends React.Component {
   getSkill() {
     SkillBackend.getSkill("admin", this.state.skillName)
       .then((res) => {
-        this.setState({
-          skill: res.data,
-          originalSkill: Setting.deepCopy(res.data),
-        });
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            skill: res.data,
+            originalSkill: Setting.deepCopy(res.data),
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -251,33 +252,41 @@ class SkillEditPage extends React.Component {
   submitSkillEdit(exitAfterSave) {
     const skill = Setting.deepCopy(this.state.skill);
     SkillBackend.updateSkill(this.state.skill.owner, this.state.skillName, skill)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        this.setState({
-          skillName: this.state.skill.name,
-          isNewSkill: false,
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          this.setState({
+            skillName: this.state.skill.name,
+            isNewSkill: false,
+          });
 
-        if (exitAfterSave) {
-          this.props.history.push("/skills");
+          if (exitAfterSave) {
+            this.props.history.push("/skills");
+          } else {
+            this.props.history.push(`/skills/${this.state.skill.name}`);
+          }
         } else {
-          this.props.history.push(`/skills/${this.state.skill.name}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
 
   cancelSkillEdit() {
     if (this.state.isNewSkill) {
       SkillBackend.deleteSkill(this.state.skill)
-        .then(() => {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
-          this.props.history.push("/skills");
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/skills");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
         })
         .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
         });
     } else {
       this.props.history.push("/skills");

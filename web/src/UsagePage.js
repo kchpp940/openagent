@@ -59,13 +59,14 @@ class UsagePage extends BaseListPage {
     UsageBackend.getUsages(serverUrl, selectedStore, this.state.selectedUser, 30)
       .then((res) => {
         if (selectedStore !== Setting.getRequestStore(this.props.account)) {return;}
-        this.setState({
-          usages: res.data,
-          usageMetadata: res.data2,
-        });
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            usages: res.data,
+            usageMetadata: res.data2,
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -102,21 +103,22 @@ class UsagePage extends BaseListPage {
   getUsers(serverUrl) {
     UsageBackend.getUsers(serverUrl, this.props.account.name, Setting.getRequestStore(this.props.account))
       .then((res) => {
-        const selectedUser = !Setting.canViewAllUsers(this.props.account) ? res.data[0] : "All";
-        this.setState({
-          users: res.data,
-          selectedUser: selectedUser,
-        }, () => {
-          this.getUsages("");
-          this.getRangeUsagesAll("");
-          this.getUserTableInfos("");
-          this.getUsageProviders();
-          this.getUsageHeatmap();
+        if (res.status === "ok") {
+          const selectedUser = !Setting.canViewAllUsers(this.props.account) ? res.data[0] : "All";
+          this.setState({
+            users: res.data,
+            selectedUser: selectedUser,
+          }, () => {
+            this.getUsages("");
+            this.getRangeUsagesAll("");
+            this.getUserTableInfos("");
+            this.getUsageProviders();
+            this.getUsageHeatmap();
+          }
+          );
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
-        );
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -124,10 +126,9 @@ class UsagePage extends BaseListPage {
     const owner = this.props.account?.owner ?? "admin";
     UsageBackend.getUsageProviders(owner)
       .then((res) => {
-        this.setState({providerData: res.data});
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({providerData: res.data});
+        }
       });
   }
 
@@ -135,10 +136,9 @@ class UsagePage extends BaseListPage {
     const owner = this.props.account?.owner ?? "admin";
     UsageBackend.getUsageHeatmap(owner)
       .then((res) => {
-        this.setState({heatmapData: res.data});
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({heatmapData: res.data});
+        }
       });
   }
   getRangeUsages(serverUrl, rangeType) {
@@ -147,12 +147,13 @@ class UsagePage extends BaseListPage {
     UsageBackend.getRangeUsages(serverUrl, rangeType, count, selectedStore, this.state.selectedUser)
       .then((res) => {
         if (selectedStore !== Setting.getRequestStore(this.props.account)) {return;}
-        const state = {};
-        state[`rangeUsages${rangeType}`] = res.data;
-        this.setState(state);
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          const state = {};
+          state[`rangeUsages${rangeType}`] = res.data;
+          this.setState(state);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
   getUserTableInfos(serverUrl) {
@@ -160,14 +161,15 @@ class UsagePage extends BaseListPage {
     UsageBackend.getUserTableInfos(serverUrl, selectedStore, this.props.account.name)
       .then((res) => {
         if (selectedStore !== Setting.getRequestStore(this.props.account)) {return;}
-        this.setState({
-          userTableInfo: res.data,
-        }, () => {
-          this.updateTableInfo("All");
-        });
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            userTableInfo: res.data,
+          }, () => {
+            this.updateTableInfo("All");
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 

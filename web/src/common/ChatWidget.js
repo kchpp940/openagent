@@ -138,24 +138,27 @@ class ChatWidget extends React.Component {
   loadProviders() {
     return ProviderBackend.getProviders(this.props.account?.owner || "admin")
       .then((res) => {
-        const providers = res.data.filter(provider => {
-          if (provider.category !== "Model") {
-            return false;
-          }
-          return this.props.modelProviderLocked ? true : provider.state === "Active";
-        });
-        const selectedProvider = this.props.modelProvider || providers.find(p => p.isDefault)?.name || providers[0]?.name || "";
-        this.setState({
-          modelProviders: providers,
-          currentChat: {
-            ...this.state.currentChat,
-            modelProvider: selectedProvider,
-          },
-        });
-        return providers;
+        if (res.status === "ok") {
+          const providers = res.data.filter(provider => {
+            if (provider.category !== "Model") {
+              return false;
+            }
+            return this.props.modelProviderLocked ? true : provider.state === "Active";
+          });
+          const selectedProvider = this.props.modelProvider || providers.find(p => p.isDefault)?.name || providers[0]?.name || "";
+          this.setState({
+            modelProviders: providers,
+            currentChat: {
+              ...this.state.currentChat,
+              modelProvider: selectedProvider,
+            },
+          });
+          return providers;
+        }
+        return [];
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to load providers");
+        Setting.showMessage("error", `Failed to load providers: ${error}`);
         return [];
       });
   }
@@ -169,9 +172,10 @@ class ChatWidget extends React.Component {
 
     ChatBackend.getChat("admin", chatName)
       .then((res) => {
-        if (res.data) {
+        if (res.status === "ok" && res.data) {
           const chat = res.data;
           let needsUpdate = false;
+          // Sync modelProvider from props (or default) if different
           const desiredModel = this.props.modelProvider ||
             (this.state.modelProviders.length > 0 ? this.state.modelProviders[0].name : "");
           if (desiredModel && chat.modelProvider !== desiredModel) {
@@ -221,14 +225,18 @@ class ChatWidget extends React.Component {
     };
 
     ChatBackend.addChat(newChat)
-      .then(() => {
-        this.setState({
-          currentChat: newChat,
-          messages: [],
-        });
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({
+            currentChat: newChat,
+            messages: [],
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to create chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
@@ -275,14 +283,22 @@ class ChatWidget extends React.Component {
     const newMessage = this.newMessage(text, fileName, isHidden, isRegenerated);
     MessageBackend.addMessage(newMessage)
       .then((res) => {
-        const updatedChat = res.data;
-        this.setState({
-          currentChat: updatedChat,
-        });
-        this.getMessages(updatedChat);
+        if (res.status === "ok") {
+          const updatedChat = res.data;
+          this.setState({
+            currentChat: updatedChat,
+          });
+          this.getMessages(updatedChat);
 
-        if (this.props.onMessageSent) {
-          this.props.onMessageSent(newMessage, updatedChat);
+          if (this.props.onMessageSent) {
+            this.props.onMessageSent(newMessage, updatedChat);
+          }
+        } else {
+          this.setState({
+            messageLoading: false,
+            messageError: true,
+          });
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         }
       })
       .catch(error => {
@@ -290,7 +306,7 @@ class ChatWidget extends React.Component {
           messageLoading: false,
           messageError: true,
         });
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to send message");
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   };
 
@@ -301,40 +317,48 @@ class ChatWidget extends React.Component {
 
     MessageBackend.getChatMessages("admin", chat.name)
       .then((res) => {
-        const messages = res.data || [];
-        messages.map((message) => {
-          message.html = renderText(message.text);
-          return message;
-        });
-        this.setState({
-          messages: messages,
-        });
+        if (res.status === "ok") {
+          const messages = res.data || [];
+          messages.map((message) => {
+            message.html = renderText(message.text);
+            return message;
+          });
+          this.setState({
+            messages: messages,
+          });
 
-        // Check if the last message is an AI message that is still pending
-        if (messages.length > 0) {
-          const lastMessage = messages[messages.length - 1];
-          if (lastMessage.author === "AI" && lastMessage.replyTo !== "" && lastMessage.text === "") {
-            this.handlePendingAIMessage(lastMessage, chat, messages);
+          // Check if the last message is an AI message that is still pending
+          if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage.author === "AI" && lastMessage.replyTo !== "" && lastMessage.text === "") {
+              this.handlePendingAIMessage(lastMessage, chat, messages);
+            } else {
+              this.setState({
+                messageLoading: false,
+              });
+            }
           } else {
             this.setState({
               messageLoading: false,
             });
           }
+
+          // Automatically scroll to the last message
+          setTimeout(() => {
+            if (messages.length > 0) {
+              Setting.scrollToDiv(`chatbox-list-item-${messages.length}`);
+            }
+          }, 100);
         } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
           this.setState({
             messageLoading: false,
+            messageError: true,
           });
         }
-
-        // Automatically scroll to the last message
-        setTimeout(() => {
-          if (messages.length > 0) {
-            Setting.scrollToDiv(`chatbox-list-item-${messages.length}`);
-          }
-        }, 100);
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to get messages");
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
         this.setState({
           messageLoading: false,
           messageError: true,
@@ -349,13 +373,17 @@ class ChatWidget extends React.Component {
         MessageBackend.closeMessageEventSource(lastMessage.owner, lastMessage.name, true);
 
         MessageBackend.updateMessage(lastMessage.owner, lastMessage.name, lastMessage)
-          .then(() => {
-            this.setState({
-              messageLoading: false,
-            });
+          .then((res) => {
+            if (res.status === "ok") {
+              this.setState({
+                messageLoading: false,
+              });
+            } else {
+              Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+            }
           })
           .catch(error => {
-            Setting.ResponseAdapter.showErrorMessage(error, "Failed to cancel message");
+            Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
           });
       }
     } else {
@@ -369,16 +397,20 @@ class ChatWidget extends React.Component {
   clearMessages = () => {
     if (this.state.currentChat) {
       ChatBackend.deleteChat(this.state.currentChat)
-        .then(() => {
-          this.newChat();
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("chat:New Chat"));
+        .then((res) => {
+          if (res.status === "ok") {
+            this.newChat();
+            Setting.showMessage("success", i18next.t("chat:New Chat"));
 
-          if (this.props.onChatCleared) {
-            this.props.onChatCleared();
+            if (this.props.onChatCleared) {
+              this.props.onChatCleared();
+            }
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
           }
         })
         .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, "Failed to delete chat");
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
         });
     } else {
       this.newChat();
@@ -674,8 +706,13 @@ class ChatWidget extends React.Component {
       });
 
       ChatBackend.updateChat(updatedChat.owner, updatedChat.name, updatedChat)
+        .then((res) => {
+          if (res.status !== "ok") {
+            Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          }
+        })
         .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, "Failed to save chat");
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
         });
     }
   };

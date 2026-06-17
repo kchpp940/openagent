@@ -109,14 +109,11 @@ class BaseListPage extends React.Component {
       formName = formType + "-tag-" + tag;
       FormBackend.getForm(this.props.account.owner, formName)
         .then(res => {
-          if (res.data) {
+          if (res.status === "ok" && res.data) {
             this.setState({formItems: res.data.formItems});
           } else {
             this.fetchFormWithoutTag(formType);
           }
-        })
-        .catch(() => {
-          this.fetchFormWithoutTag(formType);
         });
     } else {
       this.fetchFormWithoutTag(formType);
@@ -126,14 +123,11 @@ class BaseListPage extends React.Component {
   fetchFormWithoutTag(formName) {
     FormBackend.getForm(this.props.account.owner, formName)
       .then(res => {
-        if (res.data) {
+        if (res.status === "ok" && res.data) {
           this.setState({formItems: res.data.formItems});
         } else {
           this.setState({formItems: []});
         }
-      })
-      .catch(() => {
-        this.setState({formItems: []});
       });
   }
 
@@ -278,13 +272,11 @@ class BaseListPage extends React.Component {
 
       // Check results and handle partial failures
       const failureCount = results.filter(result =>
-        result.status === "rejected"
+        result.status === "rejected" || result.value.status !== "ok"
       ).length;
 
       if (failureCount > 0) {
         Setting.showMessage("error", `${failureCount} ${i18next.t("general:Failed to delete")}`);
-      } else if (results.length > 0) {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
       }
 
       this.clearSelection();
@@ -294,7 +286,7 @@ class BaseListPage extends React.Component {
       this.fetch({pagination});
 
     } catch (error) {
-      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to connect to server"));
+      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
     } finally {
       this.setState({loading: false});
     }

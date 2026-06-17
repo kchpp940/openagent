@@ -12,37 +12,81 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalVectors() {
-  return ApiClient.get("/api/get-global-vectors");
+  return fetch(`${Setting.ServerUrl}/api/get-global-vectors`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getVectors(owner, storeName, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-vectors", {queryParams: {owner, store: storeName, p: page, pageSize, field, value, sortField, sortOrder}});
+  return fetch(`${Setting.ServerUrl}/api/get-vectors?owner=${owner}&store=${storeName}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getVector(owner, name) {
-  return ApiClient.get("/api/get-vector", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-vector?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateVector(owner, name, vector) {
-  return ApiClient.post("/api/update-vector", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: vector,
-  });
+  const newVector = Setting.deepCopy(vector);
+  return fetch(`${Setting.ServerUrl}/api/update-vector?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newVector),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addVector(vector) {
-  return ApiClient.post("/api/add-vector", {body: vector});
+  const newVector = Setting.deepCopy(vector);
+  return fetch(`${Setting.ServerUrl}/api/add-vector`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newVector),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteVector(vector) {
-  return ApiClient.post("/api/delete-vector", {body: vector});
+  const newVector = Setting.deepCopy(vector);
+  return fetch(`${Setting.ServerUrl}/api/delete-vector`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newVector),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteAllVectors() {
-  return ApiClient.post("/api/delete-all-vectors");
+  return fetch(`${Setting.ServerUrl}/api/delete-all-vectors`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: null,
+  }).then(res => Setting.handleFetchResponse(res));
 }

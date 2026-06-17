@@ -15,7 +15,6 @@
 package controllers
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -23,32 +22,6 @@ import (
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/txt"
 )
-
-func decodeFileBase64(fileBase64 string) ([]byte, error) {
-	data := fileBase64
-
-	if idx := strings.Index(data, ","); idx != -1 {
-		data = data[idx+1:]
-	}
-
-	data = strings.TrimSpace(data)
-
-	dec, err := base64.StdEncoding.DecodeString(data)
-	if err != nil {
-		dec, err = base64.URLEncoding.DecodeString(data)
-		if err != nil {
-			dec, err = base64.RawStdEncoding.DecodeString(data)
-			if err != nil {
-				dec, err = base64.RawURLEncoding.DecodeString(data)
-				if err != nil {
-					return nil, fmt.Errorf("invalid base64 data: %v", err)
-				}
-			}
-		}
-	}
-
-	return dec, nil
-}
 
 // UploadTaskDocument
 // @Title UploadTaskDocument
@@ -101,23 +74,31 @@ func (c *ApiController) UploadTaskDocument() {
 		return
 	}
 
-	fileBytes, err := decodeFileBase64(fileBase64)
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
-	safeFileName := strings.ReplaceAll(fileName, "+", "_")
-	filePath := fmt.Sprintf("openagent/task-documents/%s/%s", userName, safeFileName)
 	host := c.Ctx.Request.Host
 	origin := getOriginFromHost(host)
-	fileUrl, err := object.UploadFileToStorageSafe(filePath, fileBytes, origin, c.GetAcceptLanguage())
+	lang := c.GetAcceptLanguage()
+
+	uploadOpts := object.UploadOptions{
+		FileName:          fileName,
+		AllowedExtensions: allowedExtensions,
+		StoragePathPrefix: fmt.Sprintf("openagent/task-documents/%s", userName),
+		AddRandomSuffix:   false,
+		Origin:            origin,
+		Lang:              lang,
+		User:              userName,
+	}
+
+	uploadResult, err := object.UploadFromBase64(fileBase64, uploadOpts)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	resource := object.NewResourceFromUpload("admin", userName, "document", fileName, "application", typeDetection.DetectedType, fileUrl, filePath, len(fileBytes), "task", taskId)
+	fileUrl := uploadResult.Url
+	filePath := uploadResult.StorageKey
+	fileSize := int(uploadResult.FileSize)
+
+	resource := object.NewResourceFromUpload("admin", userName, "document", fileName, "application", typeDetection.DetectedType, fileUrl, filePath, fileSize, "task", taskId)
 	if _, addErr := object.AddResource(resource); addErr != nil {
 		logs.Warning("Failed to save resource record for task document: %v", addErr)
 	}

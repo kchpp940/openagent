@@ -27,10 +27,6 @@ const demoModeCallback = (res, isWriteOperation) => {
   if (!isWriteOperation) {
     return;
   }
-  // [EXEMPT] Uses Setting.handleFetchResponse intentionally — this is a global
-  // interceptor that receives a cloned Response object and needs to parse it
-  // silently without throwing. Setting.handleFetchResponse returns {status, msg}
-  // instead of throwing, which is the correct behavior for this inspection use case.
   Setting.handleFetchResponse(res).then(data => {
     if (data && Setting.isResponseDenied(data) && !demoModalVisible) {
       demoModalVisible = true;
@@ -115,10 +111,6 @@ export function initDemoMode() {
   }
 }
 
-// [EXEMPT] Global fetch interceptor — cannot use ApiClient.
-// This patches window.fetch globally to intercept all requests for demo mode.
-// It wraps the original fetch to add response filters (e.g. showing a modal for
-// write operations on demo sites). This must remain as raw fetch interception.
 window.fetch = async(url, option = {}) => {
   requestFilters.forEach(filter => filter(url, option));
 

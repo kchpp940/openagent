@@ -12,14 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function addFile(storeId, key, isLeaf, filename, file) {
   const formData = new FormData();
   formData.append("file", file);
-  return ApiClient.post("/api/add-tree-file", {queryParams: {store: storeId, key, isLeaf: isLeaf ? 1 : 0, filename: encodeURIComponent(filename)}, body: formData});
+  return fetch(`${Setting.ServerUrl}/api/add-tree-file?store=${storeId}&key=${key}&isLeaf=${isLeaf ? 1 : 0}&filename=${encodeURIComponent(filename)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: formData,
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteFile(storeId, key, isLeaf) {
-  return ApiClient.post("/api/delete-tree-file", {queryParams: {store: storeId, key, isLeaf: isLeaf ? 1 : 0}});
+  return fetch(`${Setting.ServerUrl}/api/delete-tree-file?store=${storeId}&key=${key}&isLeaf=${isLeaf ? 1 : 0}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }

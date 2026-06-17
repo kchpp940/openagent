@@ -64,15 +64,11 @@ class TaskEditPage extends React.Component {
   UNSAFE_componentWillMount() {
     this.getTask();
     this.getModelProviders();
-    ScaleBackend.getPublicScales()
-      .then((res) => {
-        if (res.data) {
-          this.setState({publicScales: res.data});
-        }
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-      });
+    ScaleBackend.getPublicScales().then((res) => {
+      if (res.status === "ok" && res.data) {
+        this.setState({publicScales: res.data});
+      }
+    });
   }
 
   normalizeTaskResult(task) {
@@ -99,12 +95,13 @@ class TaskEditPage extends React.Component {
   getTask() {
     TaskBackend.getTask(this.state.owner, this.state.taskName)
       .then((res) => {
-        this.setState({
-          task: this.normalizeTaskResult(res.data),
-        });
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            task: this.normalizeTaskResult(res.data),
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -136,14 +133,20 @@ class TaskEditPage extends React.Component {
     }, ANALYZE_PROGRESS_TICK_MS);
     TaskBackend.analyzeTask(this.state.task.owner, this.state.task.name)
       .then((res) => {
-        const task = this.state.task;
-        task.result = res.data;
-        task.score = res.data.score;
-        this.setState({task: task});
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        if (res.status === "ok") {
+          const task = this.state.task;
+          task.result = res.data;
+          task.score = res.data.score;
+          this.setState({task: task});
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+        } else {
+          this.setState({analyzeError: res.msg || i18next.t("general:Failed to get")});
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       })
-      .catch(error => {
-        this.setState({analyzeError: Setting.ResponseAdapter.getErrorMessage(error, i18next.t("general:Failed to get"))});
+      .catch(err => {
+        this.setState({analyzeError: err.message || i18next.t("general:Failed to get")});
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
       })
       .finally(() => {
         if (this.analyzeProgressIntervalId !== null) {
@@ -172,12 +175,12 @@ class TaskEditPage extends React.Component {
     const video = "";
     MessageBackend.getAnswer(provider, question, framework, video)
       .then((res) => {
-        this.updateTaskField("log", res.data);
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
-      })
-      .finally(() => {
+        if (res.status === "ok") {
+          this.updateTaskField("log", res.data);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+
         this.setState({
           loading: false,
         });
@@ -187,12 +190,13 @@ class TaskEditPage extends React.Component {
   getModelProviders() {
     ProviderBackend.getProviders(this.props.account.name)
       .then((res) => {
-        this.setState({
-          modelProviders: res.data.filter(provider => provider.category === "Model"),
-        });
-      })
-      .catch((error) => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({
+            modelProviders: res.data.filter(provider => provider.category === "Model"),
+          });
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -230,24 +234,28 @@ class TaskEditPage extends React.Component {
 
     TaskBackend.uploadTaskDocument(taskId, base64Data, file.name, file.type)
       .then((res) => {
-        const result = res.data;
-        const task = this.state.task;
-        task.documentUrl = result.url;
-        task.documentText = result.text;
-        task.documentError = result.error || "";
-        task.documentFileType = result.fileType || "";
-        this.setState({task: task});
+        if (res.status === "ok") {
+          const result = res.data;
+          const task = this.state.task;
+          task.documentUrl = result.url;
+          task.documentText = result.text;
+          task.documentError = result.error || "";
+          task.documentFileType = result.fileType || "";
+          this.setState({task: task});
 
-        if (result.parseSuccess) {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
-        } else if (result.error) {
-          Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
+          if (result.parseSuccess) {
+            Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+          } else if (result.error) {
+            Setting.showMessage("warning", `${i18next.t("general:Uploaded successfully, but parsing failed")}: ${result.error}`);
+          } else {
+            Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
+          }
         } else {
-          Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
         }
       })
       .catch(err => {
-        Setting.ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to upload"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${err.message}`);
       })
       .finally(() => {
         this.setState({uploadingDocument: false});
@@ -541,32 +549,40 @@ class TaskEditPage extends React.Component {
       task.result = JSON.stringify(task.result);
     }
     TaskBackend.updateTask(this.state.task.owner, this.state.taskName, task)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        this.setState({
-          taskName: this.state.task.name,
-          isNewTask: false,
-        });
-        if (exitAfterSave) {
-          this.props.history.push("/tasks");
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          this.setState({
+            taskName: this.state.task.name,
+            isNewTask: false,
+          });
+          if (exitAfterSave) {
+            this.props.history.push("/tasks");
+          } else {
+            this.props.history.push(`/tasks/${this.state.task.owner}/${this.state.task.name}`);
+          }
         } else {
-          this.props.history.push(`/tasks/${this.state.task.owner}/${this.state.task.name}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
 
   cancelTaskEdit() {
     if (this.state.isNewTask) {
       TaskBackend.deleteTask(this.state.task)
-        .then(() => {
-          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
-          this.props.history.push("/tasks");
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/tasks");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
         })
         .catch(error => {
-          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
         });
     } else {
       this.props.history.push("/tasks");

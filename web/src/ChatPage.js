@@ -101,6 +101,13 @@ class ChatPage extends BaseListPage {
             if (this.isChatPageUnmounted) {
               return;
             }
+            if (res.status !== "ok") {
+              if (!this.chatStatusPollingErrorShown) {
+                Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+                this.chatStatusPollingErrorShown = true;
+              }
+              return;
+            }
             this.chatStatusPollingErrorShown = false;
 
             const status = res.data;
@@ -128,7 +135,7 @@ class ChatPage extends BaseListPage {
               return;
             }
             if (!this.chatStatusPollingErrorShown) {
-              Setting.ResponseAdapter.showErrorMessage(error, "Failed to get chat status");
+              Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
               this.chatStatusPollingErrorShown = true;
             }
           })
@@ -259,34 +266,38 @@ class ChatPage extends BaseListPage {
         if (this.isChatPageUnmounted) {
           return;
         }
-        this.updateChatStatus(chat.name, {isUnread: false, isGenerating: chat.isGenerating});
+        if (res.status === "ok") {
+          this.updateChatStatus(chat.name, {isUnread: false, isGenerating: chat.isGenerating});
+        }
       })
       .catch(error => {
         if (this.isChatPageUnmounted) {
           return;
         }
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to save chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   };
 
   getGlobalStores() {
     StoreBackend.getGlobalStores().then((res) => {
-      const stores = res?.data;
-      const defaultStore = stores?.find(store => store.isDefault);
+      if (res.status === "ok") {
+        const stores = res?.data;
+        const defaultStore = stores?.find(store => store.isDefault);
 
-      let filteredStores = [];
-      if (stores && defaultStore && defaultStore.childStores && defaultStore.childStores.length > 0) {
-        const childStoreNames = new Set(defaultStore.childStores);
-        filteredStores = stores.filter(store => childStoreNames.has(store.name));
+        let filteredStores = [];
+        if (stores && defaultStore && defaultStore.childStores && defaultStore.childStores.length > 0) {
+          const childStoreNames = new Set(defaultStore.childStores);
+          filteredStores = stores.filter(store => childStoreNames.has(store.name));
+        }
+
+        this.setState({
+          stores: stores,
+          defaultStore: defaultStore,
+          filteredStores: filteredStores,
+        });
+      } else {
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
       }
-
-      this.setState({
-        stores: stores,
-        defaultStore: defaultStore,
-        filteredStores: filteredStores,
-      });
-    }).catch(error => {
-      Setting.ResponseAdapter.showErrorMessage(error, "Failed to get global stores");
     });
   }
 
@@ -366,20 +377,24 @@ class ChatPage extends BaseListPage {
 
         const canceledChat = this.state.chat;
         MessageBackend.updateMessage(lastMessage.owner, lastMessage.name, lastMessage)
-          .then(() => {
-            this.setState({
-              messageLoading: false,
-            });
-            if (canceledChat) {
-              this.updateChatStatus(canceledChat.name, {isGenerating: false});
-              const chatInList = this.state.data?.find(c => c.name === canceledChat.name);
-              if (chatInList) {
-                this.markChatRead({...chatInList, isGenerating: false});
+          .then((res) => {
+            if (res.status === "ok") {
+              this.setState({
+                messageLoading: false,
+              });
+              if (canceledChat) {
+                this.updateChatStatus(canceledChat.name, {isGenerating: false});
+                const chatInList = this.state.data?.find(c => c.name === canceledChat.name);
+                if (chatInList) {
+                  this.markChatRead({...chatInList, isGenerating: false});
+                }
               }
+            } else {
+              Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
             }
           })
           .catch(error => {
-            Setting.ResponseAdapter.showErrorMessage(error, "Failed to cancel message");
+            Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
           });
       }
     }
@@ -393,11 +408,13 @@ class ChatPage extends BaseListPage {
 
     ChatBackend.getChats(value, storeName, -1, -1, field, value, sortField, sortOrder)
       .then((res) => {
-        const chats = res.data;
-        this.setState({
-          data: chats,
-        });
-        this.menu.current?.setSelectedKeyToChat(chats, chat.name);
+        if (res.status === "ok") {
+          const chats = res.data;
+          this.setState({
+            data: chats,
+          });
+          this.menu.current?.setSelectedKeyToChat(chats, chat.name);
+        }
       });
   }
 
@@ -406,37 +423,42 @@ class ChatPage extends BaseListPage {
     this.setState({messageLoading: true});
     MessageBackend.addMessage(newMessage)
       .then((res) => {
-        const chat = res.data;
-        const draftModelProvider = this.state.draftModelProvider;
-        if (draftModelProvider) {
-          chat.modelProvider = draftModelProvider;
-        }
-        const currentGenerationMode = this.state.generationMode;
-        Setting.saveChatGenerationMode(chat.owner, chat.name, currentGenerationMode);
-        this.setState({
-          chat: chat,
-          draftStoreName: chat.store,
-          draftModelProvider: null,
-          generationMode: currentGenerationMode,
-        });
-        this.goToLinkSoft(this.generateChatUrl(chat.name, chat.store));
+        if (res.status === "ok") {
+          const chat = res.data;
+          const draftModelProvider = this.state.draftModelProvider;
+          if (draftModelProvider) {
+            chat.modelProvider = draftModelProvider;
+          }
+          const currentGenerationMode = this.state.generationMode;
+          Setting.saveChatGenerationMode(chat.owner, chat.name, currentGenerationMode);
+          this.setState({
+            chat: chat,
+            draftStoreName: chat.store,
+            draftModelProvider: null,
+            generationMode: currentGenerationMode,
+          });
+          this.goToLinkSoft(this.generateChatUrl(chat.name, chat.store));
 
-        const afterRefresh = () => {
-          this.refreshChatsAndSelect(chat);
-          this.getMessages(chat);
-        };
+          const afterRefresh = () => {
+            this.refreshChatsAndSelect(chat);
+            this.getMessages(chat);
+          };
 
-        if (draftModelProvider) {
-          ChatBackend.updateChat(chat.owner, chat.name, chat)
-            .then(() => afterRefresh())
-            .catch(() => afterRefresh());
+          if (draftModelProvider) {
+            ChatBackend.updateChat(chat.owner, chat.name, chat)
+              .then(() => afterRefresh())
+              .catch(() => afterRefresh());
+          } else {
+            afterRefresh();
+          }
         } else {
-          afterRefresh();
+          this.setState({messageLoading: false});
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
         }
       })
       .catch(error => {
         this.setState({messageLoading: false});
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to send message");
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   }
 
@@ -723,9 +745,6 @@ class ChatPage extends BaseListPage {
         }
 
         Setting.scrollToDiv(`chatbox-list-item-${res.data.length}`);
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to get messages");
       });
   }
 
@@ -765,31 +784,35 @@ class ChatPage extends BaseListPage {
 
   deleteChat(chats, i, chat) {
     ChatBackend.deleteChat(chat)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
-        const data = Setting.deleteRow(this.state.data, i);
-        const j = Math.min(i, data.length - 1);
-        if (j < 0) {
-          this.setState({
-            chat: undefined,
-            messages: [],
-            data: data,
-          });
-          this.goToLinkSoft("/chat");
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
+          const data = Setting.deleteRow(this.state.data, i);
+          const j = Math.min(i, data.length - 1);
+          if (j < 0) {
+            this.setState({
+              chat: undefined,
+              messages: [],
+              data: data,
+            });
+            this.goToLinkSoft("/chat");
+          } else {
+            const focusedChat = data[j];
+            this.setState({
+              chat: focusedChat,
+              // messages: null,
+              data: data,
+              generationMode: Setting.loadChatGenerationMode(focusedChat.owner, focusedChat.name),
+            });
+            this.getMessages(focusedChat);
+            this.goToLinkSoft(this.generateChatUrl(focusedChat.name, focusedChat.store));
+          }
         } else {
-          const focusedChat = data[j];
-          this.setState({
-            chat: focusedChat,
-            // messages: null,
-            data: data,
-            generationMode: Setting.loadChatGenerationMode(focusedChat.owner, focusedChat.name),
-          });
-          this.getMessages(focusedChat);
-          this.goToLinkSoft(this.generateChatUrl(focusedChat.name, focusedChat.store));
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to delete chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   }
 
@@ -797,11 +820,15 @@ class ChatPage extends BaseListPage {
     const name = chat.name;
     chat.displayName = newName;
     ChatBackend.updateChat("admin", name, chat)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+        }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, "Failed to save chat");
+        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
       });
   }
 
@@ -1011,48 +1038,50 @@ class ChatPage extends BaseListPage {
     }
     ChatBackend.getChats(value, storeName, -1, -1, field, value, sortField, sortOrder)
       .then((res) => {
-        const chats = res.data;
-        const nextState = {
-          loading: false,
-          data: chats,
-          messageError: false,
-          searchText: params.searchText,
-          searchedColumn: params.searchedColumn,
-        };
-        if (setLoading) {
-          nextState.messages = [];
-          nextState.chat = undefined;
-          nextState.draftStoreName = storeName;
-        }
-        this.setState(nextState);
-
-        if (chats.length > 0) {
-          let chat;
-          if (chatName !== undefined) {
-            chat = chats.find(c => c.name === chatName);
-          }
-          if (!chat) {
-            chat = chats[0];
-            this.goToLinkSoft(this.generateChatUrl(chat.name, chat.store));
-          }
-
+        if (res.status === "ok") {
+          const chats = res.data;
+          const nextState = {
+            loading: false,
+            data: chats,
+            messageError: false,
+            searchText: params.searchText,
+            searchedColumn: params.searchedColumn,
+          };
           if (setLoading) {
-            this.setState({
-              messages: [],
-              chat: chat,
-              draftStoreName: chat.store,
-              generationMode: Setting.loadChatGenerationMode(chat.owner, chat.name),
-            });
-            this.getMessages(chat);
-          } else if (this.state.chat?.name === chat.name) {
-            this.setState({chat: chat});
+            nextState.messages = [];
+            nextState.chat = undefined;
+            nextState.draftStoreName = storeName;
           }
-        }
-        this.getGlobalStores();
+          this.setState(nextState);
 
-        if (!setLoading) {
-          if (this.menu && this.menu.current) {
-            this.menu.current.setSelectedKeyToChat(chats, this.state.chat?.name);
+          if (chats.length > 0) {
+            let chat;
+            if (chatName !== undefined) {
+              chat = chats.find(c => c.name === chatName);
+            }
+            if (!chat) {
+              chat = chats[0];
+              this.goToLinkSoft(this.generateChatUrl(chat.name, chat.store));
+            }
+
+            if (setLoading) {
+              this.setState({
+                messages: [],
+                chat: chat,
+                draftStoreName: chat.store,
+                generationMode: Setting.loadChatGenerationMode(chat.owner, chat.name),
+              });
+              this.getMessages(chat);
+            } else if (this.state.chat?.name === chat.name) {
+              this.setState({chat: chat});
+            }
+          }
+          this.getGlobalStores();
+
+          if (!setLoading) {
+            if (this.menu && this.menu.current) {
+              this.menu.current.setSelectedKeyToChat(chats, this.state.chat?.name);
+            }
           }
         }
       });

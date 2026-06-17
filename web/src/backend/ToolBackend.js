@@ -12,45 +12,82 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getGlobalTools() {
-  return ApiClient.get("/api/get-global-tools");
+  return fetch(`${Setting.ServerUrl}/api/get-global-tools`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getTools(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-tools", {
-    queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-tools?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getTool(owner, name) {
-  return ApiClient.get("/api/get-tool", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-tool?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateTool(owner, name, tool) {
-  return ApiClient.post("/api/update-tool", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: tool,
-  });
+  const newTool = Setting.deepCopy(tool);
+  return fetch(`${Setting.ServerUrl}/api/update-tool?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTool),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addTool(tool) {
-  return ApiClient.post("/api/add-tool", {
-    body: tool,
-  });
+  const newTool = Setting.deepCopy(tool);
+  return fetch(`${Setting.ServerUrl}/api/add-tool`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTool),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteTool(tool) {
-  return ApiClient.post("/api/delete-tool", {
-    body: tool,
-  });
+  const newTool = Setting.deepCopy(tool);
+  return fetch(`${Setting.ServerUrl}/api/delete-tool`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTool),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function testTool(tool) {
-  return ApiClient.post("/api/test-tool", {
-    body: tool,
-  });
+  const newTool = Setting.deepCopy(tool);
+  return fetch(`${Setting.ServerUrl}/api/test-tool`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newTool),
+  }).then(res => Setting.handleFetchResponse(res));
 }

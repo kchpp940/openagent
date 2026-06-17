@@ -12,58 +12,105 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ApiClient} from "./ApiClient";
+import * as Setting from "../Setting";
 
 export function getServers(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
-  return ApiClient.get("/api/get-servers", {
-    queryParams: {owner, p: page, pageSize, field, value, sortField, sortOrder},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-servers?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getServer(owner, name) {
-  return ApiClient.get("/api/get-server", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-  });
+  return fetch(`${Setting.ServerUrl}/api/get-server?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function updateServer(owner, name, server) {
-  return ApiClient.post("/api/update-server", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`},
-    body: server,
-  });
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/update-server?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function addServer(server) {
-  return ApiClient.post("/api/add-server", {
-    body: server,
-  });
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/add-server`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function deleteServer(server) {
-  return ApiClient.post("/api/delete-server", {
-    body: server,
-  });
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/delete-server`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function testMcpServer(server) {
-  return ApiClient.post("/api/test-mcp-server", {
-    body: server,
-  });
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/test-mcp-server`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function syncMcpTool(owner, name, server, isCleared = false) {
-  return ApiClient.post("/api/sync-mcp-tool", {
-    queryParams: {id: `${owner}/${encodeURIComponent(name)}`, isCleared: isCleared ? "1" : "0"},
-    body: server,
-  });
+  const newServer = Setting.deepCopy(server);
+  return fetch(`${Setting.ServerUrl}/api/sync-mcp-tool?id=${owner}/${encodeURIComponent(name)}&isCleared=${isCleared ? "1" : "0"}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify(newServer),
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function getOnlineServers() {
-  return ApiClient.get("/api/get-online-servers");
+  return fetch(`${Setting.ServerUrl}/api/get-online-servers`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
 }
 
 export function syncIntranetServers(cidr, ports = [], paths = []) {
-  return ApiClient.post("/api/sync-intranet-servers", {
-    body: {cidr, ports, paths},
-  });
+  return fetch(`${Setting.ServerUrl}/api/sync-intranet-servers`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({cidr, ports, paths}),
+  }).then(res => Setting.handleFetchResponse(res));
 }

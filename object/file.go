@@ -15,9 +15,7 @@
 package object
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"sort"
 	"strings"
@@ -296,14 +294,6 @@ func getDefaultStorageProviderObj(lang string) (storage.StorageProvider, error) 
 }
 
 func UploadFile(owner string, userName string, filename string, fileData multipart.File, lang string, origin string) (*File, error) {
-	provider, err := GetDefaultStorageProvider()
-	if err != nil {
-		return nil, err
-	}
-	if provider == nil {
-		return nil, fmt.Errorf(i18n.Translate(lang, "object:The provider: %s does not exist"), "default storage provider")
-	}
-
 	defaultStore, err := GetDefaultStore(owner)
 	if err != nil {
 		return nil, err
@@ -313,28 +303,40 @@ func UploadFile(owner string, userName string, filename string, fileData multipa
 	}
 	storeName := defaultStore.Name
 
+	provider, err := GetDefaultStorageProvider()
+	if err != nil {
+		return nil, err
+	}
+	if provider == nil {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:The provider: %s does not exist"), "default storage provider")
+	}
+
 	storageProviderObj, err := provider.GetStorageProviderObj("", lang)
 	if err != nil {
 		return nil, err
 	}
 
-	objectKey := fmt.Sprintf("file_%s/%s", util.GetRandomName(), filename)
-	fileBuffer := bytes.NewBuffer(nil)
-	_, err = io.Copy(fileBuffer, fileData)
+	objectKeyPrefix := fmt.Sprintf("file_%s", util.GetRandomName())
+
+	uploadOpts := UploadOptions{
+		FileName:          filename,
+		StoragePathPrefix: objectKeyPrefix,
+		AddRandomSuffix:   false,
+		Origin:            origin,
+		Lang:              lang,
+		StorageProvider:   storageProviderObj,
+		User:              userName,
+		Parent:            provider.Name,
+	}
+
+	uploadResult, err := UploadFromReader(fileData, uploadOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	fileSize := int64(fileBuffer.Len())
-	rawUrl, err := storageProviderObj.PutObject(userName, provider.Name, objectKey, fileBuffer)
-	if err != nil {
-		return nil, err
-	}
-
-	fileUrl, err := getUrlFromPath(rawUrl, origin)
-	if err != nil {
-		return nil, err
-	}
+	objectKey := uploadResult.StorageKey
+	fileUrl := uploadResult.Url
+	fileSize := uploadResult.FileSize
 
 	fileRecord := &File{
 		Owner:           owner,

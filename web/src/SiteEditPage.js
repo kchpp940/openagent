@@ -43,10 +43,11 @@ class SiteEditPage extends React.Component {
   getSite() {
     SiteBackend.getSite("admin", this.state.siteName)
       .then((res) => {
-        this.setState({site: res.data});
-      })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        if (res.status === "ok") {
+          this.setState({site: res.data});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
       });
   }
 
@@ -61,11 +62,15 @@ class SiteEditPage extends React.Component {
     this.setState({[loadingKey]: true});
     ResourceBackend.uploadResource("admin", "avatar", "site", this.state.site.name, file)
       .then((res) => {
-        this.updateSiteField(field, res.data);
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
+        if (res.status === "ok") {
+          this.updateSiteField(field, res.data);
+          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
+        }
       })
-      .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to upload"));
+      .catch(err => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${err.message}`);
       })
       .finally(() => {
         this.setState({[loadingKey]: false});
@@ -74,17 +79,21 @@ class SiteEditPage extends React.Component {
 
   submitSiteEdit(exitAfterSave) {
     SiteBackend.updateSite(this.state.site.owner, this.state.siteName, this.state.site)
-      .then(() => {
-        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
-        Setting.setThemeColor(this.state.site.themeColor || Setting.getThemeColor());
-        this.setState({siteName: this.state.site.name});
-        if (this.props.onUpdateSite) {
-          this.props.onUpdateSite();
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          Setting.setThemeColor(this.state.site.themeColor || Setting.getThemeColor());
+          this.setState({siteName: this.state.site.name});
+          if (this.props.onUpdateSite) {
+            this.props.onUpdateSite();
+          }
+          this.props.history.push(`/sites/${this.state.site.name}`);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
         }
-        this.props.history.push(`/sites/${this.state.site.name}`);
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
       });
   }
 

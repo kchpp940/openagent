@@ -148,7 +148,7 @@ class RemoteSpeechToTextProvider {
         return STTBackend.processSpeechToText(storeId, wavBlob);
       })
       .then(result => {
-        if (result && result.data) {
+        if (result.status === "ok" && result.data) {
           // Get the actual text from the result
           const transcriptText = typeof result.data === "string" ? result.data :
             (result.data.text ? result.data.text : JSON.stringify(result.data));
@@ -173,11 +173,11 @@ class RemoteSpeechToTextProvider {
             Setting.showMessage("error", i18next.t("provider:Failed to display speech recognition result"));
           }
         } else {
-          throw new Error("Speech-to-text processing failed");
+          throw new Error(result.msg || "Speech-to-text processing failed");
         }
       })
       .catch(error => {
-        Setting.ResponseAdapter.showErrorMessage(error, `${i18next.t("general:Failed to get")}. Falling back to browser recognition`);
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error.message}. Falling back to browser recognition.`);
       });
   }
 
