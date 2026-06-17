@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/beego/beego"
+	"github.com/the-open-agent/openagent/conf"
 )
 
 // ipParsingMode holds the resolved config string: "" = disabled, "17monipdb" = 17monipdb, "MaxMind GeoIP2" = MaxMind.
@@ -52,7 +52,7 @@ func tryInitLocalDb() (bool, error) {
 // ipParsingMode = "17monipdb"     : use local 17monipdb.
 // ipParsingMode = "MaxMind GeoIP2": use MaxMind GeoIP2.
 func InitIpDb() {
-	ipParsingMode = beego.AppConfig.DefaultString("ipParsingMode", "")
+	ipParsingMode = conf.GetConfigString("ipParsingMode")
 	if ipParsingMode == "" {
 		return
 	}

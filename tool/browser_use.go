@@ -539,7 +539,7 @@ func findUserChromeExecutable() (string, error) {
 	var candidates []string
 	switch runtime.GOOS {
 	case "windows":
-		for _, base := range []string{os.Getenv("PROGRAMFILES"), os.Getenv("PROGRAMFILES(X86)"), os.Getenv("LOCALAPPDATA")} {
+		for _, base := range []string{os.Getenv("PROGRAMFILES"), os.Getenv("PROGRAMFILES(X86)"), os.Getenv("LOCALAPPDATA")} { // config-registry:allow — system paths
 			if base != "" {
 				candidates = append(candidates, filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe"))
 			}

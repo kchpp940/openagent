@@ -125,7 +125,7 @@ func (b *browserUseChromeExtBridge) handleWebSocket(w http.ResponseWriter, r *ht
 		http.Error(w, "browser extension bridge only accepts localhost connections", http.StatusForbidden)
 		return
 	}
-	if expectedToken := strings.TrimSpace(os.Getenv("OPENAGENT_CHROME_EXTENSION_TOKEN")); expectedToken != "" {
+	if expectedToken := strings.TrimSpace(os.Getenv("OPENAGENT_CHROME_EXTENSION_TOKEN")); expectedToken != "" { // config-registry:allow — runtime security token
 		if r.URL.Query().Get("token") != expectedToken {
 			http.Error(w, "invalid browser extension bridge token", http.StatusUnauthorized)
 			return

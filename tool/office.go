@@ -33,7 +33,7 @@ func ResolveOutputPath(path string) string {
 	if filepath.IsAbs(path) {
 		return path
 	}
-	if xdgDocs := os.Getenv("XDG_DOCUMENTS_DIR"); xdgDocs != "" {
+	if xdgDocs := os.Getenv("XDG_DOCUMENTS_DIR"); xdgDocs != "" { // config-registry:allow — system path
 		return filepath.Join(xdgDocs, path)
 	}
 	homeDir, err := os.UserHomeDir()

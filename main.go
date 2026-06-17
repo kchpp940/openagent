@@ -111,7 +111,7 @@ func main() {
 		panic(err)
 	}
 
-	port := beego.AppConfig.DefaultInt("httpport", 14000)
+	port := beego.AppConfig.DefaultInt("httpport", 14000) // config-registry:allow — needed before beego.BConfig.RunMode is set
 	err = util.StopOldInstance(port)
 	if err != nil {
 		panic(err)

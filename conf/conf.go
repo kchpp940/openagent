@@ -94,9 +94,9 @@ func GetConfigInt(key string) int {
 func GetConfigDataSourceName() string {
 	dataSourceName := GetConfigString("dataSourceName")
 
-	runningInDocker := os.Getenv("RUNNING_IN_DOCKER")
+	runningInDocker := os.Getenv("RUNNING_IN_DOCKER") // config-registry:allow — system env, not a config key
 	if runningInDocker == "true" {
-		if dbHost := os.Getenv("DOCKER_DB_HOST"); dbHost != "" {
+		if dbHost := os.Getenv("DOCKER_DB_HOST"); dbHost != "" { // config-registry:allow — system env
 			dataSourceName = strings.ReplaceAll(dataSourceName, "localhost", dbHost)
 		} else if runtime.GOOS == "linux" {
 			// https://stackoverflow.com/questions/48546124/what-is-linux-equivalent-of-host-docker-internal

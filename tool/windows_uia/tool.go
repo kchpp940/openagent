@@ -78,7 +78,7 @@ func resolveDesktopPath() string {
 }
 
 func resolveCmdExe() string {
-	windir := os.Getenv("WINDIR")
+	windir := os.Getenv("WINDIR") // config-registry:allow — system path
 	if windir == "" {
 		windir = "C:\\Windows"
 	}
