@@ -15,6 +15,7 @@
 import React from "react";
 import {Col, Row, Spin} from "antd";
 import * as StoreBackend from "./backend/StoreBackend";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import FileTree from "./FileTree";
 import i18next from "i18next";
 import * as Setting from "./Setting";
@@ -37,17 +38,16 @@ class FileTreePage extends React.Component {
   getStore() {
     StoreBackend.getStore(this.state.owner, this.state.storeName)
       .then((res) => {
-        if (res.status === "ok") {
-          if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
-            res.data.error = res.data2;
-          }
-
-          this.setState({
-            store: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
+          res.data.error = res.data2;
         }
+
+        this.setState({
+          store: res.data,
+        });
+      })
+      .catch((error) => {
+        ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 

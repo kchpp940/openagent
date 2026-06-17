@@ -156,20 +156,22 @@ const KnowledgeSourcesDrawer = ({visible, onClose, vectorScores, account}) => {
       const newVectorsData = {};
 
       try {
-        for (const vectorScore of vectorScores) {
+        const promises = vectorScores.map((vectorScore) => {
           if (!vectorScore.vector || typeof vectorScore.vector !== "string") {
-            continue; // Skip invalid vector IDs
+            return null;
           }
-          // Use "admin" as owner, same as VectorTooltip.js
-          const result = await VectorBackend.getVector("admin", vectorScore.vector);
-          if (result.status === "ok" && result.data) {
-            newVectorsData[vectorScore.vector] = result.data;
-          }
-        }
+          return VectorBackend.getVector("admin", vectorScore.vector)
+            .then((res) => {
+              if (res.data) {
+                newVectorsData[vectorScore.vector] = res.data;
+              }
+            });
+        }).filter(Boolean);
+
+        await Promise.all(promises);
         setVectorsData(newVectorsData);
       } catch (error) {
-        // Failed to load vectors data
-        Setting.showMessage("error", i18next.t("chat:Unable to load knowledge base sources. Please try again."));
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("chat:Unable to load knowledge base sources. Please try again."));
       } finally {
         setLoading(false);
       }

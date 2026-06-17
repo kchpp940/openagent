@@ -47,13 +47,12 @@ class FormEditPage extends React.Component {
   getForm() {
     FormBackend.getForm(this.props.account.owner, this.state.formName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            form: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          form: res.data,
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -283,23 +282,19 @@ class FormEditPage extends React.Component {
     }
     FormBackend.updateForm(this.state.form.owner, this.state.formName, form)
       .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            formName: this.state.form.name,
-            isNewForm: false,
-          });
-          if (exitAfterSave) {
-            this.props.history.push("/forms");
-          } else {
-            this.props.history.push(`/forms/${this.state.form.name}`);
-          }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          formName: this.state.form.name,
+          isNewForm: false,
+        });
+        if (exitAfterSave) {
+          this.props.history.push("/forms");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/forms/${this.state.form.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
@@ -307,15 +302,11 @@ class FormEditPage extends React.Component {
     if (this.state.isNewForm) {
       FormBackend.deleteForm(this.state.form)
         .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/forms");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/forms");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/forms");

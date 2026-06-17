@@ -41,14 +41,13 @@ class ToolEditPage extends React.Component {
   getTool() {
     ToolBackend.getTool("admin", this.state.toolName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            tool: res.data,
-            originalTool: Setting.deepCopy(res.data),
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          tool: res.data,
+          originalTool: Setting.deepCopy(res.data),
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -323,41 +322,33 @@ class ToolEditPage extends React.Component {
   submitToolEdit(exitAfterSave) {
     const tool = Setting.deepCopy(this.state.tool);
     ToolBackend.updateTool(this.state.tool.owner, this.state.toolName, tool)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            toolName: this.state.tool.name,
-            isNewTool: false,
-          });
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          toolName: this.state.tool.name,
+          isNewTool: false,
+        });
 
-          if (exitAfterSave) {
-            this.props.history.push("/tools");
-          } else {
-            this.props.history.push(`/tools/${this.state.tool.name}`);
-          }
+        if (exitAfterSave) {
+          this.props.history.push("/tools");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/tools/${this.state.tool.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
   cancelToolEdit() {
     if (this.state.isNewTool) {
       ToolBackend.deleteTool(this.state.tool)
-        .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/tools");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+        .then(() => {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/tools");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/tools");

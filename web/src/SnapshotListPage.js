@@ -17,6 +17,7 @@ import {Button, Modal, Popconfirm, Table, Tag, Tooltip, Typography} from "antd";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as SnapshotBackend from "./backend/SnapshotBackend";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import i18next from "i18next";
 import {EyeOutlined, RollbackOutlined} from "@ant-design/icons";
 
@@ -81,34 +82,25 @@ class SnapshotListPage extends BaseListPage {
     this.setState({detailVisible: true, detailLoading: true, detailSnapshot: null});
     SnapshotBackend.getSnapshot(record.owner, record.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({detailSnapshot: res.data, detailLoading: false});
-        } else {
-          this.setState({detailLoading: false});
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({detailSnapshot: res.data, detailLoading: false});
       })
       .catch(error => {
         this.setState({detailLoading: false});
-        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
+        ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   rollbackSnapshot(record) {
     this.setState({rollbackLoadingName: record.name});
     SnapshotBackend.rollbackSnapshot(record.owner, record.name)
-      .then((res) => {
+      .then(() => {
         this.setState({rollbackLoadingName: ""});
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Snapshot rolled back"));
-          this.fetch({pagination: this.state.pagination});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Rollback failed")}: ${res.msg}`);
-        }
+        ResponseAdapter.showSuccessMessage(i18next.t("general:Snapshot rolled back"));
+        this.fetch({pagination: this.state.pagination});
       })
       .catch(error => {
         this.setState({rollbackLoadingName: ""});
-        Setting.showMessage("error", `${i18next.t("general:Rollback failed")}: ${error}`);
+        ResponseAdapter.showErrorMessage(error, i18next.t("general:Rollback failed"));
       });
   }
 
@@ -287,22 +279,21 @@ class SnapshotListPage extends BaseListPage {
     });
     SnapshotBackend.getSnapshots("admin", pagination.current, pagination.pageSize, field, value, params.sortField || "", params.sortOrder || "")
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            loading: false,
-            data: res.data,
-            pagination: {
-              ...pagination,
-              total: res.data2,
-            },
-          });
+        this.setState({
+          loading: false,
+          data: res.data,
+          pagination: {
+            ...pagination,
+            total: res.data2,
+          },
+        });
+      })
+      .catch(error => {
+        if (error?.code === "unauthorized" || error?.message === "Unauthorized") {
+          this.setState({isAuthorized: false, loading: false});
         } else {
-          if (res.status === "error" && res.msg === "Unauthorized") {
-            this.setState({isAuthorized: false, loading: false});
-          } else {
-            this.setState({loading: false});
-            Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          }
+          this.setState({loading: false});
+          ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         }
       });
   };

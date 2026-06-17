@@ -17,6 +17,7 @@ import {Avatar, Button, Card, Col, Empty, Input, Row, Select, Spin, Tag, Tooltip
 import {CopyOutlined, InfoCircleOutlined, LinkOutlined, SortAscendingOutlined, SortDescendingOutlined} from "@ant-design/icons";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import i18next from "i18next";
 import StoreHubDrawer, {getChatUrl} from "./StoreHubDrawer";
 
@@ -46,15 +47,11 @@ class StoreHubPage extends React.Component {
   getHubStores() {
     StoreBackend.getHubStores()
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({stores: res.data || [], loading: false});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({loading: false});
-        }
+        this.setState({stores: res.data || [], loading: false});
       })
-      .catch(() => {
+      .catch((error) => {
         this.setState({loading: false});
+        ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 

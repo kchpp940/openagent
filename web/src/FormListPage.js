@@ -47,18 +47,14 @@ class FormListPage extends BaseListPage {
     const newForm = this.newForm();
     FormBackend.addForm(newForm)
       .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.history.push({
-            pathname: `/forms/${newForm.name}`,
-            state: {isNewForm: true},
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.history.push({
+          pathname: `/forms/${newForm.name}`,
+          state: {isNewForm: true},
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   }
 
@@ -69,21 +65,17 @@ class FormListPage extends BaseListPage {
   deleteForm(record) {
     FormBackend.deleteForm(record)
       .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: this.state.data.filter((item) => item.name !== record.name),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: this.state.data.filter((item) => item.name !== record.name),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -266,25 +258,25 @@ class FormListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2,
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
         });
-        if (res.status === "ok") {
+      })
+      .catch(error => {
+        this.setState({
+          loading: false,
+        });
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
           this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2,
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
+            isAuthorized: false,
           });
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({
-              isAuthorized: false,
-            });
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          Setting.ResponseAdapter.showErrorMessage(error);
         }
       });
   };

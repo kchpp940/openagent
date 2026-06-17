@@ -118,15 +118,14 @@ class FileTree extends React.Component {
   getPermissions() {
     PermissionBackend.getPermissions(Conf.AuthConfig.organizationName)
       .then((res) => {
-        if (res.status === "ok") {
-          const permissions = res.data.filter(permission => (permission.domains[0] === this.props.store.name) && permission.users.length !== 0);
-          this.setState({
-            permissions: permissions,
-            permissionMap: this.getPermissionMap(permissions),
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        const permissions = res.data.filter(permission => (permission.domains[0] === this.props.store.name) && permission.users.length !== 0);
+        this.setState({
+          permissions: permissions,
+          permissionMap: this.getPermissionMap(permissions),
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -209,42 +208,35 @@ class FileTree extends React.Component {
       promises.push(TreeFileBackend.addFile(storeId, file.key, true, uploadedFile.name, uploadedFile.originFileObj));
     });
 
-    Promise.all(promises)
-      .then((values) => {
-        if (promises.length === 0) {
-          // no new file was uploaded
-          return;
-        }
+    if (promises.length === 0) {
+      return;
+    }
+
+    Promise.allSettled(promises)
+      .then((results) => {
         let hasError = false;
-        values.forEach((res, _index) => {
-          if (res.status !== "ok") {
+        results.forEach((result, _index) => {
+          if (result.status === "rejected") {
             hasError = true;
-            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+            Setting.ResponseAdapter.showErrorMessage(result.reason, i18next.t("general:Failed to add"));
           }
         });
         if (!hasError) {
-          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
         }
         this.props.onRefresh();
-      })
-      .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
       });
   }
 
   addFile(file, newFolder) {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.addFile(storeId, file.key, false, newFolder, null)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.onRefresh();
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.onRefresh();
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   }
 
@@ -252,19 +244,15 @@ class FileTree extends React.Component {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.deleteFile(storeId, file.key, isLeaf)
       .then((res) => {
-        if (res.status === "ok") {
-          if (res.data === true) {
-            Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-            this.props.onRefresh();
-          } else {
-            Setting.showMessage("error", i18next.t("general:Failed to connect to server"));
-          }
+        if (res.data === true) {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+          this.props.onRefresh();
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+          Setting.showMessage("error", i18next.t("general:Failed to connect to server"));
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 

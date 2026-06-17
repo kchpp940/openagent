@@ -16,6 +16,7 @@ import React from "react";
 import {Redirect} from "react-router-dom";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import ChatPage from "./ChatPage";
 import i18next from "i18next";
 
@@ -44,17 +45,13 @@ class HomePage extends React.Component {
     // No current store yet — fetch the default store and save it.
     StoreBackend.getStore("admin", "_default_store_")
       .then((res) => {
-        if (res.status === "ok") {
-          if (res.data) {
-            Setting.setStore(res.data.name);
-          }
-          this.setState({storeFetched: true});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          this.setState({storeFetched: true});
+        if (res.data) {
+          Setting.setStore(res.data.name);
         }
-      }).catch(() => {
         this.setState({storeFetched: true});
+      }).catch((error) => {
+        this.setState({storeFetched: true});
+        ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 

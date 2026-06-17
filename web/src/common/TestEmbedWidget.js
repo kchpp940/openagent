@@ -43,50 +43,39 @@ class TestEmbedWidget extends React.Component {
     }
   }
 
-  async sendTestEmbedding(provider, originalProvider, text) {
-    await checkProvider(provider, originalProvider);
+  sendTestEmbedding(provider, originalProvider, text) {
+    checkProvider(provider, originalProvider);
     this.setState({testButtonLoading: true, embeddingResult: null});
 
-    try {
-      const testVectorName = `test_${provider.name}`;
+    const testVectorName = `test_${provider.name}`;
 
-      const testVector = {
-        owner: "admin",
-        name: testVectorName,
-        provider: provider.name,
-        text: "",
-      };
+    const testVector = {
+      owner: "admin",
+      name: testVectorName,
+      provider: provider.name,
+      text: "",
+    };
 
-      await VectorBackend.deleteVector(testVector);
-
-      // Create new empty vector
-      const addResult = await VectorBackend.addVector(testVector);
-      if (addResult.status !== "ok") {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${addResult.msg}`);
-        return;
-      }
-
-      testVector.text = text;
-      const updateResult = await VectorBackend.updateVector("admin", testVectorName, testVector);
-      if (updateResult.status !== "ok") {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${updateResult.msg}`);
-        return;
-      }
-
-      // Get generated vector data
-      const vectorResult = await VectorBackend.getVector("admin", testVectorName);
-      if (vectorResult.status === "ok" && vectorResult.data && vectorResult.data.data) {
-        this.setState({
-          embeddingResult: vectorResult.data.data,
-        });
-      } else {
-        Setting.showMessage("error", i18next.t("general:Failed to get"));
-      }
-    } catch (error) {
-      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error.message}`);
-    } finally {
-      this.setState({testButtonLoading: false});
-    }
+    VectorBackend.deleteVector(testVector)
+      .then(() => VectorBackend.addVector(testVector))
+      .then(() => {
+        testVector.text = text;
+        return VectorBackend.updateVector("admin", testVectorName, testVector);
+      })
+      .then(() => VectorBackend.getVector("admin", testVectorName))
+      .then((res) => {
+        if (res && res.data && res.data.data) {
+          this.setState({
+            embeddingResult: res.data.data,
+          });
+        }
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to connect to server"));
+      })
+      .finally(() => {
+        this.setState({testButtonLoading: false});
+      });
   }
 
   render() {

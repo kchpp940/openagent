@@ -47,20 +47,15 @@ class ProviderEditPage extends React.Component {
     this.setState({isFetchingModels: true});
     ProviderBackend.getProviderModels(this.state.provider)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            fetchedModels: res.data,
-            isFetchingModels: false,
-          });
-          Setting.showMessage("success", i18next.t("provider:Successfully fetched models"));
-        } else {
-          this.setState({isFetchingModels: false});
-          Setting.showMessage("error", `${i18next.t("provider:Failed to fetch models")}: ${res.msg}`);
-        }
+        this.setState({
+          fetchedModels: res.data,
+          isFetchingModels: false,
+        });
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("provider:Successfully fetched models"));
       })
       .catch(error => {
         this.setState({isFetchingModels: false});
-        Setting.showMessage("error", `${i18next.t("provider:Failed to fetch models")}: ${error?.message || error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("provider:Failed to fetch models"));
       });
   }
 
@@ -71,14 +66,13 @@ class ProviderEditPage extends React.Component {
   getProvider() {
     ProviderBackend.getProvider("admin", this.state.providerName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            provider: res.data,
-            originalProvider: Setting.deepCopy(res.data),
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          provider: res.data,
+          originalProvider: Setting.deepCopy(res.data),
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -1245,41 +1239,33 @@ class ProviderEditPage extends React.Component {
   submitProviderEdit(exitAfterSave) {
     const provider = Setting.deepCopy(this.state.provider);
     ProviderBackend.updateProvider(this.state.provider.owner, this.state.providerName, provider)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            providerName: this.state.provider.name,
-            isNewProvider: false,
-          });
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          providerName: this.state.provider.name,
+          isNewProvider: false,
+        });
 
-          if (exitAfterSave) {
-            this.props.history.push("/providers");
-          } else {
-            this.props.history.push(`/providers/${this.state.provider.name}`);
-          }
+        if (exitAfterSave) {
+          this.props.history.push("/providers");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/providers/${this.state.provider.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error.message || error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
   cancelProviderEdit() {
     if (this.state.isNewProvider) {
       ProviderBackend.deleteProvider(this.state.provider)
-        .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/providers");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+        .then(() => {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/providers");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/providers");

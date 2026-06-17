@@ -42,19 +42,19 @@ class AuthCallback extends React.Component {
   }
 
   login() {
-    Setting.signin().then((res) => {
-      if (res.status === "ok") {
+    Setting.signin()
+      .then(() => {
         Setting.showMessage("success", i18next.t("general:Successfully logged in"));
 
         const link = this.getFromLink();
         Setting.goToLink(link);
-      } else {
+      })
+      .catch((error) => {
         this.setState({
-          msg: res.msg,
-          errorDetails: res,
+          msg: Setting.ResponseAdapter.getErrorMessage(error, ""),
+          errorDetails: error.raw ? error.raw : {msg: error.message},
         });
-      }
-    });
+      });
   }
 
   handleHelp = () => {

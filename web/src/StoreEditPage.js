@@ -76,14 +76,10 @@ class StoreEditPage extends React.Component {
     this.setState({ownerUsersLoading: true});
     OrganizationUserBackend.getOrganizationUsers()
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({ownerUsers: res.data || []});
-        } else {
-          Setting.showMessage("error", res.msg || i18next.t("general:Failed to load"));
-        }
+        this.setState({ownerUsers: res.data || []});
       })
-      .catch((err) => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to load")}: ${err}`);
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to load"));
       })
       .finally(() => this.setState({ownerUsersLoading: false}));
   }
@@ -113,98 +109,91 @@ class StoreEditPage extends React.Component {
   getStore() {
     StoreBackend.getStore(this.state.owner, this.state.storeName)
       .then((res) => {
-        if (res.status === "ok") {
-          if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
-            res.data.error = res.data2;
-          }
-
-          const store = res.data;
-          this.setState({
-            store: store,
-            ...(store ? {owner: store.owner, storeName: store.name} : {}),
-          });
-          if (store && store.owner && store.owner !== this.props.match.params.owner) {
-            this.props.history.replace(`/stores/${store.owner}/${store.name}`);
-          }
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
+          res.data.error = res.data2;
         }
+
+        const store = res.data;
+        this.setState({
+          store: store,
+          ...(store ? {owner: store.owner, storeName: store.name} : {}),
+        });
+        if (store && store.owner && store.owner !== this.props.match.params.owner) {
+          this.props.history.replace(`/stores/${store.owner}/${store.name}`);
+        }
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getStores() {
     StoreBackend.getStores(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            stores: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          stores: res.data,
+        });
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getStorageProviders() {
     StorageProviderBackend.getStorageProviders(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            casdoorStorageProviders: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          casdoorStorageProviders: res.data,
+        });
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getProviders() {
     ProviderBackend.getProviders(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            storageProviders: res.data.filter(provider => provider.category === "Storage"),
-            modelProviders: res.data.filter(provider => provider.category === "Model"),
-            embeddingProviders: res.data.filter(provider => provider.category === "Embedding"),
-            textToSpeechProviders: res.data.filter(provider => provider.category === "Text-to-Speech"),
-            speechToTextProviders: res.data.filter(provider => provider.category === "Speech-to-Text"),
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          storageProviders: res.data.filter(provider => provider.category === "Storage"),
+          modelProviders: res.data.filter(provider => provider.category === "Model"),
+          embeddingProviders: res.data.filter(provider => provider.category === "Embedding"),
+          textToSpeechProviders: res.data.filter(provider => provider.category === "Text-to-Speech"),
+          speechToTextProviders: res.data.filter(provider => provider.category === "Speech-to-Text"),
+        });
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getMcpServers() {
     ServerBackend.getServers(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({mcpServers: res.data});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({mcpServers: res.data});
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getSkills() {
     SkillBackend.getSkills(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({skills: res.data});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({skills: res.data});
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getTools() {
     ToolBackend.getTools(this.props.account.name)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({tools: res.data});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({tools: res.data});
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -279,21 +268,17 @@ class StoreEditPage extends React.Component {
     store.publishState = newState;
     store.fileTree = undefined;
     StoreBackend.updateStore(this.state.owner, this.state.storeName, store)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState(prevState => ({
-            store: {
-              ...prevState.store,
-              publishState: newState,
-            },
-          }));
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState(prevState => ({
+          store: {
+            ...prevState.store,
+            publishState: newState,
+          },
+        }));
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
@@ -889,25 +874,21 @@ class StoreEditPage extends React.Component {
 
     store.fileTree = undefined;
     StoreBackend.updateStore(this.state.owner, this.state.storeName, store)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            storeName: this.state.store.name,
-            isNewStore: false,
-          });
-          window.dispatchEvent(new Event("storesChanged"));
-          if (exitAfterSave) {
-            this.props.history.push("/stores");
-          } else {
-            this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
-          }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          storeName: this.state.store.name,
+          isNewStore: false,
+        });
+        window.dispatchEvent(new Event("storesChanged"));
+        if (exitAfterSave) {
+          this.props.history.push("/stores");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/stores/${this.state.store.owner}/${this.state.store.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
@@ -919,21 +900,17 @@ class StoreEditPage extends React.Component {
       onOk: () => {
         StoreBackend.claimStore(this.state.store.owner, this.state.store.name)
           .then((res) => {
-            if (res.status === "ok") {
-              Setting.showMessage("success", i18next.t("general:Successfully saved"));
-              window.dispatchEvent(new Event("storesChanged"));
-              this.setState({
-                store: res.data,
-                owner: res.data.owner,
-                storeName: res.data.name,
-              });
-              this.props.history.push(`/stores/${res.data.owner}/${res.data.name}`);
-            } else {
-              Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-            }
+            Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+            window.dispatchEvent(new Event("storesChanged"));
+            this.setState({
+              store: res.data,
+              owner: res.data.owner,
+              storeName: res.data.name,
+            });
+            this.props.history.push(`/stores/${res.data.owner}/${res.data.name}`);
           })
           .catch(error => {
-            Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+            Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
           });
       },
     });
@@ -942,17 +919,13 @@ class StoreEditPage extends React.Component {
   cancelStoreEdit() {
     if (this.state.isNewStore) {
       StoreBackend.deleteStore(this.state.store)
-        .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            window.dispatchEvent(new Event("storesChanged"));
-            this.props.history.push("/stores");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+        .then(() => {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          window.dispatchEvent(new Event("storesChanged"));
+          this.props.history.push("/stores");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/stores");

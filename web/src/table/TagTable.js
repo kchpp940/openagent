@@ -68,11 +68,10 @@ class TagTable extends React.Component {
     const video = this.props.video.name;
     MessageBackend.getAnswer(provider, question, framework, video)
       .then((res) => {
-        if (res.status === "ok") {
-          this.updateField(this.props.table, rowIndex, `tag${columnIndex + 1}`, this.trimAnswer(res.data));
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.updateField(this.props.table, rowIndex, `tag${columnIndex + 1}`, this.trimAnswer(res.data));
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 

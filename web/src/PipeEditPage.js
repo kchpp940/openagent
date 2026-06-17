@@ -49,14 +49,10 @@ class PipeEditPage extends React.Component {
   getStoreNames() {
     StoreBackend.getStoreNames("admin")
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({storeNames: res.data || []});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({storeNames: res.data || []});
       })
       .catch((error) => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -70,18 +66,17 @@ class PipeEditPage extends React.Component {
   getPipe() {
     PipeBackend.getPipe("admin", this.state.pipeName)
       .then((res) => {
-        if (res.status === "ok") {
-          const pipe = res.data;
-          if (!pipe.store) {
-            pipe.store = "store-built-in";
-          }
-          this.setState({
-            pipe: pipe,
-            originalPipe: Setting.deepCopy(pipe),
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        const pipe = res.data;
+        if (!pipe.store) {
+          pipe.store = "store-built-in";
         }
+        this.setState({
+          pipe: pipe,
+          originalPipe: Setting.deepCopy(pipe),
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -97,15 +92,11 @@ class PipeEditPage extends React.Component {
     PipeBackend.setPipeWebhook(id)
       .then((res) => {
         this.setState({isSendingWebhook: false});
-        if (res.status === "ok") {
-          Setting.showMessage("success", `${i18next.t("provider:Webhook set successfully")}: ${res.data}`);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
-        }
+        Setting.ResponseAdapter.showSuccessMessage(`${i18next.t("provider:Webhook set successfully")}: ${res.data}`);
       })
       .catch((error) => {
         this.setState({isSendingWebhook: false});
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
@@ -122,59 +113,45 @@ class PipeEditPage extends React.Component {
     this.setState({isTesting: true, testResult: ""});
     const id = `${pipe.owner}/${pipe.name}`;
     PipeBackend.chatTest(id, pipe.chatId, pipe.chatTestMessage)
-      .then((res) => {
-        this.setState({isTesting: false});
-        if (res.status === "ok") {
-          this.setState({testResult: i18next.t("general:Success")});
-          Setting.showMessage("success", i18next.t("general:Success"));
-        } else {
-          this.setState({testResult: res.msg});
-          Setting.showMessage("error", res.msg);
-        }
+      .then(() => {
+        this.setState({isTesting: false, testResult: i18next.t("general:Success")});
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Success"));
       })
       .catch((error) => {
-        this.setState({isTesting: false, testResult: String(error)});
-        Setting.showMessage("error", String(error));
+        this.setState({isTesting: false, testResult: Setting.ResponseAdapter.getErrorMessage(error)});
+        Setting.ResponseAdapter.showErrorMessage(error);
       });
   }
 
   submitPipeEdit(exitAfterSave) {
     const pipe = Setting.deepCopy(this.state.pipe);
     PipeBackend.updatePipe(this.state.pipe.owner, this.state.pipeName, pipe)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            pipeName: this.state.pipe.name,
-            isNewPipe: false,
-          });
-          if (exitAfterSave) {
-            this.props.history.push("/pipes");
-          } else {
-            this.props.history.push(`/pipes/${this.state.pipe.name}`);
-          }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          pipeName: this.state.pipe.name,
+          isNewPipe: false,
+        });
+        if (exitAfterSave) {
+          this.props.history.push("/pipes");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/pipes/${this.state.pipe.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
   cancelPipeEdit() {
     if (this.state.isNewPipe) {
       PipeBackend.deletePipe(this.state.pipe)
-        .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/pipes");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+        .then(() => {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/pipes");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/pipes");

@@ -245,21 +245,21 @@ class ServerListPage extends BaseListPage {
     this.setState({loading: true});
     ServerBackend.getServers("admin", pagination.current, pagination.pageSize, this.state.searchField, this.state.searchValue, params.sortField, params.sortOrder)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            loading: false,
-            data: res.data,
-            pagination: {
-              ...pagination,
-              total: res.data2,
-            },
-          });
+        this.setState({
+          loading: false,
+          data: res.data,
+          pagination: {
+            ...pagination,
+            total: res.data2,
+          },
+        });
+      })
+      .catch(error => {
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
+          this.setState({isAuthorized: false, loading: false});
         } else {
-          if (res.status === "error" && res.msg === "Unauthorized") {
-            this.setState({isAuthorized: false, loading: false});
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-          }
+          this.setState({loading: false});
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         }
       });
   };

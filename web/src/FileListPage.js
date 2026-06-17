@@ -40,16 +40,22 @@ class FileListPage extends BaseListPage {
     Promise.all([
       StorageProviderBackend.getStorageProviders(this.props.account?.name),
       ProviderBackend.getProviders(this.props.account?.name),
-    ]).then(([res1, res2]) => {
-      const providers = {};
-      if (res1.status === "ok") {
-        res1.data.forEach(p => {providers[p.name] = p;});
-      }
-      if (res2.status === "ok") {
-        res2.data.forEach(p => {providers[p.name] = p;});
-      }
-      this.setState({providers});
-    });
+    ])
+      .then(([res1, res2]) => {
+        const providers = {};
+        if (res1.data) {
+          res1.data.forEach(p => {providers[p.name] = p;});
+        }
+        if (res2.data) {
+          res2.data.forEach(p => {providers[p.name] = p;});
+        }
+        this.setState({providers});
+      })
+      .catch(error => {
+        if (!(error instanceof Setting.ApiError && error.isPermissionDenied())) {
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
+        }
+      });
   }
 
   uploadFile = (file, info) => {
@@ -67,21 +73,12 @@ class FileListPage extends BaseListPage {
     }
 
     Promise.all(promises)
-      .then((values) => {
-        let hasError = false;
-        values.forEach((res) => {
-          if (res.status !== "ok") {
-            hasError = true;
-            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-          }
-        });
-        if (!hasError) {
-          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
         this.fetch({pagination: this.state.pagination});
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to upload"));
       });
   };
 
@@ -91,22 +88,18 @@ class FileListPage extends BaseListPage {
 
   deleteFile(record) {
     FileBackend.deleteFile(record)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: this.state.data.filter((item) => item.name !== record.name),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: this.state.data.filter((item) => item.name !== record.name),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -118,13 +111,9 @@ class FileListPage extends BaseListPage {
       },
     }));
     FileBackend.refreshFileVectors(this.state.data[index])
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Vectors generated successfully"));
-          this.fetch({pagination: this.state.pagination});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Vectors generated successfully"));
+        this.fetch({pagination: this.state.pagination});
         this.setState(prevState => ({
           refreshing: {
             ...prevState.refreshing,
@@ -133,7 +122,7 @@ class FileListPage extends BaseListPage {
         }));
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Vectors failed to generate")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Vectors failed to generate"));
         this.setState(prevState => ({
           refreshing: {
             ...prevState.refreshing,
@@ -391,25 +380,21 @@ class FileListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2 !== undefined ? res.data2 : (res.data?.length || 0),
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
         });
-        if (res.status === "ok") {
-          this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2 !== undefined ? res.data2 : (res.data?.length || 0),
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
-          });
+      })
+      .catch(error => {
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
+          this.setState({isAuthorized: false, loading: false});
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({
-              isAuthorized: false,
-            });
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          this.setState({loading: false});
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         }
       });
   };

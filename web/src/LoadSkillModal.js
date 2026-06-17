@@ -16,6 +16,7 @@ import React, {useState} from "react";
 import {Button, Descriptions, Input, Modal, Spin, Tag, Typography} from "antd";
 import * as SkillBackend from "./backend/SkillBackend";
 import * as Setting from "./Setting";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import i18next from "i18next";
 import moment from "moment";
 
@@ -53,15 +54,11 @@ function LoadSkillModal({open, onClose, onImported}) {
     SkillBackend.loadSkill(trimmed)
       .then((res) => {
         setLoading(false);
-        if (res.status === "ok") {
-          setPreview(res.data);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to load")}: ${res.msg}`);
-        }
+        setPreview(res.data);
       })
       .catch((err) => {
         setLoading(false);
-        Setting.showMessage("error", `${i18next.t("general:Failed to load")}: ${err}`);
+        ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to load"));
       });
   }
 
@@ -75,17 +72,13 @@ function LoadSkillModal({open, onClose, onImported}) {
       createdTime: moment().format(),
     };
     SkillBackend.addSkill(toSave)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          handleClose();
-          onImported(toSave.name);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+      .then(() => {
+        ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        handleClose();
+        onImported(toSave.name);
       })
       .catch((err) => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${err}`);
+        ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to add"));
       });
   }
 

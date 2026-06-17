@@ -48,12 +48,11 @@ class ChatEditPage extends React.Component {
   getProviders() {
     ProviderBackend.getProviders("admin")
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            providers: res.data.filter(p => p.category === "Model"),
-          });
-        }
-      });
+        this.setState({
+          providers: res.data.filter(p => p.category === "Model"),
+        });
+      })
+      .catch(error => {});
   }
 
   getProvider(providerName) {
@@ -62,25 +61,23 @@ class ChatEditPage extends React.Component {
     }
     ProviderBackend.getProvider("admin", providerName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            provider: res.data,
-          });
-        }
-      });
+        this.setState({
+          provider: res.data,
+        });
+      })
+      .catch(error => {});
   }
 
   getChat() {
     ChatBackend.getChat("admin", this.state.chatName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            chat: res.data,
-          });
-          this.getProvider(res.data.modelProvider);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          chat: res.data,
+        });
+        this.getProvider(res.data.modelProvider);
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -93,6 +90,9 @@ class ChatEditPage extends React.Component {
         this.setState({
           messages: res.data,
         });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -256,24 +256,20 @@ class ChatEditPage extends React.Component {
     const chat = Setting.deepCopy(this.state.chat);
     ChatBackend.updateChat(this.state.chat.owner, this.state.chatName, chat)
       .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            chatName: this.state.chat.name,
-            isNewChat: false,
-          });
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          chatName: this.state.chat.name,
+          isNewChat: false,
+        });
 
-          if (exitAfterSave) {
-            this.props.history.push("/chats");
-          } else {
-            this.props.history.push(`/chats/${this.state.chat.name}`);
-          }
+        if (exitAfterSave) {
+          this.props.history.push("/chats");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/chats/${this.state.chat.name}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
@@ -281,15 +277,11 @@ class ChatEditPage extends React.Component {
     if (this.state.isNewChat) {
       ChatBackend.deleteChat(this.state.chat)
         .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/chats");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/chats");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/chats");

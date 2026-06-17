@@ -107,11 +107,10 @@ class TestToolWidget extends React.Component {
     this.setState({modelProvidersLoading: true});
     ProviderBackend.getProviders("admin")
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({modelProviders: res.data.filter(p => p.category === "Model"), modelProvidersLoading: false});
-        } else {
-          this.setState({modelProvidersLoading: false});
-        }
+        this.setState({modelProviders: res.data.filter(p => p.category === "Model"), modelProvidersLoading: false});
+      })
+      .catch(() => {
+        this.setState({modelProvidersLoading: false});
       });
   }
 
@@ -145,19 +144,18 @@ class TestToolWidget extends React.Component {
     try {
       parsed = JSON.parse(tool.testContent);
     } catch (e) {
-      Setting.showMessage("error", `${i18next.t("provider:Invalid tool test JSON")}: ${e.message}`);
+      Setting.ResponseAdapter.showErrorMessage(new Error(`${i18next.t("provider:Invalid tool test JSON")}: ${e.message}`), "");
       return;
     }
     if (!parsed || typeof parsed.tool !== "string" || parsed.tool.trim() === "") {
-      Setting.showMessage("error", i18next.t("provider:Tool test JSON must include tool"));
+      Setting.ResponseAdapter.showErrorMessage(new Error(i18next.t("provider:Tool test JSON must include tool")), "");
       return;
     }
 
     this.setState({testButtonLoading: true, testResult: ""});
 
-    try {
-      const res = await ToolBackend.testTool(tool);
-      if (res.status === "ok") {
+    ToolBackend.testTool(tool)
+      .then((res) => {
         let out;
         if (typeof res.data === "string") {
           try {
@@ -169,19 +167,18 @@ class TestToolWidget extends React.Component {
           out = JSON.stringify(res.data, null, 2);
         }
         this.setState({testResult: out});
-        Setting.showMessage("success", i18next.t("general:Success"));
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Success"));
         if (this.props.onUpdateTool) {
           this.props.onUpdateTool("resultSummary", out);
         }
-        await ToolBackend.updateTool(tool.owner, tool.name, {...tool, resultSummary: out});
-      } else {
-        Setting.showMessage("error", res.msg || i18next.t("general:Failed to save"));
-      }
-    } catch (error) {
-      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error.message}`);
-    } finally {
-      this.setState({testButtonLoading: false});
-    }
+        return ToolBackend.updateTool(tool.owner, tool.name, {...tool, resultSummary: out});
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to connect to server"));
+      })
+      .finally(() => {
+        this.setState({testButtonLoading: false});
+      });
   }
 
   render() {

@@ -60,16 +60,17 @@ class MessageListPage extends BaseListPage {
   getProviders() {
     ProviderBackend.getProviders("admin")
       .then((res) => {
-        if (res.status === "ok") {
-          const providerMap = {};
-          res.data.forEach(provider => {
-            providerMap[provider.name] = provider;
-          });
-          this.setState({
-            providers: res.data,
-            providerMap: providerMap,
-          });
-        }
+        const providerMap = {};
+        res.data.forEach(provider => {
+          providerMap[provider.name] = provider;
+        });
+        this.setState({
+          providers: res.data,
+          providerMap: providerMap,
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -96,18 +97,14 @@ class MessageListPage extends BaseListPage {
     const newMessage = this.newMessage();
     MessageBackend.addMessage(newMessage)
       .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.history.push({
-            pathname: `/messages/${newMessage.name}`,
-            state: {isNewMessage: true},
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.history.push({
+          pathname: `/messages/${newMessage.name}`,
+          state: {isNewMessage: true},
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   }
 
@@ -117,22 +114,18 @@ class MessageListPage extends BaseListPage {
 
   deleteMessage(record) {
     MessageBackend.deleteMessage(record)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: this.state.data.filter((item) => item.name !== record.name),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: this.state.data.filter((item) => item.name !== record.name),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -151,10 +144,6 @@ class MessageListPage extends BaseListPage {
     let page = 1;
     while (all.length < total) {
       const res = await MessageBackend.getGlobalMessages(page, pageSize, field, value, sortField, sortOrder, store);
-      if (res.status !== "ok") {
-        Setting.showMessage("error", res.msg);
-        return null;
-      }
       const batch = res.data || [];
       all.push(...batch);
       if (batch.length === 0 || batch.length < pageSize) {
@@ -190,9 +179,6 @@ class MessageListPage extends BaseListPage {
     this.setState({downloadLoading: true});
     try {
       const messages = await this.fetchAllMessagesForExport();
-      if (messages === null) {
-        return;
-      }
       const sorted = [...messages].sort((a, b) => {
         const byTime = (a.createdTime || "").localeCompare(b.createdTime || "");
         if (byTime !== 0) {
@@ -212,6 +198,8 @@ class MessageListPage extends BaseListPage {
         {wch: 50},
       ];
       Setting.saveSheetToFile(sheet, i18next.t("general:Messages"), `${i18next.t("general:Messages")}-${Setting.getFormattedDate(moment().format())}.xlsx`);
+    } catch (error) {
+      Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
     } finally {
       this.setState({downloadLoading: false});
     }
@@ -666,27 +654,27 @@ class MessageListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2,
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
+          sortField,
+          sortOrder,
         });
-        if (res.status === "ok") {
+      })
+      .catch(error => {
+        this.setState({
+          loading: false,
+        });
+        if (Setting.isResponseDenied(error?.raw)) {
           this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2,
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
-            sortField,
-            sortOrder,
+            isAuthorized: false,
           });
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({
-              isAuthorized: false,
-            });
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          Setting.ResponseAdapter.showErrorMessage(error);
         }
       });
   };

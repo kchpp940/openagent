@@ -55,32 +55,31 @@ function StoreSelect(props) {
 
     StoreBackend.getStoreNames("admin")
       .then((res) => {
-        if (res.status === "ok") {
-          setStores(res.data);
+        setStores(res.data);
 
-          // Iron rule: if the user has previously saved a value in localStorage (even "All"),
-          // NEVER override it during initialization. Only a user action changes it.
-          // Distinguish "explicitly set to All" from "never set" by checking localStorage directly.
-          const rawStoredStore = localStorage.getItem("store");
-          if (rawStoredStore !== null) {
-            // User has an explicit choice saved — just sync the display widget.
-            setValue(rawStoredStore);
+        // Iron rule: if the user has previously saved a value in localStorage (even "All"),
+        // NEVER override it during initialization. Only a user action changes it.
+        // Distinguish "explicitly set to All" from "never set" by checking localStorage directly.
+        const rawStoredStore = localStorage.getItem("store");
+        if (rawStoredStore !== null) {
+          // User has an explicit choice saved — just sync the display widget.
+          setValue(rawStoredStore);
+        } else {
+          // First visit / localStorage cleared. Apply defaults:
+          // 1. Homepage-bound store takes priority.
+          // 2. Fall back to first store in the list.
+          const userBoundStore = getUserBoundStore(res.data);
+          if (userBoundStore) {
+            handleOnChange(userBoundStore);
           } else {
-            // First visit / localStorage cleared. Apply defaults:
-            // 1. Homepage-bound store takes priority.
-            // 2. Fall back to first store in the list.
-            const userBoundStore = getUserBoundStore(res.data);
-            if (userBoundStore) {
-              handleOnChange(userBoundStore);
-            } else {
-              // Use res.data directly because the stores state update hasn't re-rendered yet
-              const firstStore = res.data.length > 0 ? res.data[0].name : "";
-              handleOnChange(firstStore);
-            }
+            // Use res.data directly because the stores state update hasn't re-rendered yet
+            const firstStore = res.data.length > 0 ? res.data[0].name : "";
+            handleOnChange(firstStore);
           }
-          setInitialized(true);
         }
-      });
+        setInitialized(true);
+      })
+      .catch(() => {});
   };
 
   const handleOnChange = (value) => {

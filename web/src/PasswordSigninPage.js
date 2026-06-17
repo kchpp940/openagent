@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import React from "react";
-import {Button, Form, Input, Result, Spin, message} from "antd";
+import {Button, Form, Input, Result, Spin} from "antd";
 import {LockOutlined, UserOutlined} from "@ant-design/icons";
 import i18next from "i18next";
 import * as AccountBackend from "./backend/AccountBackend";
+import ResponseAdapter from "./backend/ResponseAdapter";
 import * as Setting from "./Setting";
 
 class PasswordSigninPage extends React.Component {
@@ -33,16 +34,16 @@ class PasswordSigninPage extends React.Component {
   componentDidMount() {
     AccountBackend.getSigninOptions()
       .then((res) => {
-        if (res.status === "ok" && res.data?.casdoorAvailable) {
+        if (res.data?.casdoorAvailable) {
           window.location.replace(Setting.getSigninUrl());
           return;
         }
 
         this.setState({
           loading: false,
-          showSignin: res.status === "ok" && !res.data?.casdoorAvailable && res.data?.signinAvailable,
-          errorMessage: res.status === "ok" ? "" : res.msg,
-          autoSignin: res.status === "ok" && res.data?.autoSignin === true,
+          showSignin: !res.data?.casdoorAvailable && res.data?.signinAvailable,
+          errorMessage: "",
+          autoSignin: res.data?.autoSignin === true,
         });
       })
       .catch((error) => {
@@ -56,16 +57,12 @@ class PasswordSigninPage extends React.Component {
 
   onFinish(values) {
     AccountBackend.signinWithPassword(values.username, values.password)
-      .then((res) => {
-        if (res.status === "ok") {
-          const from = sessionStorage.getItem("from") || "/";
-          sessionStorage.removeItem("from");
-          window.location.href = from;
-        } else {
-          message.error(res.msg);
-        }
+      .then(() => {
+        const from = sessionStorage.getItem("from") || "/";
+        sessionStorage.removeItem("from");
+        window.location.href = from;
       })
-      .catch((error) => message.error(error.message));
+      .catch((error) => ResponseAdapter.showErrorMessage(error));
   }
 
   render() {

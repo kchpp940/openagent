@@ -40,14 +40,13 @@ class ResourceListPage extends BaseListPage {
     const file = info.file;
     const account = this.props.account;
     ResourceBackend.uploadResource(account.name, "avatar", "", "", file)
-      .then(res => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
-          const {pagination} = this.state;
-          this.fetch({pagination});
-        } else {
-          Setting.showMessage("error", res.msg);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully uploaded"));
+        const {pagination} = this.state;
+        this.fetch({pagination});
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to upload"));
       })
       .finally(() => {
         this.setState({uploading: false});
@@ -56,23 +55,19 @@ class ResourceListPage extends BaseListPage {
 
   deleteResource(i) {
     ResourceBackend.deleteResource(this.state.data[i])
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.fetch({
-            pagination: {
-              ...this.state.pagination,
-              current: this.state.pagination.current > 1 && this.state.data.length === 1
-                ? this.state.pagination.current - 1
-                : this.state.pagination.current,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.fetch({
+          pagination: {
+            ...this.state.pagination,
+            current: this.state.pagination.current > 1 && this.state.data.length === 1
+              ? this.state.pagination.current - 1
+              : this.state.pagination.current,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -255,23 +250,23 @@ class ResourceListPage extends BaseListPage {
     this.setState({loading: true});
     ResourceBackend.getGlobalResources("", params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder)
       .then((res) => {
-        this.setState({loading: false});
-        if (res.status === "ok") {
-          this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2,
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
-          });
+        this.setState({
+          loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2,
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
+        });
+      })
+      .catch(error => {
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
+          this.setState({isAuthorized: false, loading: false});
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({isAuthorized: false});
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          this.setState({loading: false});
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         }
       });
   };

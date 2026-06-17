@@ -35,7 +35,7 @@ class TestMcpWidget extends React.Component {
     const {testToolName, testArgValues} = this.state;
 
     if (!testToolName) {
-      Setting.showMessage("error", i18next.t("server:Please select a tool first"));
+      Setting.ResponseAdapter.showErrorMessage(new Error(i18next.t("server:Please select a tool first")), "");
       return;
     }
 
@@ -77,20 +77,18 @@ class TestMcpWidget extends React.Component {
     serverCopy.testContent = JSON.stringify({tool: testToolName, arguments: args});
 
     this.setState({testButtonLoading: true, testResult: ""});
-    try {
-      const res = await ServerBackend.testMcpServer(serverCopy);
-      if (res.status === "ok") {
+    ServerBackend.testMcpServer(serverCopy)
+      .then((res) => {
         const out = typeof res.data === "string" ? res.data : JSON.stringify(res.data, null, 2);
         this.setState({testResult: out});
-        Setting.showMessage("success", i18next.t("general:Success"));
-      } else {
-        Setting.showMessage("error", res.msg || i18next.t("general:Failed to save"));
-      }
-    } catch (error) {
-      Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error.message}`);
-    } finally {
-      this.setState({testButtonLoading: false});
-    }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Success"));
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to connect to server"));
+      })
+      .finally(() => {
+        this.setState({testButtonLoading: false});
+      });
   }
 
   renderArgFields(schema) {

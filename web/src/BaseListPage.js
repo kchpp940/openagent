@@ -109,7 +109,7 @@ class BaseListPage extends React.Component {
       formName = formType + "-tag-" + tag;
       FormBackend.getForm(this.props.account.owner, formName)
         .then(res => {
-          if (res.status === "ok" && res.data) {
+          if (res.data) {
             this.setState({formItems: res.data.formItems});
           } else {
             this.fetchFormWithoutTag(formType);
@@ -126,7 +126,7 @@ class BaseListPage extends React.Component {
   fetchFormWithoutTag(formName) {
     FormBackend.getForm(this.props.account.owner, formName)
       .then(res => {
-        if (res.status === "ok" && res.data) {
+        if (res.data) {
           this.setState({formItems: res.data.formItems});
         } else {
           this.setState({formItems: []});

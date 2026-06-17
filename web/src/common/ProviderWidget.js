@@ -16,12 +16,12 @@ import * as Setting from "../Setting";
 import * as ProviderBackend from "../backend/ProviderBackend";
 import i18next from "i18next";
 
-export async function checkProvider(provider, originalProvider) {
+export function checkProvider(provider, originalProvider) {
   const hasChanges = JSON.stringify(originalProvider) !== JSON.stringify(provider);
   if (hasChanges) {
-    const saveRes = await ProviderBackend.updateProvider(provider.owner, provider.name, provider);
-    if (saveRes.status !== "ok") {
-      Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${saveRes.msg}`);
-    }
+    ProviderBackend.updateProvider(provider.owner, provider.name, provider)
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
+      });
   }
 }

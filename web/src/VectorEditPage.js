@@ -46,13 +46,12 @@ class VectorEditPage extends React.Component {
           return;
         }
 
-        if (res.status === "ok") {
-          this.setState({
-            vector: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          vector: res.data,
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -202,42 +201,34 @@ class VectorEditPage extends React.Component {
   submitVectorEdit(exitAfterSave) {
     const vector = Setting.deepCopy(this.state.vector);
     VectorBackend.updateVector(this.state.vector.owner, this.state.vectorName, vector)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            vectorName: this.state.vector.name,
-            isNewVector: false,
-          });
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          vectorName: this.state.vector.name,
+          isNewVector: false,
+        });
 
-          if (exitAfterSave) {
-            this.props.history.push("/vectors");
-          } else {
-            this.props.history.push(`/vectors/${this.state.vector.name}`);
-            this.getVector();
-          }
+        if (exitAfterSave) {
+          this.props.history.push("/vectors");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/vectors/${this.state.vector.name}`);
+          this.getVector();
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
   cancelVectorEdit() {
     if (this.state.isNewVector) {
       VectorBackend.deleteVector(this.state.vector)
-        .then((res) => {
-          if (res.status === "ok") {
-            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
-            this.props.history.push("/vectors");
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
-          }
+        .then(() => {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Cancelled successfully"));
+          this.props.history.push("/vectors");
         })
         .catch(error => {
-          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to cancel"));
         });
     } else {
       this.props.history.push("/vectors");

@@ -27,22 +27,18 @@ class SessionListPage extends BaseListPage {
 
   deleteSession(i) {
     SessionBackend.deleteSession(this.state.data[i])
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: Setting.deleteRow(this.state.data, i),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: Setting.deleteRow(this.state.data, i),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -187,13 +183,10 @@ class SessionListPage extends BaseListPage {
       loading: true,
     });
 
-    SessionBackend.getSessions(Setting.getRequestOrganization(this.props.account), params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder).then((res) => {
-      this.setState({
-        loading: false,
-      });
-
-      if (res.status === "ok") {
+    SessionBackend.getSessions(Setting.getRequestOrganization(this.props.account), params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder)
+      .then((res) => {
         this.setState({
+          loading: false,
           data: res.data,
           pagination: {
             ...params.pagination,
@@ -202,16 +195,15 @@ class SessionListPage extends BaseListPage {
           searchText: params.searchText,
           searchedColumn: params.searchedColumn,
         });
-      } else {
-        if (Setting.isResponseDenied(res)) {
-          this.setState({
-            isAuthorized: false,
-          });
+      })
+      .catch(error => {
+        this.setState({loading: false});
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
+          this.setState({isAuthorized: false});
         } else {
-          Setting.showMessage("error", res.msg);
+          Setting.ResponseAdapter.showErrorMessage(error);
         }
-      }
-    });
+      });
   };
 }
 

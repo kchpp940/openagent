@@ -22,18 +22,13 @@ const VectorTooltip = ({vectorScore, children}) => {
   const [vectorData, setVectorData] = useState(null);
 
   useEffect(() => {
-    const fetchVectorInfo = async() => {
-      try {
-        const res = await VectorBackend.getVector("admin", vectorScore.vector);
-        if (res.status === "ok") {
-          setVectorData(res.data);
-        }
-      } catch (error) {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
-      }
-    };
-
-    fetchVectorInfo();
+    VectorBackend.getVector("admin", vectorScore.vector)
+      .then((res) => {
+        setVectorData(res.data);
+      })
+      .catch((error) => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to connect to server"));
+      });
   }, [vectorScore.vector]);
 
   const tooltipContent = () => {

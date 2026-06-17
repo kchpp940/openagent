@@ -68,19 +68,15 @@ class VectorListPage extends BaseListPage {
   addVector() {
     const newVector = this.newVector();
     VectorBackend.addVector(newVector)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.history.push({
-            pathname: `/vectors/${newVector.name}`,
-            state: {isNewVector: true},
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.history.push({
+          pathname: `/vectors/${newVector.name}`,
+          state: {isNewVector: true},
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   }
 
@@ -90,44 +86,36 @@ class VectorListPage extends BaseListPage {
 
   deleteVector(record) {
     VectorBackend.deleteVector(record)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: this.state.data.filter((item) => item.name !== record.name),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total - 1,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: this.state.data.filter((item) => item.name !== record.name),
+          pagination: {
+            ...this.state.pagination,
+            total: this.state.pagination.total - 1,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
   deleteAllVectors() {
     VectorBackend.deleteAllVectors()
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-          this.setState({
-            data: [],
-            pagination: {
-              ...this.state.pagination,
-              current: 1,
-              total: 0,
-            },
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+        this.setState({
+          data: [],
+          pagination: {
+            ...this.state.pagination,
+            current: 1,
+            total: 0,
+          },
+        });
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
@@ -327,25 +315,21 @@ class VectorListPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2,
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
         });
-        if (res.status === "ok") {
-          this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2,
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
-          });
+      })
+      .catch(error => {
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
+          this.setState({isAuthorized: false, loading: false});
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({
-              isAuthorized: false,
-            });
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          this.setState({loading: false});
+          Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
         }
       });
   };

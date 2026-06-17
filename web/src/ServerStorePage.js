@@ -42,17 +42,12 @@ class ServerStorePage extends React.Component {
     this.setState({onlineListLoading: true, onlineNameFilter: "", onlineCategoryFilter: []});
     ServerBackend.getOnlineServers()
       .then((res) => {
-        if (res.status === "ok") {
-          const onlineServerList = this.normalizeOnlineServers(this.getOnlineServersFromResponse(res.data));
-          this.setState({onlineServerList, onlineListLoading: false});
-        } else {
-          this.setState({onlineListLoading: false});
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        const onlineServerList = this.normalizeOnlineServers(this.getOnlineServersFromResponse(res.data));
+        this.setState({onlineServerList, onlineListLoading: false});
       })
       .catch(error => {
         this.setState({onlineListLoading: false});
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   };
 
@@ -83,18 +78,14 @@ class ServerStorePage extends React.Component {
 
     this.setState({creatingOnlineServerId: onlineServer.id});
     ServerBackend.addServer(newServer)
-      .then((res) => {
+      .then(() => {
         this.setState({creatingOnlineServerId: ""});
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.props.history.push({pathname: `/servers/${newServer.name}`, state: {isNewServer: true}});
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
-        }
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully added"));
+        this.props.history.push({pathname: `/servers/${newServer.name}`, state: {isNewServer: true}});
       })
       .catch(error => {
         this.setState({creatingOnlineServerId: ""});
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   };
 

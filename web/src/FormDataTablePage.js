@@ -45,16 +45,15 @@ class FormDataPage extends BaseListPage {
   getForm() {
     FormBackend.getForm(this.props.account.owner, this.state.formName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            form: res.data,
-          });
+        this.setState({
+          form: res.data,
+        });
 
-          const {pagination} = this.state;
-          this.fetch({pagination}, res.data);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        const {pagination} = this.state;
+        this.fetch({pagination}, res.data);
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -151,25 +150,25 @@ class FormDataPage extends BaseListPage {
       .then((res) => {
         this.setState({
           loading: false,
+          data: res.data,
+          pagination: {
+            ...params.pagination,
+            total: res.data2,
+          },
+          searchText: params.searchText,
+          searchedColumn: params.searchedColumn,
         });
-        if (res.status === "ok") {
+      })
+      .catch(error => {
+        this.setState({
+          loading: false,
+        });
+        if (error instanceof Setting.ApiError && error.isPermissionDenied()) {
           this.setState({
-            data: res.data,
-            pagination: {
-              ...params.pagination,
-              total: res.data2,
-            },
-            searchText: params.searchText,
-            searchedColumn: params.searchedColumn,
+            isAuthorized: false,
           });
         } else {
-          if (Setting.isResponseDenied(res)) {
-            this.setState({
-              isAuthorized: false,
-            });
-          } else {
-            Setting.showMessage("error", res.msg);
-          }
+          Setting.ResponseAdapter.showErrorMessage(error);
         }
       });
   };

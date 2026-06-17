@@ -228,25 +228,25 @@ class ChatBox extends React.Component {
     message[`${oppositeReaction}Users`] = Setting.deleteElementFromSet(message[`${oppositeReaction}Users`], this.props.account.name);
 
     this.setState({messages: this.state.messages.map(m => m.name === message.name ? message : m)});
-    MessageBackend.updateMessage(message.owner, message.name, message).then((result) => {
-      if (result.status === "ok") {
+    MessageBackend.updateMessage(message.owner, message.name, message)
+      .then((result) => {
         if (reactionType === "like") {
           if (isCancel) {
-            Setting.showMessage("success", i18next.t("general:Successfully unliked"));
+            Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully unliked"));
           } else {
-            Setting.showMessage("success", i18next.t("general:Successfully liked"));
+            Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully liked"));
           }
         } else {
           if (isCancel) {
-            Setting.showMessage("success", i18next.t("general:Successfully undisliked"));
+            Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully undisliked"));
           } else {
-            Setting.showMessage("success", i18next.t("general:Successfully disliked"));
+            Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully disliked"));
           }
         }
-      } else {
-        Setting.showMessage("error", result.msg);
-      }
-    });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error);
+      });
   };
 
   toggleMessageReadState = (message) => {
@@ -358,22 +358,18 @@ class ChatBox extends React.Component {
     };
     MessageBackend.addMessage(editedMessage)
       .then((res) => {
-        if (res.status === "ok") {
-          const chat = res.data;
+        const chat = res.data;
 
-          if (this.props.onMessageEdit) {
-            this.props.onMessageEdit(chat);
-          }
+        if (this.props.onMessageEdit) {
+          this.props.onMessageEdit(chat);
+        }
 
-          if (!silent) {
-            Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          }
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        if (!silent) {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to add"));
       });
   };
 

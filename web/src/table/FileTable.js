@@ -79,19 +79,15 @@ class FileTable extends React.Component {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.deleteFile(storeId, file.key, isLeaf)
       .then((res) => {
-        if (res.status === "ok") {
-          if (res.data === true) {
-            Setting.showMessage("success", i18next.t("general:Successfully deleted"));
-            this.props.onRefresh();
-          } else {
-            Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-          }
+        if (res.data === true) {
+          Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully deleted"));
+          this.props.onRefresh();
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+          Setting.showMessage("error", i18next.t("general:Failed to connect to server"));
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 

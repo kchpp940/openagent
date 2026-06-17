@@ -30,24 +30,20 @@ const StoreAvatarUploader = (props) => {
     setLoading(true);
     ResourceBackend.uploadResource(store.owner, "avatar", "store", store.name, file)
       .then((res) => {
-        if (res.status === "ok") {
-          const newAvatarUrl = res.data;
-          if (typeof newAvatarUrl !== "string" || newAvatarUrl === "") {
-            Setting.showMessage("error", i18next.t("general:Failed to get"));
-            return;
-          }
-          const finalUrl = `${newAvatarUrl}?t=${Date.now()}`;
-          onUpdate(finalUrl);
-          if (onUploadComplete) {
-            onUploadComplete(finalUrl);
-          }
-          Setting.showMessage("success", i18next.t("general:Successfully added"));
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+        const newAvatarUrl = res.data;
+        if (typeof newAvatarUrl !== "string" || newAvatarUrl === "") {
+          Setting.showMessage("error", i18next.t("general:Failed to get"));
+          return;
         }
+        const finalUrl = `${newAvatarUrl}?t=${Date.now()}`;
+        onUpdate(finalUrl);
+        if (onUploadComplete) {
+          onUploadComplete(finalUrl);
+        }
+        Setting.showMessage("success", i18next.t("general:Successfully added"));
       })
       .catch(err => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${err.message}`);
+        Setting.ResponseAdapter.showErrorMessage(err, i18next.t("general:Failed to add"));
       })
       .finally(() => {
         setLoading(false);

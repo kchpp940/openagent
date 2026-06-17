@@ -44,26 +44,24 @@ class RecordEditPage extends React.Component {
   getRecord() {
     RecordBackend.getRecord(this.props.account.owner, this.state.recordName)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            record: res.data,
-          });
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
+        this.setState({
+          record: res.data,
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
   getProviders() {
     ProviderBackend.getProviders(this.props.account.owner)
       .then((res) => {
-        if (res.status === "ok") {
-          this.setState({
-            blockchainProviders: res.data.filter(provider => provider.category === "Blockchain" && provider.state === "Active"),
-          });
-        } else {
-          Setting.showMessage("error", res.msg);
-        }
+        this.setState({
+          blockchainProviders: res.data.filter(provider => provider.category === "Blockchain" && provider.state === "Active"),
+        });
+      })
+      .catch(error => {
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to get"));
       });
   }
 
@@ -302,37 +300,29 @@ class RecordEditPage extends React.Component {
   submitRecordEdit(willExist) {
     const record = Setting.deepCopy(this.state.record);
     RecordBackend.updateRecord(this.state.record.owner, this.state.recordName, record)
-      .then((res) => {
-        if (res.status === "ok") {
-          Setting.showMessage("success", i18next.t("general:Successfully saved"));
-          this.setState({
-            recordName: this.state.record.name,
-          });
-          if (willExist) {
-            this.props.history.push("/records");
-          } else {
-            this.props.history.push(`/records/${this.state.record.owner}/${encodeURIComponent(this.state.record.id)}`);
-          }
+      .then(() => {
+        Setting.ResponseAdapter.showSuccessMessage(i18next.t("general:Successfully saved"));
+        this.setState({
+          recordName: this.state.record.name,
+        });
+        if (willExist) {
+          this.props.history.push("/records");
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+          this.props.history.push(`/records/${this.state.record.owner}/${encodeURIComponent(this.state.record.id)}`);
         }
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to save"));
       });
   }
 
   deleteRecord() {
     RecordBackend.deleteRecord(this.state.record)
-      .then((res) => {
-        if (res.status === "ok") {
-          this.props.history.push("/records");
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
-        }
+      .then(() => {
+        this.props.history.push("/records");
       })
       .catch(error => {
-        Setting.showMessage("error", `${i18next.t("general:Failed to connect to server")}: ${error}`);
+        Setting.ResponseAdapter.showErrorMessage(error, i18next.t("general:Failed to delete"));
       });
   }
 
