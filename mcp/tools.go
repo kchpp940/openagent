@@ -59,7 +59,9 @@ func ListToolsWithContext(tec *ToolExecutionContext, url, token string) *ListToo
 	ctx, cancel := tec.GetTimeoutContext()
 	defer cancel()
 
+	// ---- SDK 原始调用边界 ----
 	list, err := cli.ListTools(ctx)
+	// --------------------------
 	if err != nil {
 		result.Error = fmt.Errorf("mcp: list tools from %s: %w", url, err)
 		return result
@@ -68,6 +70,9 @@ func ListToolsWithContext(tec *ToolExecutionContext, url, token string) *ListToo
 	return result
 }
 
+// ---- 旧 API 兼容层 ----
+// 新代码请使用 ListToolsWithContext 返回 ListToolsResult。
+// 本函数仅保留向后兼容，内部直接委托给 ListToolsWithContext。
 func GetToolsFromURL(url, token string) ([]*protocol.Tool, error) {
 	tec := NewToolExecutionContext(context.Background()).WithTimeout(DefaultListToolsTimeout)
 	result := ListToolsWithContext(tec, url, token)

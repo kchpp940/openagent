@@ -204,7 +204,11 @@ func syncServerTools(server *Server) error {
 				break
 			}
 		}
+		// ---- 数据持久化边界：protocol.InputSchema -> JSON 字符串 ----
+		// 此处方向与 SchemaParseResult（JSON 字符串 -> 解析）相反，
+		// 是将内存中的 schema 对象序列化为字符串存入数据库。
 		schemaJSON, _ := json.Marshal(t.InputSchema)
+		// --------------------------------------------------------------
 		newTools = append(newTools, &McpTool{
 			Name:        t.Name,
 			Description: t.Description,
@@ -248,7 +252,11 @@ func (s *Server) BuildMcpToolSet() (*mcp.ToolSet, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// ---- SDK 原始调用边界 ----
+	// 此处保留直接调用是因为 BuildMcpToolSet 需要长期持有连接（不能关闭），
+	// 与 ListToolsWithContext 的短连接语义不同。
 	list, err := cli.ListTools(ctx)
+	// --------------------------
 	if err != nil {
 		cli.Close()
 		return nil, err

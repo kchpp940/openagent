@@ -60,10 +60,14 @@ func (r *ToolRegistry) GetToolsAsProtocolTools() []*protocol.Tool {
 			continue
 		}
 
+		// ---- 工具定义层边界：interface{} -> protocol.InputSchema ----
+		// 此处为工具定义层内部的内存对象转换，方向与业务层 SchemaParseResult
+		// （JSON 字符串解析）相反；且本包为工具定义底层，引入 mcp 包会产生反向依赖。
 		var inputSchema protocol.InputSchema
 		if err := json.Unmarshal(schemaBytes, &inputSchema); err != nil {
 			continue
 		}
+		// --------------------------------------------------------------
 
 		tools = append(tools, &protocol.Tool{
 			Name:        tool.GetName(),

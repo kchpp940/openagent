@@ -845,6 +845,9 @@ func openaiNumTokensFromMessages(messages responses.ResponseInputParam, model st
 func reverseMcpToolsToOpenAi(tools []*protocol.Tool) ([]responses.ToolUnionParam, error) {
 	var openaiTools []responses.ToolUnionParam
 	for _, tool := range tools {
+		// ---- 模型 API 适配边界：protocol.InputSchema -> OpenAI Responses API 工具参数格式 ----
+		// 此处为 MCP 协议格式到 OpenAI Responses API 格式的协议间转换，
+		// 方向与 SchemaParseResult（JSON 字符串 -> 解析）不同。
 		schemaBytes, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return nil, err
@@ -854,6 +857,7 @@ func reverseMcpToolsToOpenAi(tools []*protocol.Tool) ([]responses.ToolUnionParam
 		if err := json.Unmarshal(schemaBytes, &parameters); err != nil {
 			return nil, err
 		}
+		// -----------------------------------------------------------------------------------
 		normalizeToolParametersSchema(parameters)
 		openaiTools = append(openaiTools, responses.ToolUnionParam{
 			OfFunction: &responses.FunctionToolParam{

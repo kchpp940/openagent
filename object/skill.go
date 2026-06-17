@@ -241,6 +241,9 @@ func LoadSkillWithContext(tec *mcp.ToolExecutionContext, dir string) *SkillLoadR
 	return result
 }
 
+// ---- 旧 API 兼容层 ----
+// 新代码请使用 LoadSkillWithContext 返回 SkillLoadResult。
+// 本函数仅保留向后兼容，内部直接委托给 LoadSkillWithContext。
 func LoadSkill(dir string) (*Skill, error) {
 	tec := mcp.NewToolExecutionContext(nil)
 	result := LoadSkillWithContext(tec, dir)

@@ -43,12 +43,12 @@ func (e *ToolCallError) Unwrap() error {
 
 const (
 	ToolCallErrInvalidID       = "invalid_tool_id"
-	ToolCallErrParseArgs        = "parse_arguments"
-	ToolCallErrNoConnection  = "no_connection"
-	ToolCallErrNoBuiltinReg   = "no_builtin_registry"
+	ToolCallErrParseArgs       = "parse_arguments"
+	ToolCallErrNoConnection    = "no_connection"
+	ToolCallErrNoBuiltinReg    = "no_builtin_registry"
 	ToolCallErrBuiltinNotFound = "builtin_tool_not_found"
-	ToolCallErrRemoteCall  = "remote_call"
-	ToolCallErrEmptyToolName  = "empty_tool_name"
+	ToolCallErrRemoteCall      = "remote_call"
+	ToolCallErrEmptyToolName   = "empty_tool_name"
 )
 
 func NewToolCallError(kind, message string, err ...error) *ToolCallError {
@@ -63,8 +63,8 @@ func NewToolCallError(kind, message string, err ...error) *ToolCallError {
 }
 
 type ToolSet struct {
-	Connections map[string]*client.Client
-	Tools       []*protocol.Tool
+	Connections      map[string]*client.Client
+	Tools            []*protocol.Tool
 	BuiltinTools     *tool.ToolRegistry
 	WebSearchEnabled bool
 }
@@ -101,10 +101,15 @@ func (ts *ToolSet) ExecuteToolWithContext(tec *ToolExecutionContext, toolId stri
 		Name:      toolName,
 		Arguments: arguments,
 	}
+	// ---- SDK 原始调用边界 ----
 	result, execErr := conn.CallTool(ctx, req)
+	// --------------------------
 	return CallToolResultToExternalResult(result, execErr)
 }
 
+// ---- 旧 API 兼容层 ----
+// 新代码请使用 ExecuteToolWithContext 返回 ExternalCallResult。
+// 本函数仅保留向后兼容，内部直接委托给 ExecuteToolWithContext。
 func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	tec := NewToolExecutionContext(ctx)
 	result := ts.ExecuteToolWithContext(tec, toolId, arguments)

@@ -63,16 +63,21 @@ func CallToolWithContext(tec *ToolExecutionContext, url, token, toolName string,
 	ctx, cancel := tec.GetTimeoutContext()
 	defer cancel()
 
+	// ---- SDK 原始调用边界 ----
 	result, err := cli.CallTool(ctx, &protocol.CallToolRequest{
 		Name:      toolName,
 		Arguments: arguments,
 	})
+	// --------------------------
 
 	extResult := CallToolResultToExternalResult(result, err)
 	extResult.RawResult = result
 	return extResult
 }
 
+// ---- 旧 API 兼容层 ----
+// 新代码请使用 CallToolWithContext 返回 ExternalCallResult。
+// 本函数仅保留向后兼容，内部直接委托给 CallToolWithContext。
 func CallTool(url, token, toolName string, arguments map[string]interface{}) (string, error) {
 	tec := NewToolExecutionContext(context.Background()).WithTimeout(DefaultToolCallTimeout)
 	result := CallToolWithContext(tec, url, token, toolName, arguments)

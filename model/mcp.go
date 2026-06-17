@@ -85,6 +85,9 @@ func flushToolCallDelta(index int, id string, name string, argumentsDelta string
 func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
 	var openaiTools []openai.Tool
 	for _, tool := range tools {
+		// ---- 模型 API 适配边界：protocol.InputSchema -> OpenAI 工具参数格式 ----
+		// 此处为 MCP 协议格式到 OpenAI API 格式的协议间转换，
+		// 方向与 SchemaParseResult（JSON 字符串 -> 解析）不同。
 		schemaBytes, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return nil, err
@@ -94,6 +97,7 @@ func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
 		if err := json.Unmarshal(schemaBytes, &parameters); err != nil {
 			return nil, err
 		}
+		// --------------------------------------------------------------------
 		normalizeToolParametersSchema(parameters)
 		openaiTools = append(openaiTools, openai.Tool{
 			Type: "function",
@@ -339,7 +343,10 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 				Name:      toolName,
 				Arguments: arguments,
 			}
+			// ---- SDK 原始调用边界 ----
+			// 此处直接调用是因为连接由上层 ToolSet 管理，不在本函数生命周期内创建/关闭
 			result, execErr := conn.CallTool(ctx, req)
+			// --------------------------
 			extResult = mcp.CallToolResultToExternalResult(result, execErr)
 		}
 	}
