@@ -39,7 +39,7 @@ class ChatMenu extends React.Component {
 
   renderIndicator(chat) {
     const isDark = Setting.getIsDark();
-    const themeColor = ThemeDefault.colorPrimary || "#262626";
+    const themeColor = ThemeDefault.colorPrimary || "#262626"; // config-registry:allow — runtime CSS color, not a config default
     const readBorderColor = isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.15)";
 
     if (chat.isGenerating) {
@@ -63,7 +63,7 @@ class ChatMenu extends React.Component {
           height: "0.625em",
           borderRadius: "50%",
           display: "block",
-          backgroundColor: chat.isUnread ? themeColor : "transparent",
+          backgroundColor: chat.isUnread ? themeColor : "transparent", // config-registry:allow — runtime CSS, not a config default
           border: chat.isUnread ? `0.0625em solid ${themeColor}` : `0.0625em solid ${readBorderColor}`,
         }} />
       </span>

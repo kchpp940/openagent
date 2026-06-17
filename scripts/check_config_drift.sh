@@ -122,7 +122,8 @@ fi
 
 # ────────────────────────────────────────────────────
 # 6. JS: hardcoded config default values in frontend
-#    Warn only — these are runtime containers or template objects.
+#    Any non-whitelisted config key string with a value = possible drift.
+#    Strict: any match fails the build; add // config-registry:allow to exempt.
 # ────────────────────────────────────────────────────
 echo ""
 echo "=== JS: hardcoded config default values in frontend ==="
@@ -136,9 +137,10 @@ js_default_matches=$(grep -rn --include='*.js' --include='*.jsx' \
   | grep -v 'StoreListPage\.js' \
   | grep -v 'App\.js' || true)
 if [ -n "$js_default_matches" ]; then
-  echo -e "${YELLOW}WARN${NC} [js-config-defaults] (review manually)"
+  echo -e "${RED}FAIL${NC} [js-config-defaults]"
   echo "$js_default_matches"
   echo ""
+  VIOLATIONS=$((VIOLATIONS + $(echo "$js_default_matches" | wc -l | tr -d ' ')))
 else
   echo -e "${GREEN}PASS${NC} [js-config-defaults]"
 fi
