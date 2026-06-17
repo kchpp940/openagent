@@ -30,6 +30,7 @@ import * as MessageBackend from "./backend/MessageBackend";
 import Editor from "./common/Editor";
 import TaskAnalysisReport from "./TaskAnalysisReport";
 import * as Provider from "./Provider";
+import {parseUploadResult} from "./UploadUtil";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -234,8 +235,8 @@ class TaskEditPage extends React.Component {
 
     TaskBackend.uploadTaskDocument(taskId, base64Data, file.name, file.type)
       .then((res) => {
-        if (res.status === "ok") {
-          const result = res.data;
+        const result = parseUploadResult(res);
+        if (result.ok) {
           const task = this.state.task;
           task.documentUrl = result.url;
           task.documentText = result.text;
@@ -251,7 +252,7 @@ class TaskEditPage extends React.Component {
             Setting.showMessage("warning", i18next.t("general:Uploaded successfully, but no text was extracted"));
           }
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${result.msg}`);
         }
       })
       .catch(err => {

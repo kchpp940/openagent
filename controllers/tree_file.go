@@ -52,21 +52,34 @@ func (c *ApiController) AddTreeFile() {
 		defer file.Close()
 	}
 
-	res, _, err := object.AddTreeFile(storeId, userName, key, isLeaf, filename, file, c.GetAcceptLanguage())
+	uploadResult, err := object.AddTreeFile(storeId, userName, key, isLeaf, filename, file, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if uploadResult == nil {
+		c.ResponseError(c.T("general:The store does not exist"))
+		return
+	}
+
+	err = addRecordForFile(c, userName, "Add", storeId, key, filename, isLeaf, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	if res {
-		err = addRecordForFile(c, userName, "Add", storeId, key, filename, isLeaf, c.GetAcceptLanguage())
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
+	result := map[string]interface{}{
+		"fileName":   uploadResult.FileName,
+		"fileSize":   uploadResult.FileSize,
+		"fileType":   uploadResult.FileType,
+		"fileFormat": uploadResult.FileFormat,
+		"mimeType":   uploadResult.MimeType,
+		"storageKey": uploadResult.StorageKey,
+		"url":        uploadResult.Url,
+		"isLeaf":     isLeaf,
+		"success":    true,
 	}
-
-	c.ResponseOk(res)
+	c.ResponseOk(result)
 }
 
 // DeleteTreeFile

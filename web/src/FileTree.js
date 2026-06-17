@@ -30,6 +30,7 @@ import * as PermissionUtil from "./PermissionUtil";
 import * as Conf from "./Conf";
 import FileTable from "./table/FileTable";
 import Editor from "./common/Editor";
+import {parseUploadResult} from "./UploadUtil";
 
 const {Search} = Input;
 
@@ -217,9 +218,10 @@ class FileTree extends React.Component {
         }
         let hasError = false;
         values.forEach((res, _index) => {
-          if (res.status !== "ok") {
+          const uploadResult = parseUploadResult(res);
+          if (!uploadResult.ok) {
             hasError = true;
-            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${uploadResult.msg}`);
           }
         });
         if (!hasError) {
@@ -236,11 +238,12 @@ class FileTree extends React.Component {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
     TreeFileBackend.addFile(storeId, file.key, false, newFolder, null)
       .then((res) => {
-        if (res.status === "ok") {
+        const uploadResult = parseUploadResult(res);
+        if (uploadResult.ok) {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
           this.props.onRefresh();
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${uploadResult.msg}`);
         }
       })
       .catch(error => {

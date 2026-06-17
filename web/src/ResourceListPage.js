@@ -20,6 +20,7 @@ import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as ResourceBackend from "./backend/ResourceBackend";
 import i18next from "i18next";
+import {parseUploadResult} from "./UploadUtil";
 
 function getCategoryColor(category) {
   if (category === "avatar") {return "blue";}
@@ -41,12 +42,13 @@ class ResourceListPage extends BaseListPage {
     const account = this.props.account;
     ResourceBackend.uploadResource(account.name, "avatar", "", "", file)
       .then(res => {
-        if (res.status === "ok") {
+        const uploadResult = parseUploadResult(res);
+        if (uploadResult.ok) {
           Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
           const {pagination} = this.state;
           this.fetch({pagination});
         } else {
-          Setting.showMessage("error", res.msg);
+          Setting.showMessage("error", uploadResult.msg);
         }
       })
       .finally(() => {

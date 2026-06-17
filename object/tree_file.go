@@ -27,18 +27,18 @@ func UpdateTreeFile(storeId string, key string, file *TreeFile) bool {
 	return true
 }
 
-func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filename string, file multipart.File, lang string) (bool, []byte, error) {
+func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filename string, file multipart.File, lang string) (*UploadResult, error) {
 	store, err := GetStore(storeId)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 	if store == nil {
-		return false, nil, nil
+		return nil, nil
 	}
 
 	storageProviderObj, err := store.GetStorageProviderObj(lang)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	if isLeaf {
@@ -57,7 +57,7 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 
 		uploadResult, err := UploadFromReader(file, uploadOpts)
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
 		objectKey := uploadResult.StorageKey
@@ -78,7 +78,7 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 		}
 		_, err = AddFile(fileRecord)
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
 		go func() {
@@ -88,8 +88,7 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			}
 		}()
 
-		fileBytes := make([]byte, fileSize)
-		return true, fileBytes, nil
+		return uploadResult, nil
 	} else {
 		objectKey := fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
 		objectKey = strings.TrimLeft(objectKey, "/")
@@ -104,12 +103,12 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			Parent:          store.Name,
 		}
 
-		_, err := UploadFromBytes([]byte{}, uploadOpts)
+		uploadResult, err := UploadFromBytes([]byte{}, uploadOpts)
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
-		return true, []byte{}, nil
+		return uploadResult, nil
 	}
 }
 

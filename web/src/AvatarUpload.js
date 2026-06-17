@@ -32,7 +32,7 @@ const StoreAvatarUploader = (props) => {
     ResourceBackend.uploadResource(store.owner, "avatar", "store", store.name, file)
       .then((res) => {
         const uploadResult = parseUploadResult(res);
-        if (uploadResult) {
+        if (uploadResult.ok) {
           const newAvatarUrl = uploadResult.url;
           if (!newAvatarUrl) {
             Setting.showMessage("error", i18next.t("general:Failed to get"));
@@ -45,7 +45,7 @@ const StoreAvatarUploader = (props) => {
           }
           Setting.showMessage("success", i18next.t("general:Successfully added"));
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${uploadResult.msg}`);
         }
       })
       .catch(err => {

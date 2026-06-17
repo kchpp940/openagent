@@ -64,11 +64,11 @@ class SiteEditPage extends React.Component {
     ResourceBackend.uploadResource("admin", "avatar", "site", this.state.site.name, file)
       .then((res) => {
         const uploadResult = parseUploadResult(res);
-        if (uploadResult) {
+        if (uploadResult.ok) {
           this.updateSiteField(field, uploadResult.url);
           Setting.showMessage("success", i18next.t("general:Successfully uploaded"));
         } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("general:Failed to upload")}: ${uploadResult.msg}`);
         }
       })
       .catch(err => {
