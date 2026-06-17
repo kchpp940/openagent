@@ -142,19 +142,10 @@ func archiveGeneratedResourceFileToStorage(owner, user, path, origin string) (*R
 		resourceArchiveSafePathSegment(fileName),
 	)
 
-	uploadOpts := UploadOptions{
-		FileName:       fileName,
-		FullStorageKey: storageName,
-		Origin:         origin,
-		Lang:           "",
-	}
-
-	uploadResult, err := UploadFromBytes(fileBytes, uploadOpts)
+	fileUrl, err := UploadFileToStorageSafe(storageName, fileBytes, origin, "")
 	if err != nil {
 		return nil, err
 	}
-
-	fileUrl := uploadResult.Url
 
 	resource := NewResourceFromUpload(owner, user, "generated", fileName, fileType, ext, fileUrl, storageName, len(fileBytes), "", "")
 	if _, err = AddResource(resource); err != nil {

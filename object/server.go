@@ -25,7 +25,6 @@ import (
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/mcp"
-	mcppkg "github.com/the-open-agent/openagent/mcp"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -183,10 +182,18 @@ func syncServerTools(server *Server) error {
 		oldTools = []*McpTool{}
 	}
 
-	tools, err := mcppkg.GetToolsFromURL(server.Url, server.Token)
-	if err != nil {
-		return err
+	tec := mcp.NewToolExecutionContext(context.Background()).
+		WithTimeout(mcp.DefaultSyncTimeout).
+		WithServerName(server.Name)
+
+	result := mcp.ListToolsWithContext(tec, server.Url, server.Token)
+	if result.Client != nil {
+		defer result.Client.Close()
 	}
+	if result.Error != nil {
+		return result.Error
+	}
+	tools := result.Tools
 
 	newTools := make([]*McpTool, 0, len(tools))
 	for _, t := range tools {
@@ -285,26 +292,27 @@ func GetServerMcpToolSet(owner, serverName, lang string) (*mcp.ToolSet, error) {
 	return server.BuildMcpToolSet()
 }
 
-// TestMcpServer connects to the server URL and calls the tool specified in
-// TestContent (JSON: {"tool": "toolName", "arguments": {...}}).
 func TestMcpServer(s *Server, lang string) (string, error) {
 	if s.Url == "" {
 		return "", fmt.Errorf(i18n.Translate(lang, "object:Server URL is empty"))
 	}
-	var payload struct {
-		Tool      string                 `json:"tool"`
-		Arguments map[string]interface{} `json:"arguments"`
-	}
-	if err := json.Unmarshal([]byte(s.TestContent), &payload); err != nil {
+
+	payload, err := mcp.ParseTestContent(s.TestContent)
+	if err != nil {
 		return "", fmt.Errorf(i18n.Translate(lang, "object:invalid MCP test JSON: %v"), err)
 	}
-	if strings.TrimSpace(payload.Tool) == "" {
-		return "", fmt.Errorf(i18n.Translate(lang, "object:MCP test JSON must include non-empty \"tool\""))
+
+	tec := mcp.NewToolExecutionContext(context.Background()).
+		WithTimeout(mcp.DefaultToolCallTimeout).
+		WithLang(lang).
+		WithServerName(s.Name).
+		WithToolName(payload.Tool)
+
+	result := mcp.CallToolWithContext(tec, s.Url, s.Token, payload.Tool, payload.Arguments)
+	if !result.Success {
+		return "", fmt.Errorf("%s", result.ErrorWithKind())
 	}
-	if payload.Arguments == nil {
-		payload.Arguments = map[string]interface{}{}
-	}
-	return mcp.CallTool(s.Url, s.Token, payload.Tool, payload.Arguments)
+	return result.Data, nil
 }
 
 func GetServerCount(owner, field, value string) (int64, error) {

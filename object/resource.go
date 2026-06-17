@@ -15,6 +15,7 @@
 package object
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/the-open-agent/openagent/util"
@@ -194,4 +195,26 @@ func NewResourceFromUpload(owner, user, category, fileName, fileType, fileFormat
 		ObjectType:  objectType,
 		ObjectId:    objectId,
 	}
+}
+
+// UploadFileToStorageSafe uploads fileBytes to the default storage provider and returns a public URL.
+// objectKey is the storage path used for PutObject (e.g. "openagent/resources/avatar/user/file.png");
+// callers should store it as StorageName for later deletion via DeleteResourceFile.
+func UploadFileToStorageSafe(objectKey string, fileBytes []byte, origin string, lang string) (fileUrl string, err error) {
+	provider, err := GetDefaultStorageProvider()
+	if err != nil {
+		return "", err
+	}
+	if provider == nil {
+		return "", fmt.Errorf("no default storage provider configured")
+	}
+	storageProvider, err := provider.GetStorageProviderObj("", lang)
+	if err != nil {
+		return "", err
+	}
+	rawUrl, err := storageProvider.PutObject("", "", objectKey, bytes.NewBuffer(fileBytes))
+	if err != nil {
+		return "", err
+	}
+	return getUrlFromPath(rawUrl, origin)
 }

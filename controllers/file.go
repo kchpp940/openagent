@@ -16,8 +16,12 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/beego/beego/utils/pagination"
+	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
@@ -264,6 +268,11 @@ func (c *ApiController) UploadFile() {
 		filename = header.Filename
 	}
 
+	if err = validateFileExtension(filename, c.GetAcceptLanguage()); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
 	origin := getOriginFromHost(c.Ctx.Request.Host)
 	fileRecord, err := object.UploadFile(userName, userName, filename, fileData, c.GetAcceptLanguage(), origin)
 	if err != nil {
@@ -271,25 +280,24 @@ func (c *ApiController) UploadFile() {
 		return
 	}
 
-	result := map[string]interface{}{
-		"owner":           fileRecord.Owner,
-		"name":            fileRecord.Name,
-		"createdTime":     fileRecord.CreatedTime,
-		"filename":        fileRecord.Filename,
-		"size":            fileRecord.Size,
-		"store":           fileRecord.Store,
-		"storageProvider": fileRecord.StorageProvider,
-		"url":             fileRecord.Url,
-		"tokenCount":      fileRecord.TokenCount,
-		"vectorCount":     fileRecord.VectorCount,
-		"status":          fileRecord.Status,
-		"errorText":       fileRecord.ErrorText,
-		"fileName":        fileRecord.Filename,
-		"fileSize":        fileRecord.Size,
-		"fileType":        "",
-		"fileFormat":      "",
-		"mimeType":        "",
-		"storageKey":      fileRecord.Name,
+	c.ResponseOk(fileRecord)
+}
+
+var legacyOfficeExtensions = map[string]bool{
+	".doc": true,
+	".ppt": true,
+	".xls": true,
+	".dot": true,
+	".pot": true,
+	".xlt": true,
+	".pps": true,
+}
+
+func validateFileExtension(filename string, lang string) error {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if legacyOfficeExtensions[ext] {
+		tmpl := i18n.Translate(lang, "resource:Unsupported legacy file format %s, please convert to a modern format (e.g. .docx, .pptx, .xlsx) before uploading")
+		return fmt.Errorf("%s", fmt.Sprintf(tmpl, ext))
 	}
-	c.ResponseOk(result)
+	return nil
 }

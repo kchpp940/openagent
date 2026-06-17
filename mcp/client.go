@@ -16,9 +16,7 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/client"
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
@@ -54,37 +52,34 @@ func NewClient(url, token string) (*client.Client, error) {
 	})
 }
 
-// CallTool opens a short-lived MCP connection to url, calls toolName with
-// the supplied arguments, and returns the JSON-marshalled result content.
-func CallTool(url, token, toolName string, arguments map[string]interface{}) (string, error) {
+func CallToolWithContext(tec *ToolExecutionContext, url, token, toolName string, arguments map[string]interface{}) *ExternalCallResult {
 	cli, err := NewClient(url, token)
 	if err != nil {
-		return "", err
+		return NewExternalCallResultError(ErrKindNoConnection,
+			fmt.Sprintf("failed to create MCP client: %v", err), err)
 	}
 	defer cli.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := tec.GetTimeoutContext()
 	defer cancel()
 
 	result, err := cli.CallTool(ctx, &protocol.CallToolRequest{
 		Name:      toolName,
 		Arguments: arguments,
 	})
-	if err != nil {
-		return "", err
+
+	extResult := CallToolResultToExternalResult(result, err)
+	extResult.RawResult = result
+	return extResult
+}
+
+func CallTool(url, token, toolName string, arguments map[string]interface{}) (string, error) {
+	tec := NewToolExecutionContext(context.Background()).WithTimeout(DefaultToolCallTimeout)
+	result := CallToolWithContext(tec, url, token, toolName, arguments)
+	if !result.Success {
+		return "", fmt.Errorf("%s", result.ErrorWithKind())
 	}
-	if result.IsError {
-		b, mErr := json.Marshal(result.Content)
-		if mErr != nil {
-			return "", fmt.Errorf("MCP tool returned error")
-		}
-		return "", fmt.Errorf("MCP tool returned error: %s", string(b))
-	}
-	b, err := json.Marshal(result.Content)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return result.Data, nil
 }
 
 func createClient(srv ServerConfig) (*client.Client, error) {

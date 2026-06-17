@@ -69,31 +69,31 @@ type ToolSet struct {
 	WebSearchEnabled bool
 }
 
-func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+func (ts *ToolSet) ExecuteToolWithContext(tec *ToolExecutionContext, toolId string, arguments map[string]interface{}) *ExternalCallResult {
 	serverName, toolName, err := GetServerNameAndToolNameFromId(toolId)
 	if err != nil {
-		return nil, NewToolCallError(ToolCallErrInvalidID, err.Error())
+		return NewExternalCallResultError(ErrKindInvalidID, err.Error(), err)
 	}
 
 	if toolName == "" {
-		return nil, NewToolCallError(ToolCallErrEmptyToolName, "tool name is empty after parsing")
+		return NewExternalCallResultError(ErrKindEmptyToolName, "tool name is empty after parsing")
 	}
+
+	ctx, cancel := tec.GetTimeoutContext()
+	defer cancel()
 
 	if serverName == "" {
 		if ts.BuiltinTools == nil {
-			return nil, NewToolCallError(ToolCallErrNoBuiltinReg,
+			return NewExternalCallResultError(ErrKindNoBuiltinReg,
 				fmt.Sprintf("builtin tool registry is nil; cannot execute builtin tool: %s", toolName))
 		}
 		result, execErr := ts.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
-		if execErr != nil {
-			return nil, NewToolCallError(ToolCallErrBuiltinNotFound, execErr.Error(), execErr)
-		}
-		return result, nil
+		return CallToolResultToExternalResult(result, execErr)
 	}
 
 	conn, ok := ts.Connections[serverName]
 	if !ok {
-		return nil, NewToolCallError(ToolCallErrNoConnection,
+		return NewExternalCallResultError(ErrKindNoConnection,
 			fmt.Sprintf("no open MCP connection for server: %s (tool: %s)", serverName, toolName))
 	}
 
@@ -102,12 +102,16 @@ func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map
 		Arguments: arguments,
 	}
 	result, execErr := conn.CallTool(ctx, req)
-	if execErr != nil {
-		return nil, NewToolCallError(ToolCallErrRemoteCall,
-			fmt.Sprintf("remote MCP call failed for server %s tool %s", serverName, toolName),
-			execErr)
+	return CallToolResultToExternalResult(result, execErr)
+}
+
+func (ts *ToolSet) ExecuteTool(ctx context.Context, toolId string, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	tec := NewToolExecutionContext(ctx)
+	result := ts.ExecuteToolWithContext(tec, toolId, arguments)
+	if !result.Success {
+		return nil, NewToolCallError(string(result.ErrorKind), result.Error, result.Err)
 	}
-	return result, nil
+	return result.RawResult, nil
 }
 
 func IsToolCallError(err error) (*ToolCallError, bool) {

@@ -17,6 +17,9 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
+	"path/filepath"
+	"strings"
 
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
@@ -230,49 +233,49 @@ func (c *ApiController) UploadResource() {
 	}
 	defer file.Close()
 
-	host := c.Ctx.Request.Host
-	origin := getOriginFromHost(host)
-	lang := c.GetAcceptLanguage()
+	fileName := header.Filename
+	fileSize := int(header.Size)
 
-	uploadOpts := object.UploadOptions{
-		FileName:          header.Filename,
-		AllowedExtensions: nil,
-		StoragePathPrefix: fmt.Sprintf("openagent/resources/%s/%s", category, userName),
-		AddRandomSuffix:   false,
-		Origin:            origin,
-		Lang:              lang,
-		User:              userName,
-	}
-
-	uploadResult, err := object.UploadFromMultipartFile(file, header, uploadOpts)
+	fileBytes := make([]byte, fileSize)
+	_, err = file.Read(fileBytes)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	fileUrl := uploadResult.Url
-	fullFilePath := uploadResult.StorageKey
-	fileSize := int(uploadResult.FileSize)
-	fileType := uploadResult.FileType
-	ext := uploadResult.FileFormat
+	// Detect MIME type and file type category
+	ext := strings.ToLower(filepath.Ext(fileName))
 
-	resource := object.NewResourceFromUpload("admin", userName, category, uploadResult.FileName, fileType, ext, fileUrl, fullFilePath, fileSize, objectType, objectId)
+	if err = validateFileExtension(fileName, c.GetAcceptLanguage()); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = mime.TypeByExtension(ext)
+	}
+	fileTypeParts := strings.SplitN(mimeType, "/", 2)
+	fileType := "unknown"
+	if len(fileTypeParts) > 0 {
+		fileType = fileTypeParts[0]
+	}
+
+	fullFilePath := fmt.Sprintf("openagent/resources/%s/%s/%s", category, userName, fileName)
+
+	host := c.Ctx.Request.Host
+	origin := getOriginFromHost(host)
+	fileUrl, err := object.UploadFileToStorageSafe(fullFilePath, fileBytes, origin, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	resource := object.NewResourceFromUpload("admin", userName, category, fileName, fileType, ext, fileUrl, fullFilePath, fileSize, objectType, objectId)
 	_, err = object.AddResource(resource)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	result := map[string]interface{}{
-		"fileName":     uploadResult.FileName,
-		"fileSize":     uploadResult.FileSize,
-		"fileType":     uploadResult.FileType,
-		"fileFormat":   uploadResult.FileFormat,
-		"mimeType":     uploadResult.MimeType,
-		"storageKey":   uploadResult.StorageKey,
-		"url":          uploadResult.Url,
-		"fileUrl":      uploadResult.Url,
-		"fullFilePath": uploadResult.StorageKey,
-	}
-	c.ResponseOk(result)
+	c.ResponseOk(fileUrl, fullFilePath)
 }

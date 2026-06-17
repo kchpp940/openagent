@@ -23,7 +23,6 @@ import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
 import i18next from "i18next";
 import {DeleteOutlined, NodeIndexOutlined, ReloadOutlined, UploadOutlined} from "@ant-design/icons";
-import {parseUploadResult} from "./UploadUtil";
 
 class FileListPage extends BaseListPage {
   constructor(props) {
@@ -71,10 +70,9 @@ class FileListPage extends BaseListPage {
       .then((values) => {
         let hasError = false;
         values.forEach((res) => {
-          const uploadResult = parseUploadResult(res);
-          if (!uploadResult.ok) {
+          if (res.status !== "ok") {
             hasError = true;
-            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${uploadResult.msg}`);
+            Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
           }
         });
         if (!hasError) {

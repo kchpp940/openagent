@@ -15,7 +15,9 @@
 package object
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"strings"
 
@@ -27,58 +29,53 @@ func UpdateTreeFile(storeId string, key string, file *TreeFile) bool {
 	return true
 }
 
-func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filename string, file multipart.File, lang string) (*UploadResult, error) {
+func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filename string, file multipart.File, lang string) (bool, []byte, error) {
 	store, err := GetStore(storeId)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 	if store == nil {
-		return nil, nil
+		return false, nil, nil
 	}
 
 	storageProviderObj, err := store.GetStorageProviderObj(lang)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 
+	var objectKey string
+	var fileBuffer *bytes.Buffer
 	if isLeaf {
-		fullKey := fmt.Sprintf("%s/%s", key, filename)
-		fullKey = strings.TrimLeft(fullKey, "/")
-
-		uploadOpts := UploadOptions{
-			FileName:        filename,
-			FullStorageKey:  fullKey,
-			AddRandomSuffix: false,
-			Lang:            lang,
-			StorageProvider: storageProviderObj,
-			User:            userName,
-			Parent:          store.Name,
-		}
-
-		uploadResult, err := UploadFromReader(file, uploadOpts)
+		objectKey = fmt.Sprintf("%s/%s", key, filename)
+		objectKey = strings.TrimLeft(objectKey, "/")
+		fileBuffer = bytes.NewBuffer(nil)
+		_, err = io.Copy(fileBuffer, file)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 
-		objectKey := uploadResult.StorageKey
-		fileUrl := uploadResult.Url
-		fileSize := uploadResult.FileSize
+		bs := fileBuffer.Bytes()
+		fileUrl, err := storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
+		if err != nil {
+			return false, nil, err
+		}
 
+		// Persist file information in the file table
 		fileRecord := &File{
 			Owner:           store.Owner,
 			Name:            getFileName(store.Name, objectKey),
 			CreatedTime:     util.GetCurrentTime(),
 			Filename:        filename,
-			Size:            fileSize,
+			Size:            int64(len(bs)),
 			Store:           store.Name,
 			StorageProvider: store.StorageProvider,
 			Url:             fileUrl,
 			TokenCount:      0,
-			Status:          FileStatusPending,
+			Status:          FileStatusPending, // Initial status before embedding
 		}
 		_, err = AddFile(fileRecord)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 
 		go func() {
@@ -88,27 +85,18 @@ func AddTreeFile(storeId string, userName string, key string, isLeaf bool, filen
 			}
 		}()
 
-		return uploadResult, nil
+		return true, bs, nil
 	} else {
-		objectKey := fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
+		objectKey = fmt.Sprintf("%s/%s/_hidden.ini", key, filename)
 		objectKey = strings.TrimLeft(objectKey, "/")
-
-		uploadOpts := UploadOptions{
-			FileName:        "_hidden.ini",
-			FullStorageKey:  objectKey,
-			AddRandomSuffix: false,
-			Lang:            lang,
-			StorageProvider: storageProviderObj,
-			User:            userName,
-			Parent:          store.Name,
-		}
-
-		uploadResult, err := UploadFromBytes([]byte{}, uploadOpts)
+		fileBuffer = bytes.NewBuffer(nil)
+		bs := fileBuffer.Bytes()
+		_, err = storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 
-		return uploadResult, nil
+		return true, bs, nil
 	}
 }
 
