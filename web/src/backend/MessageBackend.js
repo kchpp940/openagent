@@ -29,6 +29,9 @@ export function getChatMessages(owner, chat) {
 
 const eventSourceMap = new Map();
 
+// [EXEMPT] EventSource stream — cannot use ApiClient.
+// This returns an EventSource object for server-sent events (streaming AI responses).
+// ApiClient would incorrectly try to buffer the entire stream as a single JSON response.
 export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd, onInfo, onChat, onToolDelta) {
   if (eventSourceMap.has(`${owner}/${name}`)) {
     return;

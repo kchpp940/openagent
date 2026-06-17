@@ -14,6 +14,12 @@
 
 import * as Setting from "../Setting";
 
+// [EXEMPT] Blob response — cannot use ApiClient.
+// ApiClient always parses the response as JSON via ResponseAdapter.handleResponse(),
+// but this endpoint returns binary audio data (audio/mpeg) on success.
+// The response Content-Type must be inspected before deciding how to parse:
+//   - Non-JSON (audio) → return response.blob()
+//   - JSON (error) → parse as JSON and throw
 export function generateTextToSpeechAudio(storeId, providerId, messageId, text) {
   const payload = {
     storeId: storeId,
@@ -35,11 +41,22 @@ export function generateTextToSpeechAudio(storeId, providerId, messageId, text) 
     if (!treatAsError) {
       return response.blob();
     }
-    const data = await Setting.handleFetchResponse(response);
-    throw new Error((data && data.msg) || "TTS request failed");
+    const text = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      // ignore parse error
+    }
+    const msg = (data && (data.msg || data.message)) || `HTTP ${response.status}`;
+    throw new Error(msg || "TTS request failed");
   });
 }
 
+// [EXEMPT] EventSource stream — cannot use ApiClient.
+// This returns an EventSource object for server-sent events (streaming audio).
+// ApiClient is designed for request/response patterns and would incorrectly
+// try to parse the entire stream as a single JSON response.
 export function generateTextToSpeechAudioStream(storeId, messageId) {
   const url = `${Setting.ServerUrl}/api/generate-text-to-speech-audio-stream?storeId=${encodeURIComponent(storeId)}&messageId=${encodeURIComponent(messageId)}`;
 

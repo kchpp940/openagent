@@ -421,6 +421,9 @@ class FileTree extends React.Component {
     if (ext && file.url && !this.isExtForDocViewer(ext) && !this.isExtForFileViewer(ext)) {
       this.setState({loading: true});
 
+      // [EXEMPT] Plain text response — cannot use ApiClient.
+      // This fetches a raw text file (e.g. source code) for display in a viewer.
+      // ApiClient would incorrectly try to parse it as JSON.
       fetch(file.url, {
         method: "GET",
         credentials: "include",
@@ -457,6 +460,7 @@ class FileTree extends React.Component {
                 loading: true,
               });
 
+              // [EXEMPT] Same as above — plain text file response.
               fetch(url, {
                 method: "GET",
                 credentials: "include",

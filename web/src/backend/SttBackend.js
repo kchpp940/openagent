@@ -19,11 +19,5 @@ export function processSpeechToText(storeId, audioBlob) {
   formData.append("audio", audioBlob);
   formData.append("storeId", storeId);
 
-  return ApiClient.post("/api/process-speech-to-text", {body: formData})
-    .then(data => {
-      if (data && data.status === "error") {
-        throw new Error(data.msg || "Speech-to-text request failed");
-      }
-      return data;
-    });
+  return ApiClient.post("/api/process-speech-to-text", {body: formData});
 }

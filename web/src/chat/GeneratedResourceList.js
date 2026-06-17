@@ -41,6 +41,9 @@ function getFileExt(fileName, mimeType) {
   return "FILE";
 }
 
+// [EXEMPT] Blob download — cannot use ApiClient.
+// This downloads a binary file via response.blob(), not JSON.
+// ApiClient would incorrectly try to parse it as JSON.
 async function downloadResource(e, href, fileName) {
   e.preventDefault();
   try {
